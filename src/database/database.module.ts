@@ -15,7 +15,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         password: config.get<string>('DB_PASS'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: false,
+        // Fresh, empty database with no production data yet — safe to let
+        // TypeORM create tables from entities. Switch to migrations before
+        // this DB holds real customer data.
+        synchronize: true,
       }),
     }),
   ],

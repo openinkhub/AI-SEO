@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Openink Hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Work+Sans:wght@400;500;600&display=swap">
+<style>
+  :root { --accent: #33418C; --accent-dark: #212c66; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Work Sans', sans-serif; background: #F7F6F3; color: #1A1A2E; }
+  .wrap { min-height: 100vh; display: flex; flex-wrap: wrap; }
+  .brand { flex: 1 1 420px; background: var(--accent); color: #F7F6F3; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; min-height: 280px; }
+  .brand-top { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 36px; height: 36px; border-radius: 8px; background: rgba(247,246,243,0.14); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; }
+  .brand-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; }
+  .tagline { font-family: 'Fraunces', serif; font-style: italic; font-weight: 500; font-size: 30px; line-height: 1.35; max-width: 380px; }
+  .sub { font-size: 14px; line-height: 1.6; color: rgba(247,246,243,0.72); max-width: 380px; margin-top: 16px; }
+  .foot { font-size: 13px; color: rgba(247,246,243,0.55); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-top"><div class="logo">O</div><div class="brand-name">Openink Hub</div></div>
+    <div>
+      <div class="tagline">Every layer of your SEO engine, in one console.</div>
+      <div class="sub">Sign in with your registered email and password.</div>
+    </div>
+    <div class="foot">© 2026 Openink Hub</div>
+  </div>
+  <div style="flex: 1 1 420px; display: flex; align-items: center; justify-content: center; padding: 48px;">
+    <form id="loginForm" style="width: 100%; max-width: 380px; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 1px 2px rgba(26,26,46,0.04), 0 12px 32px rgba(26,26,46,0.06);">
+      <div style="font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; margin-bottom: 4px;">Welcome back</div>
+      <div style="font-size: 14px; color: #6B6963; margin-bottom: 24px;">Sign in to the admin console</div>
+      <div id="errorBox" style="display:none; background:#FBEAEA; border:1px solid #E3B8B8; color:#9C3A3A; font-size:13px; padding:10px 12px; border-radius:8px; margin-bottom:16px;"></div>
+      <label style="font-size:13px; font-weight:500; margin-bottom:6px; display:block;">Email address</label>
+      <input id="email" type="email" required placeholder="you@openinkhub.in" style="width:100%; padding:12px 14px; border-radius:9px; border:1px solid #E3E1DA; font-size:14px; margin-bottom:16px; background:#FCFBF9;">
+      <label style="font-size:13px; font-weight:500; margin-bottom:6px; display:block;">Password</label>
+      <input id="password" type="password" required placeholder="••••••••" style="width:100%; padding:12px 14px; border-radius:9px; border:1px solid #E3E1DA; font-size:14px; margin-bottom:20px; background:#FCFBF9;">
+      <button id="submitBtn" type="submit" style="width:100%; padding:13px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:600; font-size:14.5px; cursor:pointer;">Sign in</button>
+    </form>
+  </div>
+</div>
+<script>
+  const form = document.getElementById('loginForm');
+  const errorBox = document.getElementById('errorBox');
+  const submitBtn = document.getElementById('submitBtn');
+
+  if (localStorage.getItem('oh_token')) {
+    window.location.href = '/dashboard.html';
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in…';
+
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Invalid email or password.');
+
+      localStorage.setItem('oh_token', data.token);
+      localStorage.setItem('oh_user', JSON.stringify(data.user));
+      window.location.href = '/dashboard.html';
+    } catch (err) {
+      errorBox.textContent = Array.isArray(err.message) ? err.message.join(' ') : err.message;
+      errorBox.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
+    }
+  });
+</script>
+</body>
+</html>

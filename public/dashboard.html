@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — Openink Hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Work+Sans:wght@400;500;600&display=swap">
+<style>
+  body { margin: 0; font-family: 'Work Sans', sans-serif; background: #F7F6F3; color: #1A1A2E; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: #fff; border-bottom: 1px solid #E8E6DF; }
+  .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; }
+  .who { font-size: 13px; color: #6B6963; }
+  main { max-width: 640px; margin: 64px auto; padding: 0 24px; text-align: center; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 600; }
+  button { margin-top: 16px; padding: 10px 18px; border-radius: 8px; border: 1px solid #E3E1DA; background: #fff; cursor: pointer; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Openink Hub — Admin</div>
+  <div class="who" id="who"></div>
+</header>
+<main>
+  <h1>You're signed in.</h1>
+  <p style="color:#6B6963;">The full admin dashboard is still being built — this confirms login is working end to end.</p>
+  <button id="logout">Sign out</button>
+</main>
+<script>
+  const token = localStorage.getItem('oh_token');
+  if (!token) window.location.href = '/index.html';
+
+  fetch('/api/v1/auth/me', { headers: { Authorization: 'Bearer ' + token } })
+    .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+    .then((u) => { document.getElementById('who').textContent = u.email + ' (' + u.role + ')'; })
+    .catch(() => {
+      localStorage.removeItem('oh_token');
+      localStorage.removeItem('oh_user');
+      window.location.href = '/index.html';
+    });
+
+  document.getElementById('logout').addEventListener('click', () => {
+    localStorage.removeItem('oh_token');
+    localStorage.removeItem('oh_user');
+    window.location.href = '/index.html';
+  });
+</script>
+</body>
+</html>
