@@ -1,48 +1,350 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard — Openink Hub</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600&family=Work+Sans:wght@400;500;600&display=swap">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard — AI SEO Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { margin: 0; font-family: 'Work Sans', sans-serif; background: #F7F6F3; color: #1A1A2E; }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: #fff; border-bottom: 1px solid #E8E6DF; }
-  .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; }
-  .who { font-size: 13px; color: #6B6963; }
-  main { max-width: 640px; margin: 64px auto; padding: 0 24px; text-align: center; }
-  h1 { font-family: 'Fraunces', serif; font-weight: 600; }
-  button { margin-top: 16px; padding: 10px 18px; border-radius: 8px; border: 1px solid #E3E1DA; background: #fff; cursor: pointer; font-size: 14px; }
+  :root{
+    --accent:#33418C; --accent-dark:#212c66;
+    --bg:#F7F6F3; --border:#E3E1DA; --border-soft:#E8E6DF; --muted:#6B6963;
+    --ok:#2f7a4f; --ok-bg:#e8f3ec;
+    --pending:#9a7b1f; --pending-bg:#faf1dd;
+    --fail:#a33a3a; --fail-bg:#f8e9e9;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:#262420; font-family:'Work Sans', sans-serif;}
+  h1,h2,h3,.brand{font-family:'Fraunces', serif;}
+  header{display:flex; align-items:center; justify-content:space-between; padding:18px 28px; border-bottom:1px solid var(--border); background:#fff;}
+  .brand{font-size:20px; font-weight:600; color:var(--accent-dark);}
+  .who{display:flex; align-items:center; gap:14px; font-size:14px; color:var(--muted);}
+  button{font-family:'Work Sans', sans-serif; cursor:pointer; border-radius:8px; border:1px solid var(--border); background:#fff; padding:8px 14px; font-size:14px; color:#262420;}
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  button.primary:hover{background:var(--accent-dark);}
+  button.ghost{background:transparent;}
+  button:disabled{opacity:.5; cursor:default;}
+  main{padding:24px 28px;}
+  .cols{display:grid; grid-template-columns:340px 1fr; gap:20px;}
+  @media (max-width:860px){ .cols{grid-template-columns:1fr;} }
+  .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;}
+  .card h2{margin:0 0 14px; font-size:18px; color:var(--accent-dark);}
+  .add-form{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+  input{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:100%;}
+  .search{margin-bottom:10px;}
+  .customer-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto;}
+  .customer-row{padding:10px 12px;border:1px solid var(--border-soft);border-radius:8px;cursor:pointer;}
+  .customer-row:hover{border-color:var(--accent);}
+  .customer-row.active{border-color:var(--accent);background:#F1F3FA;}
+  .customer-row .name{font-weight:600;}
+  .customer-row .site{font-size:12px;color:var(--muted);}
+  .muted{color:var(--muted);font-size:14px;}
+  .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600;}
+  .badge.ok{background:var(--ok-bg);color:var(--ok);}
+  .badge.pending{background:var(--pending-bg);color:var(--pending);}
+  .badge.fail{background:var(--fail-bg);color:var(--fail);}
+  .run-row{border:1px solid var(--border-soft);border-radius:8px;padding:12px;margin-bottom:10px;}
+  .run-row .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .row-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .task-scroll{max-height:400px;overflow:auto;margin-top:10px;border:1px solid var(--border-soft);border-radius:8px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-soft);}
+  th{background:#FAFAF8;position:sticky;top:0;}
+  .detail-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+  .detail-header h2{margin:0;}
+  .detail-header .site-link{font-size:13px;color:var(--muted);}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">Openink Hub — Admin</div>
-  <div class="who" id="who"></div>
+  <div class="brand">AI SEO Engine</div>
+  <div class="who"><span id="whoEmail"></span><button id="logoutBtn">Sign out</button></div>
 </header>
 <main>
-  <h1>You're signed in.</h1>
-  <p style="color:#6B6963;">The full admin dashboard is still being built — this confirms login is working end to end.</p>
-  <button id="logout">Sign out</button>
+  <div class="cols">
+    <section class="card" id="customersCard">
+      <h2>Customers</h2>
+      <div class="add-form">
+        <input id="newCompanyName" placeholder="Company name" />
+        <input id="newWebsite" placeholder="Website (https://...)" />
+        <button class="primary" id="addCustomerBtn">Add customer</button>
+      </div>
+      <input id="searchInput" class="search" placeholder="Search customers..." />
+      <ul id="customerList" class="customer-list"><li class="muted">Loading…</li></ul>
+    </section>
+    <section class="card" id="detailCol">
+      <p class="muted">Select a customer to run or review a Complete Website Audit (Layer 69).</p>
+    </section>
+  </div>
 </main>
 <script>
-  const token = localStorage.getItem('oh_token');
-  if (!token) window.location.href = '/index.html';
+(function(){
+  var token = localStorage.getItem('oh_token');
+  var userRaw = localStorage.getItem('oh_user');
+  if (!token) { window.location.href = '/index.html'; return; }
+  var user = null;
+  try { user = userRaw ? JSON.parse(userRaw) : null; } catch(e) {}
+  document.getElementById('whoEmail').textContent = (user && user.email) || '';
 
-  fetch('/api/v1/auth/me', { headers: { Authorization: 'Bearer ' + token } })
-    .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-    .then((u) => { document.getElementById('who').textContent = u.email + ' (' + u.role + ')'; })
-    .catch(() => {
-      localStorage.removeItem('oh_token');
-      localStorage.removeItem('oh_user');
-      window.location.href = '/index.html';
-    });
-
-  document.getElementById('logout').addEventListener('click', () => {
+  document.getElementById('logoutBtn').addEventListener('click', function(){
     localStorage.removeItem('oh_token');
     localStorage.removeItem('oh_user');
     window.location.href = '/index.html';
   });
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = Object.assign({ 'Authorization': 'Bearer ' + token }, opts.headers || {});
+    if (opts.body && !(opts.body instanceof Blob)) headers['Content-Type'] = 'application/json';
+    return fetch('/api/v1' + path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function(res){
+      if (res.status === 401) {
+        localStorage.removeItem('oh_token');
+        localStorage.removeItem('oh_user');
+        window.location.href = '/index.html';
+        throw new Error('Unauthorized');
+      }
+      var ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('text/html') !== -1) return res.text().then(function(t){ return { __html: t, ok: res.ok }; });
+      return res.json().then(function(data){
+        if (!res.ok) throw new Error((data && data.message) || ('Request failed: ' + res.status));
+        return data;
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return (s == null ? '' : String(s)).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+
+  var customers = [];
+  var selectedCustomerId = null;
+  var currentRuns = [];
+  var expanded = {}; // runId -> 'tasks' | 'pushes' | null
+
+  function loadCustomers(search) {
+    var q = search ? ('?search=' + encodeURIComponent(search)) : '';
+    return api('/customers' + q).then(function(data){
+      customers = Array.isArray(data) ? data : (data.items || []);
+      renderCustomers();
+    }).catch(function(err){
+      document.getElementById('customerList').innerHTML =
+        '<li class="muted">Failed to load: ' + escapeHtml(err.message) + '</li>';
+    });
+  }
+
+  function renderCustomers() {
+    var list = document.getElementById('customerList');
+    if (!customers.length) { list.innerHTML = '<li class="muted">No customers yet.</li>'; return; }
+    list.innerHTML = customers.map(function(c){
+      var active = c.id === selectedCustomerId ? ' active' : '';
+      return '<li class="customer-row' + active + '" data-id="' + c.id + '">' +
+        '<div class="name">' + escapeHtml(c.companyName) + '</div>' +
+        '<div class="site">' + escapeHtml(c.website || 'no website') + '</div>' +
+      '</li>';
+    }).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.customer-row'), function(row){
+      row.addEventListener('click', function(){ selectCustomer(row.getAttribute('data-id')); });
+    });
+  }
+
+  document.getElementById('searchInput').addEventListener('input', function(e){
+    clearTimeout(window.__searchT);
+    window.__searchT = setTimeout(function(){ loadCustomers(e.target.value.trim()); }, 300);
+  });
+
+  document.getElementById('addCustomerBtn').addEventListener('click', function(){
+    var companyName = document.getElementById('newCompanyName').value.trim();
+    var website = document.getElementById('newWebsite').value.trim();
+    if (!companyName) { alert('Company name is required.'); return; }
+    var btn = document.getElementById('addCustomerBtn');
+    btn.disabled = true;
+    api('/customers', { method: 'POST', body: { companyName: companyName, website: website || undefined } })
+      .then(function(created){
+        document.getElementById('newCompanyName').value = '';
+        document.getElementById('newWebsite').value = '';
+        return loadCustomers();
+      })
+      .then(function(){ if (customers.length) selectCustomer(customers[0].id); })
+      .catch(function(err){ alert('Could not add customer: ' + err.message); })
+      .finally(function(){ btn.disabled = false; });
+  });
+
+  function selectCustomer(id) {
+    selectedCustomerId = id;
+    expanded = {};
+    renderCustomers();
+    renderDetailLoading();
+    loadRuns(id);
+  }
+
+  function renderDetailLoading() {
+    document.getElementById('detailCol').innerHTML = '<p class="muted">Loading…</p>';
+  }
+
+  function loadRuns(customerId) {
+    return api('/customers/' + customerId + '/audits').then(function(data){
+      currentRuns = Array.isArray(data) ? data : (data.items || []);
+      renderDetail();
+    }).catch(function(err){
+      document.getElementById('detailCol').innerHTML =
+        '<p class="muted">Failed to load audits: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function statusBadge(status) {
+    var cls = status === 'completed' ? 'ok' : (status === 'failed' ? 'fail' : 'pending');
+    return '<span class="badge ' + cls + '">' + escapeHtml(status) + '</span>';
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    try { return new Date(d).toLocaleString(); } catch(e) { return d; }
+  }
+
+  function renderDetail() {
+    var customer = customers.find(function(c){ return c.id === selectedCustomerId; }) || {};
+    var html = '';
+    html += '<div class="detail-header">';
+    html += '<div><h2>' + escapeHtml(customer.companyName || '') + '</h2>';
+    html += '<div class="site-link">' + escapeHtml(customer.website || 'no website') + '</div></div>';
+    html += '<button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button>';
+    html += '</div>';
+    html += '<div id="runsList"></div>';
+    document.getElementById('detailCol').innerHTML = html;
+    document.getElementById('runAuditBtn').addEventListener('click', runAudit);
+    renderRuns();
+  }
+
+  function runAudit() {
+    var btn = document.getElementById('runAuditBtn');
+    btn.disabled = true;
+    btn.textContent = 'Starting audit…';
+    api('/customers/' + selectedCustomerId + '/audits', { method: 'POST', body: {} })
+      .then(function(){ return loadRuns(selectedCustomerId); })
+      .catch(function(err){ alert('Could not start audit: ' + err.message); })
+      .finally(function(){
+        var b = document.getElementById('runAuditBtn');
+        if (b) { b.disabled = false; b.textContent = 'Run new audit (Layer 69)'; }
+      });
+  }
+
+  function renderRuns() {
+    var box = document.getElementById('runsList');
+    if (!box) return;
+    if (!currentRuns.length) { box.innerHTML = '<p class="muted">No audits run yet for this customer.</p>'; return; }
+    box.innerHTML = currentRuns.map(function(r){ return runRowHtml(r); }).join('');
+    currentRuns.forEach(function(r){
+      var reportBtn = document.getElementById('report-' + r.id);
+      if (reportBtn) reportBtn.addEventListener('click', function(){ viewReport(r.id); });
+      var tasksBtn = document.getElementById('tasks-' + r.id);
+      if (tasksBtn) tasksBtn.addEventListener('click', function(){ togglePanel(r.id, 'tasks'); });
+      var pushesBtn = document.getElementById('pushes-' + r.id);
+      if (pushesBtn) pushesBtn.addEventListener('click', function(){ togglePanel(r.id, 'pushes'); });
+      var refreshBtn = document.getElementById('refresh-' + r.id);
+      if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(selectedCustomerId); });
+    });
+  }
+
+  function runRowHtml(r) {
+    var panel = expanded[r.id];
+    var html = '<div class="run-row">';
+    html += '<div class="top">';
+    html += '<div>' + statusBadge(r.status) +
+      ' <strong>' + (r.completedSkills != null ? r.completedSkills : 0) + '/' +
+      (r.totalSkills != null ? r.totalSkills : 140) + '</strong> skills' +
+      ' <span class="muted">started ' + fmtDate(r.startedAt || r.createdAt) + '</span></div>';
+    html += '<div class="row-actions">';
+    html += '<button id="refresh-' + r.id + '">Refresh</button>';
+    html += '<button id="report-' + r.id + '"' + (r.status !== 'completed' ? ' disabled' : '') + '>View report</button>';
+    html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
+    html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
+    html += '</div></div>';
+    html += '<div id="panel-' + r.id + '"></div>';
+    html += '</div>';
+    return html;
+  }
+
+  function togglePanel(runId, kind) {
+    expanded[runId] = expanded[runId] === kind ? null : kind;
+    renderRuns();
+    if (expanded[runId] === 'tasks') loadTasks(runId);
+    if (expanded[runId] === 'pushes') loadPushes(runId);
+  }
+
+  function loadTasks(runId) {
+    var panel = document.getElementById('panel-' + runId);
+    if (panel) panel.innerHTML = '<p class="muted">Loading tasks…</p>';
+    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/tasks').then(function(data){
+      var tasks = Array.isArray(data) ? data : (data.items || []);
+      var rows = tasks.map(function(t){
+        return '<tr>' +
+          '<td>' + escapeHtml(t.group) + '</td>' +
+          '<td>' + escapeHtml(t.plugin + ':' + t.skill) + '</td>' +
+          '<td>' + statusBadge(t.status) + '</td>' +
+          '<td>' + (t.isAutomated ? 'Yes' : 'No') + '</td>' +
+          '<td>' + escapeHtml(t.layerNumbers ? t.layerNumbers.join(', ') : '') + '</td>' +
+          '<td>' + escapeHtml((t.finding || '').slice(0, 140)) + '</td>' +
+        '</tr>';
+      }).join('');
+      var html = '<div class="task-scroll"><table><thead><tr>' +
+        '<th>Group</th><th>Skill</th><th>Status</th><th>Automated</th><th>Layers</th><th>Finding</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      var p = document.getElementById('panel-' + runId);
+      if (p) p.innerHTML = html;
+    }).catch(function(err){
+      var p = document.getElementById('panel-' + runId);
+      if (p) p.innerHTML = '<p class="muted">Failed to load tasks: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function loadPushes(runId) {
+    var panel = document.getElementById('panel-' + runId);
+    if (panel) panel.innerHTML = '<p class="muted">Loading layer pushes…</p>';
+    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/pushes').then(function(data){
+      var pushes = Array.isArray(data) ? data : (data.items || []);
+      if (!pushes.length) {
+        var p0 = document.getElementById('panel-' + runId);
+        if (p0) p0.innerHTML = '<p class="muted">No layer pushes for this run.</p>';
+        return;
+      }
+      var rows = pushes.map(function(p){
+        return '<tr>' +
+          '<td>Layer ' + escapeHtml(p.layerNumber) + '</td>' +
+          '<td>' + statusBadge(p.status) + '</td>' +
+          '<td>' + escapeHtml((p.suggestion || '').slice(0, 140)) + '</td>' +
+          '<td>' + fmtDate(p.pushedAt) + '</td>' +
+        '</tr>';
+      }).join('');
+      var html = '<div class="task-scroll"><table><thead><tr>' +
+        '<th>Layer</th><th>Status</th><th>Suggestion</th><th>Pushed at</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      var p = document.getElementById('panel-' + runId);
+      if (p) p.innerHTML = html;
+    }).catch(function(err){
+      var p = document.getElementById('panel-' + runId);
+      if (p) p.innerHTML = '<p class="muted">Failed to load pushes: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function viewReport(runId) {
+    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/report').then(function(data){
+      var html = (data && data.__html) || '<p>Empty report.</p>';
+      var blob = new Blob([html], { type: 'text/html' });
+      var url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }).catch(function(err){ alert('Could not load report: ' + err.message); });
+  }
+
+  loadCustomers();
+})();
 </script>
 </body>
 </html>
