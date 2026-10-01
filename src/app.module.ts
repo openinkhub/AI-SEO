@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { PageImagesModule } from './page-images/page-images.module';
+import { AuditsModule } from './audits/audits.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PageImagesModule } from './page-images/page-images.module';
     AuthModule,
     CustomersModule,
     PageImagesModule,
+    AuditsModule,
   ],
   controllers: [AppController],
 })
