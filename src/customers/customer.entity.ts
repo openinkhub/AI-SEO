@@ -21,6 +21,17 @@ export class Customer {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // WP user ID this customer was synced from (WP↔Engine integration,
+  // decisions 1/2/4). Null for a customer created directly in the
+  // Engine (e.g. manually by Admin) rather than via WP signup sync.
+  @Column({ nullable: true, unique: true })
+  wpUserId: string | null;
+
+  // 'wp_sync' = created/kept in sync from the WP signup/profile flow;
+  // 'manual' = created directly in the Engine admin dashboard.
+  @Column({ default: 'manual' })
+  source: string;
+
   @Column()
   companyName: string;
 

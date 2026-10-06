@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { PageImagesModule } from './page-images/page-images.module';
 import { AuditsModule } from './audits/audits.module';
+import { WpIntegrationModule } from './wp-integration/wp-integration.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuditsModule } from './audits/audits.module';
     CustomersModule,
     PageImagesModule,
     AuditsModule,
+    WpIntegrationModule,
   ],
   controllers: [AppController],
 })
