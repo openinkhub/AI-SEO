@@ -148,22 +148,36 @@ export class WpIntegrationService {
       return this.importRuns.save(run);
     }
 
-    const result = await this.wpClient.request<WpExportResponse>(
+    const result = await this.wpClient.requestDetailed<WpExportResponse>(
       '/wp-json/aiseo/v1/engine-export/customers',
     );
 
-    if (!result || !Array.isArray(result.customers)) {
+    if (!result.ok || !result.data || !Array.isArray(result.data.customers)) {
       run.status = ImportRunStatus.FAILED;
-      run.notes =
-        'Could not reach /wp-json/aiseo/v1/engine-export/customers - confirm plugin ' +
-        'v8.9.256+ is installed on the live WP site and WP_APP_USER has manage_options.';
+      if (result.status === 401 || result.status === 403) {
+        run.notes =
+          `WP responded ${result.status} (auth rejected) for /wp-json/aiseo/v1/engine-export/customers: ` +
+          `${result.error ?? 'no body'}. Check that WP_APP_USER/WP_APP_PASSWORD on Hostinger match a ` +
+          `current, un-revoked Application Password for an Administrator account. If the credential is ` +
+          `confirmed correct and this still fails, the host may be stripping the Authorization header ` +
+          `before WordPress sees it - a known issue on some shared hosting that needs an .htaccess fix.`;
+      } else if (result.status) {
+        run.notes =
+          `WP responded ${result.status} for /wp-json/aiseo/v1/engine-export/customers: ` +
+          `${result.error ?? 'no body'}. Confirm plugin v8.9.256+ is installed and active.`;
+      } else {
+        run.notes =
+          `Could not reach WP at all (no HTTP response) - ${result.error ?? 'unknown network error'}. ` +
+          `Check WP_BASE_URL on Hostinger points at the live site (e.g. https://openinkhub.cloud, no trailing slash).`;
+      }
       return this.importRuns.save(run);
     }
 
+    const data = result.data;
     let created = 0;
     let updated = 0;
 
-    for (const wp of result.customers) {
+    for (const wp of data.customers) {
       let customer = await this.customers.findOne({
         where: { wpUserId: wp.wpUserId },
       });
@@ -206,9 +220,9 @@ export class WpIntegrationService {
     }
 
     run.status = ImportRunStatus.COMPLETED;
-    run.recordsImported = result.customers.length;
+    run.recordsImported = data.customers.length;
     run.notes =
-      `Imported ${result.customers.length} WP customer profile(s): ${created} created, ` +
+      `Imported ${data.customers.length} WP customer profile(s): ${created} created, ` +
       `${updated} updated. Month shells (M0/M1) ensured for each.`;
     this.logger.log(run.notes);
     return this.importRuns.save(run);
