@@ -47,6 +47,15 @@ export class HistoricalImportController {
     return this.service.runHistoricalImport(wpUserId);
   }
 
+  // Decided 2026-10-06: "Pull and sync real customer Data and profile
+  // rows, so that we have not to create again." Admin-triggered,
+  // idempotent — pulls every WP customer's profile from the new
+  // KP21_Engine_Export route and merges it into the matching Customer.
+  @Post('import-profiles')
+  importProfiles() {
+    return this.service.importWpCustomerProfiles();
+  }
+
   @Get('runs')
   listRuns() {
     return this.service.listImportRuns();

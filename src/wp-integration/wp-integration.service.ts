@@ -2,11 +2,27 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer, CustomerStatus } from '../customers/customer.entity';
+import { ProjectsService } from '../projects/projects.service';
 import { HistoricalRecord } from './historical-record.entity';
 import { ImportRun, ImportRunStatus } from './import-run.entity';
 import { WpSyncCustomerDto } from './dto/wp-sync-customer.dto';
 import { WpSyncHistoryDto } from './dto/wp-sync-history.dto';
 import { WpClientService } from './wp-client.service';
+
+// Shape returned by the WP-side read-only export route (KP21_Engine_Export,
+// plugin v8.9.256+): GET /wp-json/aiseo/v1/engine-export/customers.
+interface WpExportedCustomer {
+  wpUserId: string;
+  email: string;
+  displayName: string;
+  registeredAt: string;
+  onboardingStatus: string;
+  profile: Record<string, unknown>;
+}
+interface WpExportResponse {
+  customers: WpExportedCustomer[];
+  count: number;
+}
 
 @Injectable()
 export class WpIntegrationService {
@@ -18,6 +34,7 @@ export class WpIntegrationService {
     private historicalRecords: Repository<HistoricalRecord>,
     @InjectRepository(ImportRun) private importRuns: Repository<ImportRun>,
     private wpClient: WpClientService,
+    private projects: ProjectsService,
   ) {}
 
   // Decision 1 ("auto fetch" sync): upsert, matched by wpUserId. A WP
@@ -105,6 +122,95 @@ export class WpIntegrationService {
       'No history-bearing layer has migrated yet, so there is nothing real to import. ' +
       'This run is a no-op placeholder - re-run once a layer with real 2-month history ' +
       '(e.g. Blog Submission, Backlinks) has an Engine module and a WP export route.';
+    return this.importRuns.save(run);
+  }
+
+  // Decided 2026-10-06: "Pull and sync real customer Data and profile
+  // rows, so that we have not to create again." Pulls every WP customer's
+  // account basics + full onboarding-profile snapshot from the new
+  // read-only WP route (KP21_Engine_Export, plugin v8.9.256) and merges
+  // it into the matching Engine Customer row (matched/created by
+  // wpUserId, same pairing as upsertFromWp), then ensures M0/M1 Month
+  // shells exist for each — this is the real-data counterpart to the
+  // dashboard/profile capability merged to `main` the same day. Safe to
+  // re-run: an existing customer is updated in place rather than
+  // duplicated; WP's profile values win for fields it sends (it's the
+  // one source of truth for onboarding data), but any extra keys already
+  // in Engine's profile that WP doesn't send are preserved, not dropped.
+  async importWpCustomerProfiles(): Promise<ImportRun> {
+    const run = this.importRuns.create({ status: ImportRunStatus.RUNNING });
+    await this.importRuns.save(run);
+
+    if (!this.wpClient.isConfigured()) {
+      run.status = ImportRunStatus.EMPTY;
+      run.notes =
+        'WP_BASE_URL/WP_APP_USER/WP_APP_PASSWORD not configured - nothing to pull.';
+      return this.importRuns.save(run);
+    }
+
+    const result = await this.wpClient.request<WpExportResponse>(
+      '/wp-json/aiseo/v1/engine-export/customers',
+    );
+
+    if (!result || !Array.isArray(result.customers)) {
+      run.status = ImportRunStatus.FAILED;
+      run.notes =
+        'Could not reach /wp-json/aiseo/v1/engine-export/customers - confirm plugin ' +
+        'v8.9.256+ is installed on the live WP site and WP_APP_USER has manage_options.';
+      return this.importRuns.save(run);
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const wp of result.customers) {
+      let customer = await this.customers.findOne({
+        where: { wpUserId: wp.wpUserId },
+      });
+      const isNew = !customer;
+      if (!customer) {
+        customer = this.customers.create({
+          wpUserId: wp.wpUserId,
+          source: 'wp_sync',
+          status: CustomerStatus.ONBOARDING,
+          companyName: wp.displayName || wp.email,
+        });
+      }
+
+      const profile = (wp.profile ?? {}) as Record<
+        string,
+        string | string[] | boolean
+      >;
+      customer.profile = { ...(customer.profile ?? {}), ...profile };
+      customer.companyName =
+        (profile.brand_name as string) ||
+        customer.companyName ||
+        wp.displayName ||
+        wp.email;
+      customer.contactEmail =
+        customer.contactEmail ?? (profile.public_email as string) ?? wp.email;
+      customer.website = customer.website ?? (profile.domain as string) ?? null;
+      customer.industry =
+        customer.industry ?? (profile.industry as string) ?? null;
+      if (!customer.competitors && Array.isArray(profile.competitors)) {
+        customer.competitors = profile.competitors as string[];
+      }
+
+      const saved = await this.customers.save(customer);
+      if (isNew) created++;
+      else updated++;
+
+      // "M0 & M1 should be present, with no data" (2026-10-06 cutover
+      // decision) — every imported WP customer gets this guaranteed too.
+      await this.projects.ensureMonths(saved.id);
+    }
+
+    run.status = ImportRunStatus.COMPLETED;
+    run.recordsImported = result.customers.length;
+    run.notes =
+      `Imported ${result.customers.length} WP customer profile(s): ${created} created, ` +
+      `${updated} updated. Month shells (M0/M1) ensured for each.`;
+    this.logger.log(run.notes);
     return this.importRuns.save(run);
   }
 

@@ -85,6 +85,8 @@
         <input id="newWebsite" placeholder="Website (https://...)" />
         <button class="primary" id="addCustomerBtn">Add customer</button>
       </div>
+      <button id="syncWpBtn" class="secondary" style="width:100%;margin:6px 0 2px;">Sync WP Customer Profiles</button>
+      <div id="syncWpMsg" class="muted" style="font-size:12px;margin-bottom:8px;"></div>
       <input id="searchInput" class="search" placeholder="Search customers..." />
       <ul id="customerList" class="customer-list"><li class="muted">Loading…</li></ul>
     </section>
@@ -217,6 +219,25 @@
       })
       .then(function(){ if (customers.length) selectCustomer(customers[0].id); })
       .catch(function(err){ alert('Could not add customer: ' + err.message); })
+      .finally(function(){ btn.disabled = false; });
+  });
+
+  // Decided 2026-10-06: "Pull and sync real customer Data and profile
+  // rows, so that we have not to create again." Admin-triggered,
+  // idempotent — calls the historical-import import-profiles endpoint,
+  // which pulls every WP customer's profile from the KP21_Engine_Export
+  // WP route (plugin v8.9.256+) and merges it into the matching Customer.
+  document.getElementById('syncWpBtn').addEventListener('click', function(){
+    var btn = document.getElementById('syncWpBtn');
+    var msg = document.getElementById('syncWpMsg');
+    btn.disabled = true;
+    msg.textContent = 'Syncing…';
+    api('/historical-import/import-profiles', { method: 'POST' })
+      .then(function(run){
+        msg.textContent = run.notes || ('Status: ' + run.status);
+        return loadCustomers();
+      })
+      .catch(function(err){ msg.textContent = 'Sync failed: ' + err.message; })
       .finally(function(){ btn.disabled = false; });
   });
 
