@@ -7,71 +7,93 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  Redesigned 2026-10-07: "remove Add customer option from admin panel.
+  Create left sidebar as it was in previous admin panel. Profile contains
+  layer 1-3." The two-column customers-list + tabs layout is replaced by
+  the old WP admin's structure: Customer + Month pickers on top of a left
+  nav tree (Profile / Off Page SEO / On Page SEO / Technical SEO / Local
+  SEO / International SEO / Social Media - the section map from WP's
+  KP21_Section_Mapping). Customers are no longer created here - they
+  arrive from the WP signup sync (or "Sync WP Customer Profiles").
+  Profile page = Layers 1-3. Other pages are placeholders showing which
+  Layers they will host, until those Layers are migrated. Layer 69 (Brand
+  Audit) keeps its existing audit UI under Technical SEO.
+-->
 <style>
   :root{
-    --accent:#33418C; --accent-dark:#212c66;
+    --accent:#33418C; --accent-dark:#212c66; --accent-soft:#F1F3FA;
     --bg:#F7F6F3; --border:#E3E1DA; --border-soft:#E8E6DF; --muted:#6B6963;
     --ok:#2f7a4f; --ok-bg:#e8f3ec;
     --pending:#9a7b1f; --pending-bg:#faf1dd;
     --fail:#a33a3a; --fail-bg:#f8e9e9;
+    --side-w:272px;
   }
   *{box-sizing:border-box;}
   body{margin:0; background:var(--bg); color:#262420; font-family:'Work Sans', sans-serif;}
   h1,h2,h3,.brand{font-family:'Fraunces', serif;}
-  header{display:flex; align-items:center; justify-content:space-between; padding:18px 28px; border-bottom:1px solid var(--border); background:#fff;}
+  header{display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--border); background:#fff;}
   .brand{font-size:20px; font-weight:600; color:var(--accent-dark);}
   .who{display:flex; align-items:center; gap:14px; font-size:14px; color:var(--muted);}
   button{font-family:'Work Sans', sans-serif; cursor:pointer; border-radius:8px; border:1px solid var(--border); background:#fff; padding:8px 14px; font-size:14px; color:#262420;}
   button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
   button.primary:hover{background:var(--accent-dark);}
-  button.ghost{background:transparent;}
   button:disabled{opacity:.5; cursor:default;}
   .btn-danger{background:var(--fail-bg); color:var(--fail); border-color:var(--fail);}
   .btn-danger:hover{background:var(--fail); color:#fff;}
-  main{padding:24px 28px;}
-  .cols{display:grid; grid-template-columns:340px 1fr; gap:20px;}
-  @media (max-width:860px){ .cols{grid-template-columns:1fr;} }
-  .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;}
-  .card h2{margin:0 0 14px; font-size:18px; color:var(--accent-dark);}
-  .add-form{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
-  input{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:100%;}
-  .search{margin-bottom:10px;}
-  .customer-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto;}
-  .customer-row{padding:10px 12px;border:1px solid var(--border-soft);border-radius:8px;cursor:pointer;}
-  .customer-row:hover{border-color:var(--accent);}
-  .customer-row.active{border-color:var(--accent);background:#F1F3FA;}
-  .customer-row .name{font-weight:600;}
-  .customer-row .site{font-size:12px;color:var(--muted);}
+  .shell{display:grid; grid-template-columns:var(--side-w) 1fr; min-height:calc(100vh - 61px);}
+  @media (max-width:860px){ .shell{grid-template-columns:1fr;} }
+  aside{background:#fff; border-right:1px solid var(--border); padding:16px 14px 24px; display:flex; flex-direction:column; gap:14px;}
+  .pick label{display:block; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:4px;}
+  select{font-family:'Work Sans',sans-serif; width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:#fff; color:#262420;}
+  nav a{display:block; text-decoration:none; color:#262420; font-size:14px; padding:8px 10px; border-radius:8px;}
+  nav a:hover{background:var(--accent-soft);}
+  nav a.active{background:var(--accent-soft); color:var(--accent-dark); font-weight:600; box-shadow:inset 3px 0 0 var(--accent);}
+  nav .grp{margin-top:10px; padding:6px 10px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);}
+  nav .grp a.grp-link{display:inline; padding:0; font-size:inherit; font-weight:inherit; color:inherit; text-transform:inherit; letter-spacing:inherit;}
+  nav .grp a.grp-link:hover{background:none; color:var(--accent-dark);}
+  nav a.sub{padding-left:22px; font-size:13.5px;}
+  .side-foot{margin-top:auto; border-top:1px solid var(--border-soft); padding-top:12px;}
+  main{padding:24px 28px; min-width:0;}
+  .page-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .page-head h1{margin:0; font-size:24px; color:var(--accent-dark);}
+  .page-head .sub{font-size:13px; color:var(--muted); margin-top:2px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .card h2{margin:0 0 4px; font-size:18px; color:var(--accent-dark);}
+  .card .lead{margin:0 0 14px; font-size:13px; color:var(--muted);}
+  .layer-tag{display:inline-block; font-family:'Work Sans',sans-serif; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:var(--accent-soft); color:var(--accent-dark); padding:2px 8px; border-radius:999px; margin-right:8px; vertical-align:middle;}
   .muted{color:var(--muted);font-size:14px;}
   .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600;}
   .badge.ok{background:var(--ok-bg);color:var(--ok);}
   .badge.pending{background:var(--pending-bg);color:var(--pending);}
   .badge.fail{background:var(--fail-bg);color:var(--fail);}
-  .run-row{border:1px solid var(--border-soft);border-radius:8px;padding:12px;margin-bottom:10px;}
-  .run-row .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
-  .row-actions{display:flex;gap:8px;flex-wrap:wrap;}
-  .task-scroll{max-height:400px;overflow:auto;margin-top:10px;border:1px solid var(--border-soft);border-radius:8px;}
+  input{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:100%;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-soft);}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:top;}
   th{background:#FAFAF8;position:sticky;top:0;}
-  .detail-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
-  .detail-header h2{margin:0;}
-  .detail-header .site-link{font-size:13px;color:var(--muted);}
-  .tabbar{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
-  .tabbar .tab{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:10px 4px;margin-right:16px;font-size:14px;color:var(--muted);}
-  .tabbar .tab.active{color:var(--accent-dark);border-bottom-color:var(--accent);font-weight:600;}
+  .kv{display:grid; grid-template-columns:200px 1fr; gap:8px 14px; font-size:14px;}
+  .kv dt{color:var(--muted);} .kv dd{margin:0; word-break:break-word;}
+  @media (max-width:700px){ .kv{grid-template-columns:1fr;} }
+  .actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0;}
   .profile-group{margin-bottom:18px;border:1px solid var(--border-soft);border-radius:8px;padding:14px;}
   .profile-group h3{margin:0 0 10px;font-size:14px;color:var(--accent-dark);text-transform:uppercase;letter-spacing:.03em;}
-  .profile-group .group-save-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
+  .profile-group h3 .cnt{font-family:'Work Sans',sans-serif; font-weight:500; text-transform:none; letter-spacing:0; color:var(--muted); font-size:12px; margin-left:8px;}
+  .group-save-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
   .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   @media (max-width:700px){ .profile-grid{grid-template-columns:1fr;} }
   .profile-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);}
   .profile-field.wide{grid-column:1 / -1;}
   .profile-field input,.profile-field textarea{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:#262420;width:100%;resize:vertical;}
-  .months-actions{margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  .kp21f-tablewrap table{width:100%;border-collapse:collapse;font-size:13px;}
-  .kp21f-tablewrap th,.kp21f-tablewrap td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);}
-  .kp21f-tablewrap th{background:#FAFAF8;}
+  .run-row{border:1px solid var(--border-soft);border-radius:8px;padding:12px;margin-bottom:10px;}
+  .run-row .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .row-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .task-scroll{max-height:400px;overflow:auto;margin-top:10px;border:1px solid var(--border-soft);border-radius:8px;}
+  .placeholder{text-align:center; padding:36px 20px;}
+  .placeholder .layers{font-size:13px; color:var(--muted); margin-top:10px; line-height:1.7;}
+  a.jump{color:var(--accent); font-size:13px; text-decoration:none;}
+  a.jump:hover{text-decoration:underline;}
+  .empty{padding:40px 10px; text-align:center;}
+  .danger-zone{border-color:#ecd0d0;}
 </style>
 </head>
 <body>
@@ -79,53 +101,50 @@
   <div class="brand">AI SEO Engine</div>
   <div class="who"><span id="whoEmail"></span><button id="logoutBtn">Sign out</button></div>
 </header>
-<main>
-  <div class="cols">
-    <section class="card" id="customersCard">
-      <h2>Customers</h2>
-      <div class="add-form">
-        <input id="newCompanyName" placeholder="Company name" />
-        <input id="newWebsite" placeholder="Website (https://...)" />
-        <button class="primary" id="addCustomerBtn">Add customer</button>
-      </div>
-      <button id="syncWpBtn" class="secondary" style="width:100%;margin:6px 0 2px;">Sync WP Customer Profiles</button>
-      <div id="syncWpMsg" class="muted" style="font-size:12px;margin-bottom:8px;"></div>
-      <input id="searchInput" class="search" placeholder="Search customers..." />
-      <ul id="customerList" class="customer-list"><li class="muted">Loading…</li></ul>
-    </section>
-    <section class="card" id="detailCol">
-      <p class="muted">Select a customer to view/edit their Profile, Months (M0/M1/M2…), or run a Complete Website Audit (Layer 69).</p>
-    </section>
-  </div>
-</main>
+<div class="shell">
+  <aside>
+    <div class="pick">
+      <label for="customerSelect">Customer</label>
+      <select id="customerSelect"><option>Loading…</option></select>
+    </div>
+    <div class="pick">
+      <label for="monthSelect">Month</label>
+      <select id="monthSelect"><option>—</option></select>
+    </div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <button id="syncWpBtn" style="width:100%;">Sync WP Customer Profiles</button>
+      <div id="syncWpMsg" class="muted" style="font-size:12px;margin-top:6px;"></div>
+    </div>
+  </aside>
+  <main id="page"><p class="muted">Loading…</p></main>
+</div>
 <script src="profile-fields.js"></script>
 <script>
 (function(){
-  var token = localStorage.getItem('oh_token');
-  var userRaw = localStorage.getItem('oh_user');
+  var token = null, userRaw = null;
+  try { token = localStorage.getItem('oh_token'); userRaw = localStorage.getItem('oh_user'); } catch(e) {}
   if (!token) { window.location.href = '/index.html'; return; }
   var user = null;
   try { user = userRaw ? JSON.parse(userRaw) : null; } catch(e) {}
   document.getElementById('whoEmail').textContent = (user && user.email) || '';
 
   document.getElementById('logoutBtn').addEventListener('click', function(){
-    localStorage.removeItem('oh_token');
-    localStorage.removeItem('oh_user');
+    try { localStorage.removeItem('oh_token'); localStorage.removeItem('oh_user'); } catch(e) {}
     window.location.href = '/index.html';
   });
 
   function api(path, opts) {
     opts = opts || {};
     var headers = Object.assign({ 'Authorization': 'Bearer ' + token }, opts.headers || {});
-    if (opts.body && !(opts.body instanceof Blob)) headers['Content-Type'] = 'application/json';
+    if (opts.body) headers['Content-Type'] = 'application/json';
     return fetch('/api/v1' + path, {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined
     }).then(function(res){
       if (res.status === 401) {
-        localStorage.removeItem('oh_token');
-        localStorage.removeItem('oh_user');
+        try { localStorage.removeItem('oh_token'); localStorage.removeItem('oh_user'); } catch(e) {}
         window.location.href = '/index.html';
         throw new Error('Unauthorized');
       }
@@ -143,74 +162,180 @@
       return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
     });
   }
+  function statusBadge(status) {
+    var cls = (status === 'completed' || status === 'active') ? 'ok' : (status === 'failed' ? 'fail' : 'pending');
+    return '<span class="badge ' + cls + '">' + escapeHtml(status || '—') + '</span>';
+  }
+  function fmtDate(d) {
+    if (!d) return '—';
+    try { return new Date(d).toLocaleString(); } catch(e) { return d; }
+  }
+  function fmtDay(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
+    if (!m) return d || '';
+    var names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return m[3] + ' ' + names[parseInt(m[2], 10) - 1] + ' ' + m[1];
+  }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
 
-  var customers = [];
-  var selectedCustomerId = null;
-  var currentRuns = [];
-  var currentMonths = [];
-  var activeTab = 'profile'; // 'profile' | 'months' | 'audits'
-  var expanded = {}; // runId -> 'tasks' | 'pushes' | null
-
-  // Decided 2026-10-06: field schema moved to the shared profile-fields.js
-  // (loaded above) so the Admin Profile tab here and the public
-  // onboarding.html form can never drift into different field sets.
   var ARRAY_PROFILE_FIELDS = ProfileFields.ARRAY_PROFILE_FIELDS;
   var LONGTEXT_PROFILE_FIELDS = ProfileFields.LONGTEXT_PROFILE_FIELDS;
   var PROFILE_FIELD_GROUPS = ProfileFields.PROFILE_FIELD_GROUPS;
+  // Hostinger's edge blocks request bodies over 10 leaf values (see
+  // profile-fields.js chunkProfile) - keep headroom.
+  var PROFILE_SAVE_CHUNK_SIZE = 8;
 
-  function loadCustomers(search) {
-    var q = search ? ('?search=' + encodeURIComponent(search)) : '';
-    return api('/customers' + q).then(function(data){
-      customers = Array.isArray(data) ? data : (data.items || []);
-      renderCustomers();
+  // Mirrors WP KP21_Section_Mapping::map() - labels, subsections, layers.
+  function rng(a, b) { var o = []; for (var i = a; i <= b; i++) o.push(i); return o; }
+  var NAV = [
+    { key: 'profile', label: 'Profile', subs: [], layers: [1, 2, 3] },
+    { key: 'off-page', label: 'Off Page SEO', subs: [
+        ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
+        ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
+        ['backlinks', 'Backlinks'], ['digital-pr', 'Digital PR'] ],
+      layers: [15, 16, 17, 18, 19, 20, 21, 23].concat(rng(30, 59), rng(73, 162)) },
+    { key: 'on-page', label: 'On Page SEO', subs: [['keyword-planner', 'Keyword Planner'], ['website-development', 'Website Development']],
+      layers: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 22, 193, 194] },
+    { key: 'technical', label: 'Technical SEO', subs: [
+        ['website-audit', 'Website Audit'], ['google-analytics', 'Google Analytics'],
+        ['ai-visibility', 'AI Visibility'], ['brand-audit', 'Brand Audit'] ],
+      layers: [26, 27, 29, 69] },
+    { key: 'local', label: 'Local SEO', subs: [['gmb-audit', 'GMB Audit'], ['gmb-profile', 'GMB Profile']], layers: [70, 71, 72] },
+    { key: 'international', label: 'International SEO', subs: [], layers: [] },
+    { key: 'social', label: 'Social Media', subs: [['social-blog', 'Social Blog'], ['social-analytics', 'Social Analytics'], ['social-post', 'Social Post']],
+      layers: [61, 62, 63, 64, 65, 66, 67, 68].concat(rng(163, 192)) }
+  ];
+  var LAYER_TITLES = {
+    1: 'User Login & Month Context',
+    2: 'Onboarding & Profile Ownership',
+    3: 'Business / Profile Resolution'
+  };
+
+  function fmtLayers(arr) {
+    if (!arr.length) return 'none (reserved)';
+    var s = arr.slice().sort(function(a, b){ return a - b; }), out = [], i = 0;
+    while (i < s.length) {
+      var j = i;
+      while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++;
+      out.push(j > i + 1 ? 'L' + s[i] + '–' + s[j] : s.slice(i, j + 1).map(function(n){ return 'L' + n; }).join(', '));
+      i = j + 1;
+    }
+    return out.join(', ');
+  }
+
+  var state = {
+    customers: [], cid: null, months: [], mid: null,
+    runs: [], expanded: {}, route: 'profile'
+  };
+
+  function curCustomer() {
+    return state.customers.filter(function(c){ return c.id === state.cid; })[0] || null;
+  }
+
+  // ---- data loading -------------------------------------------------
+
+  function loadCustomers() {
+    return api('/customers').then(function(data){
+      state.customers = Array.isArray(data) ? data : (data.items || []);
+      var saved = lsGet('oh_admin_cid');
+      var ids = state.customers.map(function(c){ return c.id; });
+      if (ids.indexOf(state.cid) === -1) {
+        state.cid = ids.indexOf(saved) !== -1 ? saved : (ids[0] || null);
+      }
+      renderCustomerSelect();
+      if (state.cid) return loadMonths(); 
+      state.months = []; state.mid = null; renderMonthSelect(); renderPage();
     }).catch(function(err){
-      document.getElementById('customerList').innerHTML =
-        '<li class="muted">Failed to load: ' + escapeHtml(err.message) + '</li>';
+      document.getElementById('customerSelect').innerHTML = '<option>Failed to load</option>';
+      document.getElementById('page').innerHTML = '<p class="muted">Failed to load customers: ' + escapeHtml(err.message) + '</p>';
     });
   }
 
-  function renderCustomers() {
-    var list = document.getElementById('customerList');
-    if (!customers.length) { list.innerHTML = '<li class="muted">No customers yet.</li>'; return; }
-    list.innerHTML = customers.map(function(c){
-      var active = c.id === selectedCustomerId ? ' active' : '';
-      return '<li class="customer-row' + active + '" data-id="' + c.id + '">' +
-        '<div class="name">' + escapeHtml(c.companyName) + '</div>' +
-        '<div class="site">' + escapeHtml(c.website || 'no website') + '</div>' +
-      '</li>';
+  function loadMonths() {
+    var cid = state.cid;
+    return api('/customers/' + cid + '/projects').then(function(data){
+      if (cid !== state.cid) return;
+      state.months = (Array.isArray(data) ? data : (data.items || [])).slice()
+        .sort(function(a, b){ return (a.monthIndex || 0) - (b.monthIndex || 0); });
+      var ids = state.months.map(function(m){ return m.id; });
+      if (ids.indexOf(state.mid) === -1) {
+        // default to the latest month that is not in the future, else last
+        state.mid = ids.length ? ids[ids.length - 1] : null;
+      }
+      renderMonthSelect();
+      renderPage();
+    }).catch(function(err){
+      state.months = []; state.mid = null; renderMonthSelect();
+      document.getElementById('page').innerHTML = '<p class="muted">Failed to load months: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  // ---- sidebar ------------------------------------------------------
+
+  function renderCustomerSelect() {
+    var sel = document.getElementById('customerSelect');
+    if (!state.customers.length) { sel.innerHTML = '<option value="">No customers</option>'; return; }
+    sel.innerHTML = state.customers.map(function(c){
+      return '<option value="' + escapeHtml(c.id) + '"' + (c.id === state.cid ? ' selected' : '') + '>' +
+        escapeHtml(c.companyName || c.contactEmail || c.id) + '</option>';
     }).join('');
-    Array.prototype.forEach.call(list.querySelectorAll('.customer-row'), function(row){
-      row.addEventListener('click', function(){ selectCustomer(row.getAttribute('data-id')); });
-    });
   }
 
-  document.getElementById('searchInput').addEventListener('input', function(e){
-    clearTimeout(window.__searchT);
-    window.__searchT = setTimeout(function(){ loadCustomers(e.target.value.trim()); }, 300);
+  function renderMonthSelect() {
+    var sel = document.getElementById('monthSelect');
+    if (!state.months.length) { sel.innerHTML = '<option value="">No months yet</option>'; return; }
+    sel.innerHTML = state.months.map(function(m){
+      var label = (m.monthCode || ('M' + m.monthIndex)) +
+        (m.monthStartDate ? ' · ' + fmtDay(m.monthStartDate) : '') +
+        (m.monthEndDate ? ' – ' + fmtDay(m.monthEndDate) : '');
+      return '<option value="' + escapeHtml(m.id) + '"' + (m.id === state.mid ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    }).join('');
+  }
+
+  document.getElementById('customerSelect').addEventListener('change', function(e){
+    state.cid = e.target.value || null;
+    lsSet('oh_admin_cid', state.cid || '');
+    state.months = []; state.mid = null; state.runs = []; state.expanded = {};
+    renderMonthSelect();
+    document.getElementById('page').innerHTML = '<p class="muted">Loading…</p>';
+    if (state.cid) loadMonths(); else renderPage();
+  });
+  document.getElementById('monthSelect').addEventListener('change', function(e){
+    state.mid = e.target.value || null;
+    renderPage();
   });
 
-  document.getElementById('addCustomerBtn').addEventListener('click', function(){
-    var companyName = document.getElementById('newCompanyName').value.trim();
-    var website = document.getElementById('newWebsite').value.trim();
-    if (!companyName) { alert('Company name is required.'); return; }
-    var btn = document.getElementById('addCustomerBtn');
-    btn.disabled = true;
-    api('/customers', { method: 'POST', body: { companyName: companyName, website: website || undefined } })
-      .then(function(created){
-        document.getElementById('newCompanyName').value = '';
-        document.getElementById('newWebsite').value = '';
-        return loadCustomers();
-      })
-      .then(function(){ if (customers.length) selectCustomer(customers[0].id); })
-      .catch(function(err){ alert('Could not add customer: ' + err.message); })
-      .finally(function(){ btn.disabled = false; });
-  });
+  function parseRoute() {
+    var h = (window.location.hash || '').replace(/^#\/?/, '');
+    var parts = h.split('/');
+    var sec = NAV.filter(function(n){ return n.key === parts[0]; })[0];
+    if (!sec) return { sec: NAV[0], sub: null };
+    var sub = sec.subs.filter(function(s){ return s[0] === parts[1]; })[0] || null;
+    return { sec: sec, sub: sub };
+  }
 
-  // Decided 2026-10-06: "Pull and sync real customer Data and profile
-  // rows, so that we have not to create again." Admin-triggered,
-  // idempotent — calls the historical-import import-profiles endpoint,
-  // which pulls every WP customer's profile from the KP21_Engine_Export
-  // WP route (plugin v8.9.256+) and merges it into the matching Customer.
+  function renderNav() {
+    var r = parseRoute();
+    var html = '';
+    NAV.forEach(function(n){
+      if (n.key === 'profile' || !n.subs.length) {
+        var act = (r.sec.key === n.key) ? ' active' : '';
+        html += '<a class="' + act.trim() + '" href="#' + n.key + '"' + (n.key !== 'profile' ? ' style="margin-top:10px;"' : '') + '>' + escapeHtml(n.label) + '</a>';
+        return;
+      }
+      html += '<div class="grp">' + escapeHtml(n.label) + '</div>';
+      n.subs.forEach(function(s){
+        var act = (r.sec.key === n.key && r.sub && r.sub[0] === s[0]) ? ' active' : '';
+        html += '<a class="sub' + act + '" href="#' + n.key + '/' + s[0] + '">' + escapeHtml(s[1]) + '</a>';
+      });
+    });
+    document.getElementById('nav').innerHTML = html;
+  }
+
+  window.addEventListener('hashchange', renderPage);
+
+  // Hostinger sync button (idempotent WP -> Engine profile import).
   document.getElementById('syncWpBtn').addEventListener('click', function(){
     var btn = document.getElementById('syncWpBtn');
     var msg = document.getElementById('syncWpMsg');
@@ -225,163 +350,202 @@
       .finally(function(){ btn.disabled = false; });
   });
 
-  function selectCustomer(id) {
-    selectedCustomerId = id;
-    expanded = {};
-    activeTab = 'profile';
-    currentRuns = [];
-    currentMonths = [];
-    renderCustomers();
-    renderDetailLoading();
-    loadMonths(id);
+  // ---- page router --------------------------------------------------
+
+  function renderPage() {
+    renderNav();
+    var page = document.getElementById('page');
+    var cust = curCustomer();
+    if (!cust) {
+      page.innerHTML = '<div class="card empty"><h2>No customer selected</h2>' +
+        '<p class="muted">Customers arrive automatically when they sign up on the WordPress site. ' +
+        'Use “Sync WP Customer Profiles” in the sidebar to pull existing ones.</p></div>';
+      return;
+    }
+    var r = parseRoute();
+    if (r.sec.key === 'profile') return renderProfilePage(cust);
+    if (r.sec.key === 'technical' && r.sub && r.sub[0] === 'brand-audit') return renderBrandAuditPage(cust);
+    return renderPlaceholderPage(cust, r.sec, r.sub);
   }
 
-  function renderDetailLoading() {
-    document.getElementById('detailCol').innerHTML = '<p class="muted">Loading…</p>';
+  function pageHead(title, sub, extra) {
+    return '<div class="page-head"><div><h1>' + escapeHtml(title) + '</h1>' +
+      (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>' + (extra || '') + '</div>';
   }
 
-  // Added 2026-10-06, after a round of real test signups left throwaway
-  // customers with no way to clean them up from here - deletes the
-  // Customer row and its Month shells (server-side cascade, see
-  // CustomersService.remove()). Does not touch the WP user account; that
-  // still needs deleting separately in wp-admin.
-  function deleteCustomer(customer) {
-    var ok = window.confirm(
-      'Delete "' + (customer.companyName || 'this customer') + '" from the Engine? ' +
-      'This removes their profile and Month data here. It does NOT delete their ' +
-      'WordPress account - do that separately in wp-admin if needed.'
-    );
-    if (!ok) return;
-    var btn = document.getElementById('deleteCustomerBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
-    api('/customers/' + customer.id, { method: 'DELETE' })
-      .then(function(){
-        selectedCustomerId = null;
-        return loadCustomers();
-      })
-      .then(function(){
-        if (customers.length) selectCustomer(customers[0].id);
-        else document.getElementById('detailCol').innerHTML = '<p class="muted">No customers yet.</p>';
-      })
-      .catch(function(err){
-        alert('Could not delete customer: ' + err.message);
-        if (btn) { btn.disabled = false; btn.textContent = 'Delete customer'; }
-      });
+  function currentMonth() {
+    return state.months.filter(function(m){ return m.id === state.mid; })[0] || null;
   }
 
-  function loadRuns(customerId) {
-    return api('/customers/' + customerId + '/audits').then(function(data){
-      currentRuns = Array.isArray(data) ? data : (data.items || []);
-      renderDetail();
-    }).catch(function(err){
-      document.getElementById('detailCol').innerHTML =
-        '<p class="muted">Failed to load audits: ' + escapeHtml(err.message) + '</p>';
-    });
+  function contextLine(cust) {
+    var m = currentMonth();
+    return escapeHtml(cust.companyName || '') + (cust.website ? ' · ' + escapeHtml(cust.website) : '') +
+      (m ? ' · ' + escapeHtml(m.monthCode || '') : '');
   }
 
-  function loadMonths(customerId) {
-    return api('/customers/' + customerId + '/projects').then(function(data){
-      currentMonths = Array.isArray(data) ? data : (data.items || []);
-      renderDetail();
-    }).catch(function(err){
-      document.getElementById('detailCol').innerHTML =
-        '<p class="muted">Failed to load months: ' + escapeHtml(err.message) + '</p>';
-    });
+  // ---- placeholder pages -------------------------------------------
+
+  function renderPlaceholderPage(cust, sec, sub) {
+    var title = sub ? sub[1] : sec.label;
+    var html = pageHead(title, sec.label + ' · ' + contextLine(cust));
+    html += '<div class="card placeholder"><h2>' + escapeHtml(title) + '</h2>' +
+      '<p class="muted">Not migrated to the Engine yet. This page will appear here once its Layers are migrated, in order, starting from Layer 1.</p>' +
+      '<div class="layers"><strong>' + escapeHtml(sec.label) + '</strong> hosts: ' + escapeHtml(fmtLayers(sec.layers)) + '</div></div>';
+    document.getElementById('page').innerHTML = html;
   }
 
-  function statusBadge(status) {
-    var cls = status === 'completed' ? 'ok' : (status === 'failed' ? 'fail' : 'pending');
-    return '<span class="badge ' + cls + '">' + escapeHtml(status) + '</span>';
+  // ---- Profile page: Layers 1-3 ------------------------------------
+
+  function isFilled(v) {
+    if (Array.isArray(v)) return v.some(function(x){ return String(x).trim() !== ''; });
+    return v != null && String(v).trim() !== '';
   }
 
-  function fmtDate(d) {
-    if (!d) return '—';
-    try { return new Date(d).toLocaleString(); } catch(e) { return d; }
+  function onboardingLink(cust) {
+    if (!cust.onboardingToken) return '';
+    return window.location.origin + '/onboarding.html?token=' + cust.onboardingToken;
   }
 
-  function renderDetail() {
-    var customer = customers.find(function(c){ return c.id === selectedCustomerId; }) || {};
-    var html = '';
-    html += '<div class="detail-header">';
-    html += '<div><h2>' + escapeHtml(customer.companyName || '') + '</h2>';
-    html += '<div class="site-link">' + escapeHtml(customer.website || 'no website') + '</div></div>';
-    html += '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button>';
-    html += '</div>';
-    html += '<div class="tabbar">';
-    [['profile','Profile'],['months','Months'],['audits','Layer 69 Audits']].forEach(function(t){
-      html += '<button class="tab' + (activeTab === t[0] ? ' active' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
-    });
-    html += '</div>';
-    html += '<div id="tabBody"></div>';
-    document.getElementById('detailCol').innerHTML = html;
-    Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tab'), function(btn){
-      btn.addEventListener('click', function(){
-        var tab = btn.getAttribute('data-tab');
-        activeTab = tab;
-        if (tab === 'audits') { renderDetailLoading(); loadRuns(selectedCustomerId); return; }
-        renderDetail();
+  function renderProfilePage(cust) {
+    var html = pageHead('Profile', 'Layers 1–3 · ' + contextLine(cust));
+    html += '<div class="actions" style="margin-top:0"><span class="muted">Jump to:</span>' +
+      [1, 2, 3].map(function(n){ return '<a href="#" class="jump" data-target="layer' + n + '">Layer ' + n + ' · ' + escapeHtml(LAYER_TITLES[n]) + '</a>'; }).join(' · ') + '</div>';
+    html += '<div id="layer1"></div><div id="layer2"></div><div id="layer3"></div>';
+    html += '<div class="card danger-zone"><h2>Remove customer</h2>' +
+      '<p class="lead">Deletes this customer and their Month shells from the Engine. It does NOT delete their WordPress account — do that separately in wp-admin.</p>' +
+      '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button></div>';
+    document.getElementById('page').innerHTML = html;
+    renderLayer1(cust);
+    renderLayer2(cust);
+    renderLayer3(cust);
+    document.getElementById('deleteCustomerBtn').addEventListener('click', function(){ deleteCustomer(cust); });
+    Array.prototype.forEach.call(document.querySelectorAll('a.jump'), function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var t = document.getElementById(a.getAttribute('data-target'));
+        if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
-    var deleteBtn = document.getElementById('deleteCustomerBtn');
-    if (deleteBtn) deleteBtn.addEventListener('click', function(){ deleteCustomer(customer); });
-    if (activeTab === 'profile') renderProfileTab(customer);
-    else if (activeTab === 'months') renderMonthsTab();
-    else renderAuditsTab();
   }
 
-  function renderProfileTab(customer) {
-    var profile = customer.profile || {};
-    var html = '<div id="profileForm">';
+  // Layer 1 - User Login & Month Context
+  function renderLayer1(cust) {
+    var link = onboardingLink(cust);
+    var hasM0 = state.months.some(function(m){ return m.monthIndex === 0; });
+    var hasM1 = state.months.some(function(m){ return m.monthIndex === 1; });
+    var hasM2 = state.months.some(function(m){ return m.monthIndex === 2; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
+      '<p class="lead">Who the customer is, how they log in, and which Months exist for them.</p>';
+    h += '<dl class="kv">' +
+      '<dt>Company</dt><dd>' + escapeHtml(cust.companyName || '—') + '</dd>' +
+      '<dt>Website</dt><dd>' + escapeHtml(cust.website || '—') + '</dd>' +
+      '<dt>Login / contact email</dt><dd>' + escapeHtml(cust.contactEmail || '—') + '</dd>' +
+      '<dt>Status</dt><dd>' + statusBadge(cust.status) + '</dd>' +
+      (cust.source ? '<dt>Source</dt><dd>' + escapeHtml(cust.source) + '</dd>' : '') +
+      '<dt>Customer ID</dt><dd><code>' + escapeHtml(cust.id) + '</code></dd>' +
+      '</dl>';
+    h += '<h3 style="font-size:14px;margin:18px 0 8px;">Months</h3>';
+    h += '<div class="actions" style="margin-top:0">';
+    if (!hasM0 || !hasM1) {
+      h += '<button class="primary" id="ensureM0M1Btn">Ensure M0 &amp; M1 exist</button>' +
+        '<span class="muted">Profile/onboarding months only — Layer 4+ data for these stays on WP for now.</span>';
+    } else if (!hasM2) {
+      h += '<button class="primary" id="startM2Btn">Start M2 (first month worked here)</button>';
+    } else {
+      h += '<span class="muted">M0, M1 and M2 all exist.</span>';
+    }
+    h += '</div>';
+    h += '<div style="overflow:auto"><table><thead><tr><th>Month</th><th>Status</th><th>Source</th><th>Start</th><th>End</th></tr></thead><tbody>';
+    if (!state.months.length) h += '<tr><td colspan="5" class="muted">No months yet.</td></tr>';
+    state.months.forEach(function(m){
+      h += '<tr><td>' + escapeHtml(m.monthCode) + '</td><td>' + statusBadge(m.status) + '</td>' +
+        '<td>' + escapeHtml(m.source) + '</td><td>' + escapeHtml(m.monthStartDate || '—') + '</td><td>' + escapeHtml(m.monthEndDate || '—') + '</td></tr>';
+    });
+    h += '</tbody></table></div></section>';
+    document.getElementById('layer1').innerHTML = h;
+    var ensureBtn = document.getElementById('ensureM0M1Btn');
+    if (ensureBtn) ensureBtn.addEventListener('click', function(){
+      ensureBtn.disabled = true;
+      api('/customers/' + state.cid + '/projects/ensure-m0-m1', { method: 'POST', body: {} })
+        .then(function(){ return loadMonths(); })
+        .catch(function(err){ alert('Could not create M0/M1: ' + err.message); ensureBtn.disabled = false; });
+    });
+    var startM2Btn = document.getElementById('startM2Btn');
+    if (startM2Btn) startM2Btn.addEventListener('click', function(){
+      startM2Btn.disabled = true;
+      var today = new Date().toISOString().slice(0, 10);
+      api('/customers/' + state.cid + '/projects', { method: 'POST',
+          body: { monthIndex: 2, monthCode: 'M2', status: 'active', source: 'manual', monthStartDate: today } })
+        .then(function(){ return loadMonths(); })
+        .catch(function(err){ alert('Could not start M2: ' + err.message); startM2Btn.disabled = false; });
+    });
+  }
+
+  // Layer 2 - Onboarding & Profile Ownership
+  function renderLayer2(cust) {
+    var profile = cust.profile || {};
+    var link = onboardingLink(cust);
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 2</span>' + escapeHtml(LAYER_TITLES[2]) + '</h2>' +
+      '<p class="lead">The company profile. The customer fills it from the onboarding link; the admin can edit any section here. Each section saves on its own.</p>';
+    h += '<dl class="kv">' +
+      '<dt>Onboarding</dt><dd>' + (cust.onboardingCompletedAt
+        ? '<span class="badge ok">Submitted</span> ' + escapeHtml(fmtDate(cust.onboardingCompletedAt))
+        : '<span class="badge pending">Not submitted yet</span>') + '</dd>' +
+      '<dt>Onboarding email</dt><dd>' + (cust.onboardingEmailSentAt ? 'Sent ' + escapeHtml(fmtDate(cust.onboardingEmailSentAt)) : 'Not sent') + '</dd>' +
+      '<dt>Onboarding link</dt><dd>' + (link
+        ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener">Open form</a> · <button type="button" id="copyLinkBtn" style="padding:3px 10px;font-size:12px;">Copy link</button> <span id="copyMsg" class="muted" style="font-size:12px;"></span>'
+        : '—') + '</dd></dl>';
+    h += '<div id="profileForm" style="margin-top:18px">';
     PROFILE_FIELD_GROUPS.forEach(function(group, gi){
-      html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+      h += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) +
+        '<span class="cnt" id="cnt_' + gi + '"></span></h3><div class="profile-grid">';
       group.fields.forEach(function(f){
         var key = f[0], label = f[1];
         var raw = profile[key];
         var isArray = ARRAY_PROFILE_FIELDS.indexOf(key) !== -1;
         var isLong = LONGTEXT_PROFILE_FIELDS.indexOf(key) !== -1;
         var value = isArray ? (Array.isArray(raw) ? raw.join('\n') : (raw || '')) : (raw || '');
-        html += '<label class="profile-field' + (isArray || isLong ? ' wide' : '') + '"><span>' + escapeHtml(label) +
+        h += '<label class="profile-field' + (isArray || isLong ? ' wide' : '') + '"><span>' + escapeHtml(label) +
           (isArray ? ' <small>(one per line)</small>' : '') + '</span>';
         if (isArray || isLong) {
-          html += '<textarea data-key="' + key + '" rows="' + (isArray ? 3 : 4) + '">' + escapeHtml(value) + '</textarea>';
+          h += '<textarea data-key="' + key + '" rows="' + (isArray ? 3 : 4) + '">' + escapeHtml(value) + '</textarea>';
         } else {
-          html += '<input data-key="' + key + '" value="' + escapeHtml(value) + '" />';
+          h += '<input data-key="' + key + '" value="' + escapeHtml(value) + '" />';
         }
-        html += '</label>';
+        h += '</label>';
       });
-      html += '</div><div class="group-save-row"><button type="button" class="primary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
+      h += '</div><div class="group-save-row"><button type="button" class="primary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
         ' <span id="profileSaveMsg_' + gi + '" class="muted"></span></div></div>';
     });
-    html += '</div>';
-    document.getElementById('tabBody').innerHTML = html;
+    h += '</div></section>';
+    document.getElementById('layer2').innerHTML = h;
+    PROFILE_FIELD_GROUPS.forEach(function(g, gi){ updateGroupCount(gi); });
     Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
-      btn.addEventListener('click', function(){
-        saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10));
-      });
+      btn.addEventListener('click', function(){ saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10)); });
+    });
+    var copyBtn = document.getElementById('copyLinkBtn');
+    if (copyBtn) copyBtn.addEventListener('click', function(){
+      var m = document.getElementById('copyMsg');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(function(){ m.textContent = 'Copied.'; }, function(){ m.textContent = 'Copy failed.'; });
+      } else { m.textContent = 'Copy not supported here.'; }
     });
   }
 
-  // Redesigned 2026-10-07: one "Save profile" button covering all ~75
-  // fields in a single PATCH used to hit Hostinger's edge CDN (hcdn),
-  // which blocks any request body with more than 11 total JSON keys with
-  // a bare "403 Forbidden" text response before it ever reaches the
-  // Engine - confirmed by direct testing, purely a key-count limit,
-  // unrelated to field content. Each of the 7 field groups now saves
-  // independently via its own "Save this section" button, so an admin
-  // never has to fill in the whole form before anything can be saved, and
-  // can see exactly which section succeeded or failed. Still internally
-  // chunked per request (PROFILE_SAVE_CHUNK_SIZE keys per PATCH) because 3
-  // of the 7 groups (Business Identity: 18 fields, Hosting & DNS: 12,
-  // Legal & Certifications: 12) still exceed that 11-key cap on their own
-  // - that chunking is invisible; what's visible is which section saved.
-  // Safe because CustomersService.update() merges profile rather than
-  // replacing it, so a partial chunk never wipes another chunk's fields.
-  var PROFILE_SAVE_CHUNK_SIZE = 8;
+  function updateGroupCount(gi) {
+    var groupEl = document.querySelector('.profile-group[data-group-index="' + gi + '"]');
+    var cnt = document.getElementById('cnt_' + gi);
+    if (!groupEl || !cnt) return;
+    var els = groupEl.querySelectorAll('[data-key]'), n = 0;
+    Array.prototype.forEach.call(els, function(el){ if (el.value.trim() !== '') n++; });
+    cnt.textContent = n + ' of ' + els.length + ' filled';
+  }
 
   function saveProfileGroup(groupIndex) {
-    var group = PROFILE_FIELD_GROUPS[groupIndex];
     var groupEl = document.querySelector('.profile-group[data-group-index="' + groupIndex + '"]');
     var msg = document.getElementById('profileSaveMsg_' + groupIndex);
+    var btn = groupEl.querySelector('.group-save-btn');
+    var cid = state.cid;
     var profile = {};
     Array.prototype.forEach.call(groupEl.querySelectorAll('[data-key]'), function(el){
       var key = el.getAttribute('data-key');
@@ -392,80 +556,140 @@
       }
     });
     var chunks = ProfileFields.chunkProfile(profile, PROFILE_SAVE_CHUNK_SIZE);
+    btn.disabled = true;
     msg.textContent = chunks.length > 1 ? 'Saving… (0/' + chunks.length + ')' : 'Saving…';
 
     function saveChunk(idx) {
       if (idx >= chunks.length) {
         msg.textContent = 'Saved.';
+        btn.disabled = false;
+        updateGroupCount(groupIndex);
+        var c = curCustomer();
+        if (c && cid === state.cid) renderLayer3(c);
         setTimeout(function () { if (msg) msg.textContent = ''; }, 2000);
         return;
       }
-      api('/customers/' + selectedCustomerId, { method: 'PATCH', body: { profile: chunks[idx] } })
+      api('/customers/' + cid, { method: 'PATCH', body: { profile: chunks[idx] } })
         .then(function (updated) {
-          var cidx = customers.findIndex(function (c) { return c.id === selectedCustomerId; });
-          if (cidx !== -1) customers[cidx] = updated;
+          var cidx = state.customers.findIndex(function (c) { return c.id === cid; });
+          if (cidx !== -1) state.customers[cidx] = updated;
           if (chunks.length > 1) msg.textContent = 'Saving… (' + (idx + 1) + '/' + chunks.length + ')';
           saveChunk(idx + 1);
         })
-        .catch(function (err) { msg.textContent = 'Failed: ' + err.message; });
+        .catch(function (err) { msg.textContent = 'Failed: ' + err.message; btn.disabled = false; });
     }
     saveChunk(0);
   }
 
-  function renderMonthsTab() {
-    var hasM0 = currentMonths.some(function(m){ return m.monthIndex === 0; });
-    var hasM1 = currentMonths.some(function(m){ return m.monthIndex === 1; });
-    var hasM2 = currentMonths.some(function(m){ return m.monthIndex === 2; });
-    var html = '<div class="months-actions">';
-    if (!hasM0 || !hasM1) {
-      html += '<button class="primary" id="ensureM0M1Btn">Ensure M0 & M1 exist</button> ';
-      html += '<span class="muted">Profile/onboarding months only — Layer 4+ data for these stays on WP for now.</span>';
-    } else if (!hasM2) {
-      html += '<button class="primary" id="startM2Btn">Start M2 (first month worked here)</button>';
-    } else {
-      html += '<span class="muted">M0, M1 and M2 all exist. Layer 4 work for M2 happens from the Audits/Layer tooling as it\'s built out.</span>';
+  // Layer 3 - Business / Profile Resolution: which real-world resources the
+  // profile resolves to, and which parts of the Engine each one feeds.
+  var RESOURCES = [
+    { name: 'Business identity', fields: ['brand_name', 'legal_name', 'industry'], feeds: 'All Layers' },
+    { name: 'Primary website', fields: ['domain'], feeds: 'On Page · Keyword Planner, Technical SEO' },
+    { name: 'Contact & NAP', fields: ['phone', 'public_email', 'address_line_1', 'town', 'state', 'pincode'], feeds: 'Off Page · Backlinks / Directories, Local SEO' },
+    { name: 'Keyword inputs', fields: ['seed_keywords', 'locations', 'target_customer_segments'], feeds: 'On Page · Keyword Planner' },
+    { name: 'Competitors', fields: ['competitors'], feeds: 'On Page · Keyword Planner, Technical SEO' },
+    { name: 'Google Search Console', fields: ['gsc_property'], feeds: 'Technical SEO · Website Audit' },
+    { name: 'Google Analytics / Tag Manager', fields: ['ga4_property', 'gtm_container'], feeds: 'Technical SEO · Google Analytics' },
+    { name: 'Google Business Profile', fields: ['gmb_url'], feeds: 'Local SEO · GMB Profile / Audit' },
+    { name: 'YouTube channel', fields: ['youtube_channel_url', 'youtube'], anyOf: true, feeds: 'Social Media · Social Analytics / Post' },
+    { name: 'Social profiles', fields: ['linkedin', 'facebook', 'instagram', 'twitter', 'threads', 'pinterest', 'tumblr'], anyOf: true, feeds: 'Social Media' },
+    { name: 'Hosting', fields: ['hosting_provider', 'hosting_url'], feeds: 'On Page · Website Development' },
+    { name: 'Domain & DNS', fields: ['dns_registrar', 'dns_provider', 'nameservers'], feeds: 'On Page · Website Development' }
+  ];
+
+  function fieldLabel(key) {
+    for (var i = 0; i < PROFILE_FIELD_GROUPS.length; i++) {
+      var f = PROFILE_FIELD_GROUPS[i].fields.filter(function(x){ return x[0] === key; })[0];
+      if (f) return f[1];
     }
-    html += '</div>';
-    html += '<div class="kp21f-tablewrap"><table><thead><tr><th>Month</th><th>Status</th><th>Source</th><th>Start</th><th>End</th></tr></thead><tbody>';
-    if (!currentMonths.length) html += '<tr><td colspan="5" class="muted">No months yet.</td></tr>';
-    currentMonths.forEach(function(m){
-      html += '<tr><td>' + escapeHtml(m.monthCode) + '</td><td>' + statusBadge(m.status) + '</td>' +
-        '<td>' + escapeHtml(m.source) + '</td><td>' + (m.monthStartDate || '—') + '</td><td>' + (m.monthEndDate || '—') + '</td></tr>';
-    });
-    html += '</tbody></table></div>';
-    document.getElementById('tabBody').innerHTML = html;
-    var ensureBtn = document.getElementById('ensureM0M1Btn');
-    if (ensureBtn) ensureBtn.addEventListener('click', function(){
-      ensureBtn.disabled = true;
-      api('/customers/' + selectedCustomerId + '/projects/ensure-m0-m1', { method: 'POST', body: {} })
-        .then(function(){ return loadMonths(selectedCustomerId); })
-        .catch(function(err){ alert('Could not create M0/M1: ' + err.message); ensureBtn.disabled = false; });
-    });
-    var startM2Btn = document.getElementById('startM2Btn');
-    if (startM2Btn) startM2Btn.addEventListener('click', function(){
-      startM2Btn.disabled = true;
-      var today = new Date().toISOString().slice(0, 10);
-      api('/customers/' + selectedCustomerId + '/projects', { method: 'POST',
-          body: { monthIndex: 2, monthCode: 'M2', status: 'active', source: 'manual', monthStartDate: today } })
-        .then(function(){ return loadMonths(selectedCustomerId); })
-        .catch(function(err){ alert('Could not start M2: ' + err.message); startM2Btn.disabled = false; });
-    });
+    return key;
   }
 
-  function renderAuditsTab() {
-    var html = '<div class="detail-header"><div></div><button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button></div>';
-    html += '<div id="runsList"></div>';
-    document.getElementById('tabBody').innerHTML = html;
+  function resolveResource(res, profile) {
+    var filled = res.fields.filter(function(k){ return isFilled(profile[k]); });
+    var status;
+    if (res.anyOf) status = filled.length ? 'mapped' : 'missing';
+    else status = filled.length === res.fields.length ? 'mapped' : (filled.length ? 'partial' : 'missing');
+    var shown = filled.map(function(k){
+      var v = profile[k];
+      return fieldLabel(k) + ': ' + (Array.isArray(v) ? v.join(', ') : v);
+    });
+    return { status: status, filled: filled, shown: shown };
+  }
+
+  function renderLayer3(cust) {
+    var profile = cust.profile || {};
+    var mapped = 0;
+    var rows = RESOURCES.map(function(res){
+      var r = resolveResource(res, profile);
+      if (r.status === 'mapped') mapped++;
+      var badge = r.status === 'mapped' ? '<span class="badge ok">Mapped</span>'
+        : (r.status === 'partial' ? '<span class="badge pending">Partial</span>' : '<span class="badge fail">Not mapped</span>');
+      var missing = res.fields.filter(function(k){ return r.filled.indexOf(k) === -1; });
+      var detail = r.shown.length
+        ? r.shown.map(function(s){ return escapeHtml(s.length > 90 ? s.slice(0, 90) + '…' : s); }).join('<br>')
+        : '<span class="muted">—</span>';
+      if (r.status === 'partial') detail += '<br><span class="muted" style="font-size:12px;">Missing: ' + missing.map(fieldLabel).map(escapeHtml).join(', ') + '</span>';
+      return '<tr><td><strong>' + escapeHtml(res.name) + '</strong></td><td>' + badge + '</td><td>' + detail + '</td><td class="muted">' + escapeHtml(res.feeds) + '</td></tr>';
+    }).join('');
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>' + escapeHtml(LAYER_TITLES[3]) + '</h2>' +
+      '<p class="lead">How the saved profile resolves to the business resources the later Layers need. ' +
+      '<strong>' + mapped + ' of ' + RESOURCES.length + '</strong> resources fully mapped. Fix gaps in Layer 2 above — this table updates when you save a section.</p>' +
+      '<div style="overflow:auto"><table><thead><tr><th>Resource</th><th>Status</th><th>Resolved from profile</th><th>Feeds</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
+    var box = document.getElementById('layer3');
+    if (box) box.innerHTML = h;
+  }
+
+  // Added 2026-10-06: cleans up throwaway signups. Server cascades the
+  // customer's Month shells (CustomersService.remove()). Does not touch
+  // the WP user account.
+  function deleteCustomer(customer) {
+    var ok = window.confirm(
+      'Delete "' + (customer.companyName || 'this customer') + '" from the Engine? ' +
+      'This removes their profile and Month data here. It does NOT delete their ' +
+      'WordPress account - do that separately in wp-admin if needed.'
+    );
+    if (!ok) return;
+    var btn = document.getElementById('deleteCustomerBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    api('/customers/' + customer.id, { method: 'DELETE' })
+      .then(function(){ state.cid = null; return loadCustomers(); })
+      .catch(function(err){
+        alert('Could not delete customer: ' + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete customer'; }
+      });
+  }
+
+  // ---- Technical SEO > Brand Audit (Layer 69) -----------------------
+
+  function renderBrandAuditPage(cust) {
+    var html = pageHead('Brand Audit', 'Technical SEO · Layer 69 · ' + contextLine(cust),
+      '<button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button>');
+    html += '<div class="card"><div id="runsList"><p class="muted">Loading audits…</p></div></div>';
+    document.getElementById('page').innerHTML = html;
     document.getElementById('runAuditBtn').addEventListener('click', runAudit);
-    renderRuns();
+    loadRuns();
+  }
+
+  function loadRuns() {
+    var cid = state.cid;
+    return api('/customers/' + cid + '/audits').then(function(data){
+      if (cid !== state.cid) return;
+      state.runs = Array.isArray(data) ? data : (data.items || []);
+      renderRuns();
+    }).catch(function(err){
+      var box = document.getElementById('runsList');
+      if (box) box.innerHTML = '<p class="muted">Failed to load audits: ' + escapeHtml(err.message) + '</p>';
+    });
   }
 
   function runAudit() {
     var btn = document.getElementById('runAuditBtn');
     btn.disabled = true;
     btn.textContent = 'Starting audit…';
-    api('/customers/' + selectedCustomerId + '/audits', { method: 'POST', body: {} })
-      .then(function(){ return loadRuns(selectedCustomerId); })
+    api('/customers/' + state.cid + '/audits', { method: 'POST', body: {} })
+      .then(function(){ return loadRuns(); })
       .catch(function(err){ alert('Could not start audit: ' + err.message); })
       .finally(function(){
         var b = document.getElementById('runAuditBtn');
@@ -476,9 +700,9 @@
   function renderRuns() {
     var box = document.getElementById('runsList');
     if (!box) return;
-    if (!currentRuns.length) { box.innerHTML = '<p class="muted">No audits run yet for this customer.</p>'; return; }
-    box.innerHTML = currentRuns.map(function(r){ return runRowHtml(r); }).join('');
-    currentRuns.forEach(function(r){
+    if (!state.runs.length) { box.innerHTML = '<p class="muted">No audits run yet for this customer.</p>'; return; }
+    box.innerHTML = state.runs.map(function(r){ return runRowHtml(r); }).join('');
+    state.runs.forEach(function(r){
       var reportBtn = document.getElementById('report-' + r.id);
       if (reportBtn) reportBtn.addEventListener('click', function(){ viewReport(r.id); });
       var tasksBtn = document.getElementById('tasks-' + r.id);
@@ -486,14 +710,17 @@
       var pushesBtn = document.getElementById('pushes-' + r.id);
       if (pushesBtn) pushesBtn.addEventListener('click', function(){ togglePanel(r.id, 'pushes'); });
       var refreshBtn = document.getElementById('refresh-' + r.id);
-      if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(selectedCustomerId); });
+      if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
+    });
+    state.runs.forEach(function(r){
+      if (state.expanded[r.id] === 'tasks') loadTasks(r.id);
+      if (state.expanded[r.id] === 'pushes') loadPushes(r.id);
     });
   }
 
   function runRowHtml(r) {
-    var panel = expanded[r.id];
-    var html = '<div class="run-row">';
-    html += '<div class="top">';
+    var panel = state.expanded[r.id];
+    var html = '<div class="run-row"><div class="top">';
     html += '<div>' + statusBadge(r.status) +
       ' <strong>' + (r.completedSkills != null ? r.completedSkills : 0) + '/' +
       (r.totalSkills != null ? r.totalSkills : 140) + '</strong> skills' +
@@ -503,39 +730,30 @@
     html += '<button id="report-' + r.id + '"' + (r.status !== 'completed' ? ' disabled' : '') + '>View report</button>';
     html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
-    html += '</div></div>';
-    html += '<div id="panel-' + r.id + '"></div>';
-    html += '</div>';
+    html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;
   }
 
   function togglePanel(runId, kind) {
-    expanded[runId] = expanded[runId] === kind ? null : kind;
+    state.expanded[runId] = state.expanded[runId] === kind ? null : kind;
     renderRuns();
-    if (expanded[runId] === 'tasks') loadTasks(runId);
-    if (expanded[runId] === 'pushes') loadPushes(runId);
   }
 
   function loadTasks(runId) {
     var panel = document.getElementById('panel-' + runId);
     if (panel) panel.innerHTML = '<p class="muted">Loading tasks…</p>';
-    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/tasks').then(function(data){
+    api('/customers/' + state.cid + '/audits/' + runId + '/tasks').then(function(data){
       var tasks = Array.isArray(data) ? data : (data.items || []);
       var rows = tasks.map(function(t){
-        return '<tr>' +
-          '<td>' + escapeHtml(t.group) + '</td>' +
-          '<td>' + escapeHtml(t.plugin + ':' + t.skill) + '</td>' +
-          '<td>' + statusBadge(t.status) + '</td>' +
-          '<td>' + (t.isAutomated ? 'Yes' : 'No') + '</td>' +
+        return '<tr><td>' + escapeHtml(t.group) + '</td><td>' + escapeHtml(t.plugin + ':' + t.skill) + '</td>' +
+          '<td>' + statusBadge(t.status) + '</td><td>' + (t.isAutomated ? 'Yes' : 'No') + '</td>' +
           '<td>' + escapeHtml(t.layerNumbers ? t.layerNumbers.join(', ') : '') + '</td>' +
-          '<td>' + escapeHtml((t.finding || '').slice(0, 140)) + '</td>' +
-        '</tr>';
+          '<td>' + escapeHtml((t.finding || '').slice(0, 140)) + '</td></tr>';
       }).join('');
-      var html = '<div class="task-scroll"><table><thead><tr>' +
+      var p = document.getElementById('panel-' + runId);
+      if (p) p.innerHTML = '<div class="task-scroll"><table><thead><tr>' +
         '<th>Group</th><th>Skill</th><th>Status</th><th>Automated</th><th>Layers</th><th>Finding</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-      var p = document.getElementById('panel-' + runId);
-      if (p) p.innerHTML = html;
     }).catch(function(err){
       var p = document.getElementById('panel-' + runId);
       if (p) p.innerHTML = '<p class="muted">Failed to load tasks: ' + escapeHtml(err.message) + '</p>';
@@ -545,26 +763,18 @@
   function loadPushes(runId) {
     var panel = document.getElementById('panel-' + runId);
     if (panel) panel.innerHTML = '<p class="muted">Loading layer pushes…</p>';
-    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/pushes').then(function(data){
+    api('/customers/' + state.cid + '/audits/' + runId + '/pushes').then(function(data){
       var pushes = Array.isArray(data) ? data : (data.items || []);
-      if (!pushes.length) {
-        var p0 = document.getElementById('panel-' + runId);
-        if (p0) p0.innerHTML = '<p class="muted">No layer pushes for this run.</p>';
-        return;
-      }
-      var rows = pushes.map(function(p){
-        return '<tr>' +
-          '<td>Layer ' + escapeHtml(p.layerNumber) + '</td>' +
-          '<td>' + statusBadge(p.status) + '</td>' +
-          '<td>' + escapeHtml((p.suggestion || '').slice(0, 140)) + '</td>' +
-          '<td>' + fmtDate(p.pushedAt) + '</td>' +
-        '</tr>';
+      var p = document.getElementById('panel-' + runId);
+      if (!p) return;
+      if (!pushes.length) { p.innerHTML = '<p class="muted">No layer pushes for this run.</p>'; return; }
+      var rows = pushes.map(function(x){
+        return '<tr><td>Layer ' + escapeHtml(x.layerNumber) + '</td><td>' + statusBadge(x.status) + '</td>' +
+          '<td>' + escapeHtml((x.suggestion || '').slice(0, 140)) + '</td><td>' + fmtDate(x.pushedAt) + '</td></tr>';
       }).join('');
-      var html = '<div class="task-scroll"><table><thead><tr>' +
+      p.innerHTML = '<div class="task-scroll"><table><thead><tr>' +
         '<th>Layer</th><th>Status</th><th>Suggestion</th><th>Pushed at</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-      var p = document.getElementById('panel-' + runId);
-      if (p) p.innerHTML = html;
     }).catch(function(err){
       var p = document.getElementById('panel-' + runId);
       if (p) p.innerHTML = '<p class="muted">Failed to load pushes: ' + escapeHtml(err.message) + '</p>';
@@ -572,14 +782,14 @@
   }
 
   function viewReport(runId) {
-    api('/customers/' + selectedCustomerId + '/audits/' + runId + '/report').then(function(data){
+    api('/customers/' + state.cid + '/audits/' + runId + '/report').then(function(data){
       var html = (data && data.__html) || '<p>Empty report.</p>';
-      var blob = new Blob([html], { type: 'text/html' });
-      var url = URL.createObjectURL(blob);
+      var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
       window.open(url, '_blank');
     }).catch(function(err){ alert('Could not load report: ' + err.message); });
   }
 
+  renderNav();
   loadCustomers();
 })();
 </script>
