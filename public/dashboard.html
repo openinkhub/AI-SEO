@@ -60,8 +60,9 @@
   .tabbar{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
   .tabbar .tab{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:10px 4px;margin-right:16px;font-size:14px;color:var(--muted);}
   .tabbar .tab.active{color:var(--accent-dark);border-bottom-color:var(--accent);font-weight:600;}
-  .profile-group{margin-bottom:18px;}
+  .profile-group{margin-bottom:18px;border:1px solid var(--border-soft);border-radius:8px;padding:14px;}
   .profile-group h3{margin:0 0 10px;font-size:14px;color:var(--accent-dark);text-transform:uppercase;letter-spacing:.03em;}
+  .profile-group .group-save-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
   .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   @media (max-width:700px){ .profile-grid{grid-template-columns:1fr;} }
   .profile-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);}
@@ -330,9 +331,9 @@
 
   function renderProfileTab(customer) {
     var profile = customer.profile || {};
-    var html = '<form id="profileForm">';
-    PROFILE_FIELD_GROUPS.forEach(function(group){
-      html += '<div class="profile-group"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+    var html = '<div id="profileForm">';
+    PROFILE_FIELD_GROUPS.forEach(function(group, gi){
+      html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
       group.fields.forEach(function(f){
         var key = f[0], label = f[1];
         var raw = profile[key];
@@ -348,20 +349,41 @@
         }
         html += '</label>';
       });
-      html += '</div></div>';
+      html += '</div><div class="group-save-row"><button type="button" class="primary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
+        ' <span id="profileSaveMsg_' + gi + '" class="muted"></span></div></div>';
     });
-    html += '<button type="submit" class="primary">Save profile</button> <span id="profileSaveMsg" class="muted"></span>';
-    html += '</form>';
+    html += '</div>';
     document.getElementById('tabBody').innerHTML = html;
-    document.getElementById('profileForm').addEventListener('submit', function(e){
-      e.preventDefault();
-      saveProfile();
+    Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
+      btn.addEventListener('click', function(){
+        saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10));
+      });
     });
   }
 
-  function saveProfile() {
+  // Redesigned 2026-10-07: one "Save profile" button covering all ~75
+  // fields in a single PATCH used to hit Hostinger's edge CDN (hcdn),
+  // which blocks any request body with more than 11 total JSON keys with
+  // a bare "403 Forbidden" text response before it ever reaches the
+  // Engine - confirmed by direct testing, purely a key-count limit,
+  // unrelated to field content. Each of the 7 field groups now saves
+  // independently via its own "Save this section" button, so an admin
+  // never has to fill in the whole form before anything can be saved, and
+  // can see exactly which section succeeded or failed. Still internally
+  // chunked per request (PROFILE_SAVE_CHUNK_SIZE keys per PATCH) because 3
+  // of the 7 groups (Business Identity: 18 fields, Hosting & DNS: 12,
+  // Legal & Certifications: 12) still exceed that 11-key cap on their own
+  // - that chunking is invisible; what's visible is which section saved.
+  // Safe because CustomersService.update() merges profile rather than
+  // replacing it, so a partial chunk never wipes another chunk's fields.
+  var PROFILE_SAVE_CHUNK_SIZE = 8;
+
+  function saveProfileGroup(groupIndex) {
+    var group = PROFILE_FIELD_GROUPS[groupIndex];
+    var groupEl = document.querySelector('.profile-group[data-group-index="' + groupIndex + '"]');
+    var msg = document.getElementById('profileSaveMsg_' + groupIndex);
     var profile = {};
-    Array.prototype.forEach.call(document.querySelectorAll('#profileForm [data-key]'), function(el){
+    Array.prototype.forEach.call(groupEl.querySelectorAll('[data-key]'), function(el){
       var key = el.getAttribute('data-key');
       if (ARRAY_PROFILE_FIELDS.indexOf(key) !== -1) {
         profile[key] = el.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
@@ -369,16 +391,31 @@
         profile[key] = el.value;
       }
     });
-    var msg = document.getElementById('profileSaveMsg');
-    msg.textContent = 'Saving…';
-    api('/customers/' + selectedCustomerId, { method: 'PATCH', body: { profile: profile } })
-      .then(function(updated){
-        var idx = customers.findIndex(function(c){ return c.id === selectedCustomerId; });
-        if (idx !== -1) customers[idx] = updated;
+    var keys = Object.keys(profile);
+    var chunks = [];
+    for (var i = 0; i < keys.length; i += PROFILE_SAVE_CHUNK_SIZE) {
+      var chunk = {};
+      keys.slice(i, i + PROFILE_SAVE_CHUNK_SIZE).forEach(function (k) { chunk[k] = profile[k]; });
+      chunks.push(chunk);
+    }
+    msg.textContent = chunks.length > 1 ? 'Saving… (0/' + chunks.length + ')' : 'Saving…';
+
+    function saveChunk(idx) {
+      if (idx >= chunks.length) {
         msg.textContent = 'Saved.';
-        setTimeout(function(){ if (msg) msg.textContent = ''; }, 2000);
-      })
-      .catch(function(err){ msg.textContent = 'Failed: ' + err.message; });
+        setTimeout(function () { if (msg) msg.textContent = ''; }, 2000);
+        return;
+      }
+      api('/customers/' + selectedCustomerId, { method: 'PATCH', body: { profile: chunks[idx] } })
+        .then(function (updated) {
+          var cidx = customers.findIndex(function (c) { return c.id === selectedCustomerId; });
+          if (cidx !== -1) customers[cidx] = updated;
+          if (chunks.length > 1) msg.textContent = 'Saving… (' + (idx + 1) + '/' + chunks.length + ')';
+          saveChunk(idx + 1);
+        })
+        .catch(function (err) { msg.textContent = 'Failed: ' + err.message; });
+    }
+    saveChunk(0);
   }
 
   function renderMonthsTab() {

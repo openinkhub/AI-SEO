@@ -68,30 +68,50 @@ export class OnboardingService {
     return customer;
   }
 
-  // Deliberately a full-replace merge, not per-field - matches how WP's
-  // own onboarding form and the Admin dashboard's profile editor both
-  // persist (see wp-integration.service.ts's importWpCustomerProfiles
-  // comment for why "last writer wins" is acceptable here: there is only
-  // ever one legitimate writer - the customer themself - for this form).
+  // Merge, not replace - a key present in dto.profile overwrites, a key
+  // simply absent (not part of whichever section/chunk posted this call)
+  // is preserved. Required since 2026-10-07: the form now saves one field-
+  // group at a time (Hostinger's edge CDN blocks any request body over 11
+  // total JSON keys with a bare 403 "Forbidden", confirmed by direct
+  // testing - purely a key-count limit, unrelated to content; ~75 fields
+  // in one POST always hit it). Mirrors CustomersService.update()'s same
+  // fix on the Admin dashboard side.
+  //
+  // Fixed 2026-10-07: status/onboardingCompletedAt used to be stamped on
+  // every call, which was correct for a single one-shot submit but became
+  // a bug once submission was split into one call per section - status
+  // would have flipped to ACTIVE after the customer saved just the first
+  // of ~7 sections. Completion is now its own explicit signal (`complete:
+  // true`, sent with no profile payload by a dedicated "Submit profile"
+  // control, separate from each section's own "Save this section"), so a
+  // partial save never marks the profile done, and a group save and the
+  // completion call can arrive as two separate requests in either order.
   async submitProfile(token: string, dto: SubmitOnboardingDto): Promise<Customer> {
     const customer = await this.findByToken(token);
-    customer.profile = { ...(customer.profile ?? {}), ...dto.profile };
-    const brandName = dto.profile['brand_name'];
-    if (typeof brandName === 'string' && brandName.trim()) {
-      customer.companyName = brandName.trim();
+    if (dto.profile) {
+      customer.profile = { ...(customer.profile ?? {}), ...dto.profile };
+      const brandName = dto.profile['brand_name'];
+      if (typeof brandName === 'string' && brandName.trim()) {
+        customer.companyName = brandName.trim();
+      }
+      const domain = dto.profile['domain'];
+      if (typeof domain === 'string' && domain.trim() && !customer.website) {
+        customer.website = domain.trim();
+      }
     }
-    const domain = dto.profile['domain'];
-    if (typeof domain === 'string' && domain.trim() && !customer.website) {
-      customer.website = domain.trim();
-    }
-    customer.onboardingCompletedAt = new Date();
-    if (customer.status === CustomerStatus.ONBOARDING) {
-      customer.status = CustomerStatus.ACTIVE;
+    if (dto.complete) {
+      customer.onboardingCompletedAt = new Date();
+      if (customer.status === CustomerStatus.ONBOARDING) {
+        customer.status = CustomerStatus.ACTIVE;
+      }
     }
     const saved = await this.customers.save(customer);
     // "M0 & M1 should be present, with no data" applies here too - a
     // customer who completes onboarding straight from the emailed link
-    // (never touched by Admin) still gets their Month shells.
+    // (never touched by Admin) still gets their Month shells. ensureMonths
+    // is idempotent, so calling it on every section save (not just on
+    // complete) is harmless and keeps this working even if the customer
+    // never clicks the final "Submit profile" control.
     await this.projects.ensureMonths(saved.id);
     return saved;
   }

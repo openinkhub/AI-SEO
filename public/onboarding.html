@@ -20,8 +20,9 @@
   .card { background:#fff; border-radius:8px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   h1 { font-size:20px; margin:0 0 8px; }
   p.lead { color:#6b7280; font-size:14px; margin:0 0 24px; }
-  .profile-group h3 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:#6b7280; margin:24px 0 12px; }
-  .profile-group:first-of-type h3 { margin-top:0; }
+  .profile-group { border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px; }
+  .profile-group h3 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:#6b7280; margin:0 0 12px; }
+  .group-save-row { display:flex; align-items:center; gap:10px; margin-top:14px; }
   .profile-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .profile-field { display:flex; flex-direction:column; font-size:13px; color:#374151; }
   .profile-field.wide { grid-column:1 / -1; }
@@ -30,6 +31,9 @@
   input, textarea { font-size:14px; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-family:inherit; }
   button.primary { background:#111827; color:#fff; border:none; padding:12px 28px; border-radius:6px; font-size:15px; cursor:pointer; }
   button.primary:disabled { opacity:.6; cursor:default; }
+  button.secondary { background:#fff; color:#111827; border:1px solid #d1d5db; padding:10px 20px; border-radius:6px; font-size:14px; cursor:pointer; }
+  button.secondary:disabled { opacity:.6; cursor:default; }
+  .final-submit { margin-top:28px; padding-top:20px; border-top:1px solid #e5e7eb; }
   .msg { font-size:13px; margin-left:12px; }
   .msg.ok { color:#059669; }
   .msg.err { color:#dc2626; }
@@ -83,18 +87,29 @@
       '</p><p class="center-state">If this link has expired, contact your Openink Hub account manager for a new one.</p>';
   });
 
+  // Redesigned 2026-10-07: a single "Save my profile" button that silently
+  // split the whole ~75-field form into background chunks made it
+  // impossible for the customer to tell what had actually saved if one
+  // part failed partway through. Each of the 7 field groups now has its
+  // own visible "Save this section" button and status - a section saves
+  // only when the customer clicks it, independently of the others, so
+  // there's no need to fill in every field before anything is saved.
+  // A separate "Submit profile" control at the end is the only thing that
+  // marks the profile complete - see the comment above it for why that has
+  // to be separate from any individual section's save.
   function renderForm(data) {
     var profile = data.profile || {};
     var html = '<h1>Welcome' + (data.companyName ? ', ' + escapeHtml(data.companyName) : '') + '!</h1>';
     html += '<p class="lead">Tell us about your business so we can start your SEO work. ' +
+      'Save each section as you go - there is no need to fill in everything at once. ' +
       'You can come back and update these details any time using the same link.</p>';
     if (data.completedAt) {
       html += '<p class="lead" style="color:#059669;">You already submitted this on ' +
         new Date(data.completedAt).toLocaleString() + ' - feel free to review and update below.</p>';
     }
     html += '<form id="onbForm">';
-    ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group){
-      html += '<div class="profile-group"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+    ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group, gi){
+      html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
       group.fields.forEach(function(f){
         var key = f[0], label = f[1];
         var raw = profile[key];
@@ -110,41 +125,105 @@
         }
         html += '</label>';
       });
-      html += '</div></div>';
+      html += '</div><div class="group-save-row"><button type="button" class="secondary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
+        ' <span id="saveMsg_' + gi + '" class="msg"></span></div></div>';
     });
-    html += '<div style="margin-top:28px;"><button type="submit" class="primary">Save my profile</button>' +
-      '<span id="saveMsg" class="msg"></span></div>';
+    html += '<div class="final-submit"><button type="button" id="finalSubmitBtn" class="primary">' +
+      (data.completedAt ? 'Mark profile complete again' : 'Submit profile') + '</button>' +
+      '<span id="finalSubmitMsg" class="msg"></span>' +
+      '<p class="lead" style="margin:8px 0 0;">Click this once you have saved every section you want included - ' +
+      'it tells us your profile is ready, it does not save any fields itself.</p></div>';
     html += '</form>';
     root.innerHTML = html;
-    document.getElementById('onbForm').addEventListener('submit', function(e){
-      e.preventDefault();
-      submit();
+    document.getElementById('onbForm').addEventListener('submit', function(e){ e.preventDefault(); });
+    Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
+      btn.addEventListener('click', function(){
+        submitGroup(parseInt(btn.getAttribute('data-group-index'), 10));
+      });
     });
+    document.getElementById('finalSubmitBtn').addEventListener('click', submitComplete);
   }
 
-  function submit() {
+  // Confirmed by direct testing 2026-10-07: Hostinger's edge (hcdn) blocks
+  // any request body with more than 11 total JSON keys with a bare "403
+  // Forbidden" text response, before it ever reaches the Engine - purely a
+  // key-count limit, unrelated to content. Most of the 7 field groups fit
+  // under that cap in one request; Business Identity (18 fields), Hosting
+  // & DNS (12) and Legal & Certifications (12) don't, so a group's own
+  // save can still split into several requests. Safe to do because
+  // OnboardingService.submitProfile() merges into Customer.profile rather
+  // than replacing it.
+  var ONBOARDING_SAVE_CHUNK_SIZE = 8;
+
+  function submitGroup(groupIndex) {
+    var groupEl = document.querySelector('#onbForm .profile-group[data-group-index="' + groupIndex + '"]');
+    var msg = document.getElementById('saveMsg_' + groupIndex);
+    var btn = groupEl.querySelector('.group-save-btn');
     var profile = {};
-    Array.prototype.forEach.call(document.querySelectorAll('#onbForm [data-key]'), function(el){
+    Array.prototype.forEach.call(groupEl.querySelectorAll('[data-key]'), function(el){
       var key = el.getAttribute('data-key');
       var isArray = ProfileFields.ARRAY_PROFILE_FIELDS.indexOf(key) !== -1;
       profile[key] = isArray
         ? el.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
         : el.value;
     });
-    var btn = document.querySelector('#onbForm button[type="submit"]');
-    var msg = document.getElementById('saveMsg');
+    var keys = Object.keys(profile);
+    var chunks = [];
+    for (var i = 0; i < keys.length; i += ONBOARDING_SAVE_CHUNK_SIZE) {
+      var chunk = {};
+      keys.slice(i, i + ONBOARDING_SAVE_CHUNK_SIZE).forEach(function (k) { chunk[k] = profile[k]; });
+      chunks.push(chunk);
+    }
     btn.disabled = true;
-    msg.textContent = '';
-    api('/' + encodeURIComponent(token), { method: 'POST', body: { profile: profile } })
-      .then(function(){
+    msg.textContent = chunks.length > 1 ? 'Saving… (0/' + chunks.length + ')' : 'Saving…';
+    msg.className = 'msg';
+
+    function submitChunk(idx) {
+      if (idx >= chunks.length) {
+        msg.textContent = 'Saved.';
+        msg.className = 'msg ok';
+        btn.disabled = false;
+        return;
+      }
+      api('/' + encodeURIComponent(token), { method: 'POST', body: { profile: chunks[idx] } })
+        .then(function () {
+          if (chunks.length > 1) msg.textContent = 'Saving… (' + (idx + 1) + '/' + chunks.length + ')';
+          submitChunk(idx + 1);
+        })
+        .catch(function (err) {
+          msg.textContent = 'Could not save: ' + err.message;
+          msg.className = 'msg err';
+          btn.disabled = false;
+        });
+    }
+    submitChunk(0);
+  }
+
+  // Deliberately separate from submitGroup() and carries no profile data -
+  // just { complete: true }. Fixed 2026-10-07: completion used to be
+  // stamped by the backend on every submit, which was fine for one single
+  // whole-form POST but became a bug once saving was split per section -
+  // the profile would have been marked complete after the very first
+  // section, no matter how many of the ~75 fields that covered. Now it
+  // only happens when the customer deliberately clicks this control, after
+  // (not instead of) saving whichever sections they want included.
+  function submitComplete() {
+    var btn = document.getElementById('finalSubmitBtn');
+    var msg = document.getElementById('finalSubmitMsg');
+    btn.disabled = true;
+    msg.textContent = 'Submitting…';
+    msg.className = 'msg';
+    api('/' + encodeURIComponent(token), { method: 'POST', body: { complete: true } })
+      .then(function () {
         msg.textContent = 'Saved - thank you!';
         msg.className = 'msg ok';
+        btn.disabled = false;
       })
-      .catch(function(err){
-        msg.textContent = 'Could not save: ' + err.message;
+      .catch(function (err) {
+        msg.textContent = 'Could not submit: ' + err.message;
         msg.className = 'msg err';
-      })
-      .finally(function(){ btn.disabled = false; });
+        btn.disabled = false;
+      });
   }
 })();
 </script>
