@@ -80,7 +80,29 @@ var ProfileFields = (function () {
       ['licenses', 'Licenses'], ['gst', 'GST'], ['cin', 'CIN'], ['udyam', 'Udyam'],
       ['iso', 'ISO'], ['awards', 'Awards'], ['govt_recognition', 'Government Recognition'] ] }
   ];
+  // Added 2026-10-07: Hostinger's edge CDN (hcdn) returns a bare 403
+  // "Forbidden" for any request body with more than 10 leaf values, and
+  // every array ELEMENT counts as one (confirmed by bisection against the
+  // live site: one key holding an array of 10 passes, 11 is blocked; a key
+  // count alone is not the limit). Splits a section's values into request
+  // bodies of at most maxLeaves leaves. A list longer than maxLeaves can't
+  // be split across requests (the server-side merge would replace it), so
+  // it is sent as one newline-joined string; the server turns that back
+  // into an array (src/customers/profile-normalize.ts).
+  function chunkProfile(profile, maxLeaves) {
+    var chunks = [], cur = {}, n = 0, count = 0;
+    Object.keys(profile).forEach(function (k) {
+      var v = profile[k];
+      if (Array.isArray(v) && v.length > maxLeaves) v = v.join('\n');
+      var w = Array.isArray(v) ? v.length : 1;
+      if (count > 0 && n + w > maxLeaves) { chunks.push(cur); cur = {}; n = 0; count = 0; }
+      cur[k] = v; n += w; count++;
+    });
+    if (count > 0) chunks.push(cur);
+    return chunks;
+  }
   return {
+    chunkProfile: chunkProfile,
     ARRAY_PROFILE_FIELDS: ARRAY_PROFILE_FIELDS,
     LONGTEXT_PROFILE_FIELDS: LONGTEXT_PROFILE_FIELDS,
     PROFILE_FIELD_GROUPS: PROFILE_FIELD_GROUPS

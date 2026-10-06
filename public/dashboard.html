@@ -391,13 +391,7 @@
         profile[key] = el.value;
       }
     });
-    var keys = Object.keys(profile);
-    var chunks = [];
-    for (var i = 0; i < keys.length; i += PROFILE_SAVE_CHUNK_SIZE) {
-      var chunk = {};
-      keys.slice(i, i + PROFILE_SAVE_CHUNK_SIZE).forEach(function (k) { chunk[k] = profile[k]; });
-      chunks.push(chunk);
-    }
+    var chunks = ProfileFields.chunkProfile(profile, PROFILE_SAVE_CHUNK_SIZE);
     msg.textContent = chunks.length > 1 ? 'Saving… (0/' + chunks.length + ')' : 'Saving…';
 
     function saveChunk(idx) {

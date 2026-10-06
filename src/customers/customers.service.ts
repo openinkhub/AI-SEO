@@ -5,6 +5,7 @@ import { Customer } from './customer.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ProjectsService } from '../projects/projects.service';
+import { normalizeProfile } from './profile-normalize';
 
 @Injectable()
 export class CustomersService {
@@ -53,7 +54,10 @@ export class CustomersService {
     const { profile, ...rest } = dto;
     Object.assign(customer, rest);
     if (profile) {
-      customer.profile = { ...(customer.profile ?? {}), ...profile };
+      customer.profile = {
+        ...(customer.profile ?? {}),
+        ...normalizeProfile(profile),
+      };
     }
     return this.repo.save(customer);
   }

@@ -6,6 +6,7 @@ import { Customer, CustomerStatus } from '../customers/customer.entity';
 import { ProjectsService } from '../projects/projects.service';
 import { EmailService } from '../email/email.service';
 import { SubmitOnboardingDto } from './dto/submit-onboarding.dto';
+import { normalizeProfile } from '../customers/profile-normalize';
 
 // Decided 2026-10-06: the Engine now owns the whole onboarding form, not
 // just the data store behind it - WP no longer sends this email or hosts
@@ -89,12 +90,13 @@ export class OnboardingService {
   async submitProfile(token: string, dto: SubmitOnboardingDto): Promise<Customer> {
     const customer = await this.findByToken(token);
     if (dto.profile) {
-      customer.profile = { ...(customer.profile ?? {}), ...dto.profile };
-      const brandName = dto.profile['brand_name'];
+      const incoming = normalizeProfile(dto.profile);
+      customer.profile = { ...(customer.profile ?? {}), ...incoming };
+      const brandName = incoming['brand_name'];
       if (typeof brandName === 'string' && brandName.trim()) {
         customer.companyName = brandName.trim();
       }
-      const domain = dto.profile['domain'];
+      const domain = incoming['domain'];
       if (typeof domain === 'string' && domain.trim() && !customer.website) {
         customer.website = domain.trim();
       }
