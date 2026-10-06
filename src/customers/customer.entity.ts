@@ -66,6 +66,21 @@ export class Customer {
   @Column({ nullable: true })
   assignedToUserId: string | null;
 
+  // Full onboarding/Company-Profile data (WP: KP21_Onboarding's ~31-field
+  // form — brand_name, legal_name, entity_type, founded_year, industry,
+  // business_domain, sector, primary_business_category,
+  // secondary_business_categories, business_model, service_area,
+  // areas_served, tagline, product_short_description, mission_statement,
+  // company_profile, phone, public_email, address_line_1, town, state,
+  // pincode, domain, target_page, secondary_websites,
+  // target_customer_segments, seed_keywords, locations, products_services,
+  // competitors, dns_access_confirmed). Kept as one JSON blob rather than 31
+  // columns: it maps 1:1 onto WP's own field keys (so wp-sync payloads pass
+  // through unchanged) and the Admin dashboard renders/edits it generically
+  // off a shared field-definition list instead of a migration per field.
+  @Column({ type: 'simple-json', nullable: true })
+  profile: Record<string, string | string[] | boolean> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

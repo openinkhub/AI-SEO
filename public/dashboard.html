@@ -55,6 +55,20 @@
   .detail-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
   .detail-header h2{margin:0;}
   .detail-header .site-link{font-size:13px;color:var(--muted);}
+  .tabbar{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
+  .tabbar .tab{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:10px 4px;margin-right:16px;font-size:14px;color:var(--muted);}
+  .tabbar .tab.active{color:var(--accent-dark);border-bottom-color:var(--accent);font-weight:600;}
+  .profile-group{margin-bottom:18px;}
+  .profile-group h3{margin:0 0 10px;font-size:14px;color:var(--accent-dark);text-transform:uppercase;letter-spacing:.03em;}
+  .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:700px){ .profile-grid{grid-template-columns:1fr;} }
+  .profile-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);}
+  .profile-field.wide{grid-column:1 / -1;}
+  .profile-field input,.profile-field textarea{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:#262420;width:100%;resize:vertical;}
+  .months-actions{margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .kp21f-tablewrap table{width:100%;border-collapse:collapse;font-size:13px;}
+  .kp21f-tablewrap th,.kp21f-tablewrap td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);}
+  .kp21f-tablewrap th{background:#FAFAF8;}
 </style>
 </head>
 <body>
@@ -75,7 +89,7 @@
       <ul id="customerList" class="customer-list"><li class="muted">Loading…</li></ul>
     </section>
     <section class="card" id="detailCol">
-      <p class="muted">Select a customer to run or review a Complete Website Audit (Layer 69).</p>
+      <p class="muted">Select a customer to view/edit their Profile, Months (M0/M1/M2…), or run a Complete Website Audit (Layer 69).</p>
     </section>
   </div>
 </main>
@@ -127,7 +141,36 @@
   var customers = [];
   var selectedCustomerId = null;
   var currentRuns = [];
+  var currentMonths = [];
+  var activeTab = 'profile'; // 'profile' | 'months' | 'audits'
   var expanded = {}; // runId -> 'tasks' | 'pushes' | null
+
+  // WP: KP21_Onboarding's Company-Profile fields, grouped the same way the
+  // WP form groups them. Array-type fields are edited one value per line.
+  var ARRAY_PROFILE_FIELDS = ['secondary_business_categories', 'target_customer_segments',
+    'secondary_websites', 'seed_keywords', 'locations', 'products_services', 'competitors'];
+  var LONGTEXT_PROFILE_FIELDS = ['company_profile', 'mission_statement'];
+  var PROFILE_FIELD_GROUPS = [
+    { title: 'Business Identity', fields: [
+      ['brand_name', 'Brand Name'], ['legal_name', 'Legal Registered Name'],
+      ['entity_type', 'Type of Registered Entity'], ['founded_year', 'Founded Year'],
+      ['industry', 'Industry'], ['business_domain', 'Business Domain'], ['sector', 'Sector'],
+      ['primary_business_category', 'Primary Business Category'],
+      ['secondary_business_categories', 'Secondary Business Categories'],
+      ['business_model', 'Business Model'], ['service_area', 'Service Area'],
+      ['areas_served', 'Areas Served'], ['tagline', 'Tagline'],
+      ['product_short_description', 'Product Short Description (max 160 chars)'],
+      ['mission_statement', 'Mission Statement'], ['company_profile', 'Company Profile'] ] },
+    { title: 'NAP & Primary Contact', fields: [
+      ['phone', 'Phone'], ['public_email', 'Public Email'], ['address_line_1', 'Address Line 1'],
+      ['town', 'Town'], ['state', 'State'], ['pincode', 'Pincode'] ] },
+    { title: 'Web & Keywords', fields: [
+      ['domain', 'Primary Website'], ['target_page', 'Target Page'],
+      ['secondary_websites', 'Secondary Websites'],
+      ['target_customer_segments', 'Target Customer Segments'], ['seed_keywords', 'Seed Keywords'],
+      ['locations', 'Locations'], ['products_services', 'Products / Services'],
+      ['competitors', 'Competitors'] ] }
+  ];
 
   function loadCustomers(search) {
     var q = search ? ('?search=' + encodeURIComponent(search)) : '';
@@ -180,9 +223,12 @@
   function selectCustomer(id) {
     selectedCustomerId = id;
     expanded = {};
+    activeTab = 'profile';
+    currentRuns = [];
+    currentMonths = [];
     renderCustomers();
     renderDetailLoading();
-    loadRuns(id);
+    loadMonths(id);
   }
 
   function renderDetailLoading() {
@@ -196,6 +242,16 @@
     }).catch(function(err){
       document.getElementById('detailCol').innerHTML =
         '<p class="muted">Failed to load audits: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function loadMonths(customerId) {
+    return api('/customers/' + customerId + '/projects').then(function(data){
+      currentMonths = Array.isArray(data) ? data : (data.items || []);
+      renderDetail();
+    }).catch(function(err){
+      document.getElementById('detailCol').innerHTML =
+        '<p class="muted">Failed to load months: ' + escapeHtml(err.message) + '</p>';
     });
   }
 
@@ -215,10 +271,124 @@
     html += '<div class="detail-header">';
     html += '<div><h2>' + escapeHtml(customer.companyName || '') + '</h2>';
     html += '<div class="site-link">' + escapeHtml(customer.website || 'no website') + '</div></div>';
-    html += '<button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button>';
     html += '</div>';
-    html += '<div id="runsList"></div>';
+    html += '<div class="tabbar">';
+    [['profile','Profile'],['months','Months'],['audits','Layer 69 Audits']].forEach(function(t){
+      html += '<button class="tab' + (activeTab === t[0] ? ' active' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
+    });
+    html += '</div>';
+    html += '<div id="tabBody"></div>';
     document.getElementById('detailCol').innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tab'), function(btn){
+      btn.addEventListener('click', function(){
+        var tab = btn.getAttribute('data-tab');
+        activeTab = tab;
+        if (tab === 'audits') { renderDetailLoading(); loadRuns(selectedCustomerId); return; }
+        renderDetail();
+      });
+    });
+    if (activeTab === 'profile') renderProfileTab(customer);
+    else if (activeTab === 'months') renderMonthsTab();
+    else renderAuditsTab();
+  }
+
+  function renderProfileTab(customer) {
+    var profile = customer.profile || {};
+    var html = '<form id="profileForm">';
+    PROFILE_FIELD_GROUPS.forEach(function(group){
+      html += '<div class="profile-group"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+      group.fields.forEach(function(f){
+        var key = f[0], label = f[1];
+        var raw = profile[key];
+        var isArray = ARRAY_PROFILE_FIELDS.indexOf(key) !== -1;
+        var isLong = LONGTEXT_PROFILE_FIELDS.indexOf(key) !== -1;
+        var value = isArray ? (Array.isArray(raw) ? raw.join('\n') : (raw || '')) : (raw || '');
+        html += '<label class="profile-field' + (isArray || isLong ? ' wide' : '') + '"><span>' + escapeHtml(label) +
+          (isArray ? ' <small>(one per line)</small>' : '') + '</span>';
+        if (isArray || isLong) {
+          html += '<textarea data-key="' + key + '" rows="' + (isArray ? 3 : 4) + '">' + escapeHtml(value) + '</textarea>';
+        } else {
+          html += '<input data-key="' + key + '" value="' + escapeHtml(value) + '" />';
+        }
+        html += '</label>';
+      });
+      html += '</div></div>';
+    });
+    html += '<button type="submit" class="primary">Save profile</button> <span id="profileSaveMsg" class="muted"></span>';
+    html += '</form>';
+    document.getElementById('tabBody').innerHTML = html;
+    document.getElementById('profileForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      saveProfile();
+    });
+  }
+
+  function saveProfile() {
+    var profile = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#profileForm [data-key]'), function(el){
+      var key = el.getAttribute('data-key');
+      if (ARRAY_PROFILE_FIELDS.indexOf(key) !== -1) {
+        profile[key] = el.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+      } else {
+        profile[key] = el.value;
+      }
+    });
+    var msg = document.getElementById('profileSaveMsg');
+    msg.textContent = 'Saving…';
+    api('/customers/' + selectedCustomerId, { method: 'PATCH', body: { profile: profile } })
+      .then(function(updated){
+        var idx = customers.findIndex(function(c){ return c.id === selectedCustomerId; });
+        if (idx !== -1) customers[idx] = updated;
+        msg.textContent = 'Saved.';
+        setTimeout(function(){ if (msg) msg.textContent = ''; }, 2000);
+      })
+      .catch(function(err){ msg.textContent = 'Failed: ' + err.message; });
+  }
+
+  function renderMonthsTab() {
+    var hasM0 = currentMonths.some(function(m){ return m.monthIndex === 0; });
+    var hasM1 = currentMonths.some(function(m){ return m.monthIndex === 1; });
+    var hasM2 = currentMonths.some(function(m){ return m.monthIndex === 2; });
+    var html = '<div class="months-actions">';
+    if (!hasM0 || !hasM1) {
+      html += '<button class="primary" id="ensureM0M1Btn">Ensure M0 & M1 exist</button> ';
+      html += '<span class="muted">Profile/onboarding months only — Layer 4+ data for these stays on WP for now.</span>';
+    } else if (!hasM2) {
+      html += '<button class="primary" id="startM2Btn">Start M2 (first month worked here)</button>';
+    } else {
+      html += '<span class="muted">M0, M1 and M2 all exist. Layer 4 work for M2 happens from the Audits/Layer tooling as it\'s built out.</span>';
+    }
+    html += '</div>';
+    html += '<div class="kp21f-tablewrap"><table><thead><tr><th>Month</th><th>Status</th><th>Source</th><th>Start</th><th>End</th></tr></thead><tbody>';
+    if (!currentMonths.length) html += '<tr><td colspan="5" class="muted">No months yet.</td></tr>';
+    currentMonths.forEach(function(m){
+      html += '<tr><td>' + escapeHtml(m.monthCode) + '</td><td>' + statusBadge(m.status) + '</td>' +
+        '<td>' + escapeHtml(m.source) + '</td><td>' + (m.monthStartDate || '—') + '</td><td>' + (m.monthEndDate || '—') + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('tabBody').innerHTML = html;
+    var ensureBtn = document.getElementById('ensureM0M1Btn');
+    if (ensureBtn) ensureBtn.addEventListener('click', function(){
+      ensureBtn.disabled = true;
+      api('/customers/' + selectedCustomerId + '/projects/ensure-m0-m1', { method: 'POST', body: {} })
+        .then(function(){ return loadMonths(selectedCustomerId); })
+        .catch(function(err){ alert('Could not create M0/M1: ' + err.message); ensureBtn.disabled = false; });
+    });
+    var startM2Btn = document.getElementById('startM2Btn');
+    if (startM2Btn) startM2Btn.addEventListener('click', function(){
+      startM2Btn.disabled = true;
+      var today = new Date().toISOString().slice(0, 10);
+      api('/customers/' + selectedCustomerId + '/projects', { method: 'POST',
+          body: { monthIndex: 2, monthCode: 'M2', status: 'active', source: 'manual', monthStartDate: today } })
+        .then(function(){ return loadMonths(selectedCustomerId); })
+        .catch(function(err){ alert('Could not start M2: ' + err.message); startM2Btn.disabled = false; });
+    });
+  }
+
+  function renderAuditsTab() {
+    var html = '<div class="detail-header"><div></div><button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button></div>';
+    html += '<div id="runsList"></div>';
+    document.getElementById('tabBody').innerHTML = html;
     document.getElementById('runAuditBtn').addEventListener('click', runAudit);
     renderRuns();
   }

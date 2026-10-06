@@ -2,6 +2,7 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
+  IsObject,
   IsOptional,
   IsString,
   MinLength,
@@ -56,4 +57,13 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   assignedToUserId?: string;
+
+  // Full onboarding/Company-Profile fields, keyed the same as WP's
+  // KP21_Onboarding form (brand_name, domain, seed_keywords, ...). Sent as
+  // one object; a save replaces the whole profile blob (the dashboard
+  // always submits the complete form, matching how KP21_Onboarding itself
+  // persists this data server-side).
+  @IsOptional()
+  @IsObject()
+  profile?: Record<string, string | string[] | boolean>;
 }
