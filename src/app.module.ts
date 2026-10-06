@@ -9,6 +9,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { PageImagesModule } from './page-images/page-images.module';
 import { AuditsModule } from './audits/audits.module';
 import { WpIntegrationModule } from './wp-integration/wp-integration.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { WpIntegrationModule } from './wp-integration/wp-integration.module';
     ProjectsModule,
     PageImagesModule,
     AuditsModule,
+    EmailModule,
+    OnboardingModule,
     WpIntegrationModule,
   ],
   controllers: [AppController],

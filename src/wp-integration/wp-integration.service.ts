@@ -8,6 +8,7 @@ import { ImportRun, ImportRunStatus } from './import-run.entity';
 import { WpSyncCustomerDto } from './dto/wp-sync-customer.dto';
 import { WpSyncHistoryDto } from './dto/wp-sync-history.dto';
 import { WpClientService } from './wp-client.service';
+import { OnboardingService } from '../onboarding/onboarding.service';
 
 // Shape returned by the WP-side read-only export route (KP21_Engine_Export,
 // plugin v8.9.256+): GET /wp-json/aiseo/v1/engine-export/customers.
@@ -35,15 +36,25 @@ export class WpIntegrationService {
     @InjectRepository(ImportRun) private importRuns: Repository<ImportRun>,
     private wpClient: WpClientService,
     private projects: ProjectsService,
+    private onboarding: OnboardingService,
   ) {}
 
   // Decision 1 ("auto fetch" sync): upsert, matched by wpUserId. A WP
   // user re-posted after an edit updates the same Engine row rather than
   // creating a duplicate customer.
+  //
+  // Updated 2026-10-06 ("automatic sync of new customer as customer
+  // signup on wordpress, it syncs with backend engine and onboarding
+  // form will be sent from engine" / "wp plugin will be only customer
+  // view portal"): this is now the one place a brand-new signup's
+  // onboarding email gets triggered - WP (KP21_Customer_Signup v8.9.257+)
+  // no longer sends it or hosts the form itself, it just creates the WP
+  // account and calls this endpoint.
   async upsertFromWp(dto: WpSyncCustomerDto): Promise<Customer> {
     let customer = await this.customers.findOne({
       where: { wpUserId: dto.wpUserId },
     });
+    const isNew = !customer;
 
     if (!customer) {
       customer = this.customers.create({
@@ -63,10 +74,19 @@ export class WpIntegrationService {
     customer.competitors = dto.competitors ?? customer.competitors ?? null;
 
     const saved = await this.customers.save(customer);
-    this.logger.log(`Synced customer from WP user ${dto.wpUserId} -> ${saved.id}`);
+    this.logger.log(
+      `${isNew ? 'Created' : 'Synced'} customer from WP user ${dto.wpUserId} -> ${saved.id}`,
+    );
 
-    // Best-effort: let WP know the sync landed, so it can send the
-    // onboarding form. Never blocks/throws if WP isn't reachable yet.
+    // Best-effort, never blocks/throws the signup if SMTP isn't
+    // configured yet or WP is otherwise reachable but email isn't -
+    // sendOnboardingEmailIfNeeded no-ops past the first successful send
+    // (onboardingEmailSentAt), so re-syncing an existing customer is safe.
+    await this.onboarding.sendOnboardingEmailIfNeeded(saved);
+
+    // Best-effort: legacy WP-side acknowledgment route (never built, see
+    // migration plan "Integration between WP and Engine" §4) - harmless
+    // no-op kept for now rather than removed, in case WP still calls it.
     await this.wpClient.notifyOnboardingReady(dto.wpUserId);
 
     return saved;

@@ -95,6 +95,7 @@
     </section>
   </div>
 </main>
+<script src="profile-fields.js"></script>
 <script>
 (function(){
   var token = localStorage.getItem('oh_token');
@@ -147,32 +148,12 @@
   var activeTab = 'profile'; // 'profile' | 'months' | 'audits'
   var expanded = {}; // runId -> 'tasks' | 'pushes' | null
 
-  // WP: KP21_Onboarding's Company-Profile fields, grouped the same way the
-  // WP form groups them. Array-type fields are edited one value per line.
-  var ARRAY_PROFILE_FIELDS = ['secondary_business_categories', 'target_customer_segments',
-    'secondary_websites', 'seed_keywords', 'locations', 'products_services', 'competitors'];
-  var LONGTEXT_PROFILE_FIELDS = ['company_profile', 'mission_statement'];
-  var PROFILE_FIELD_GROUPS = [
-    { title: 'Business Identity', fields: [
-      ['brand_name', 'Brand Name'], ['legal_name', 'Legal Registered Name'],
-      ['entity_type', 'Type of Registered Entity'], ['founded_year', 'Founded Year'],
-      ['industry', 'Industry'], ['business_domain', 'Business Domain'], ['sector', 'Sector'],
-      ['primary_business_category', 'Primary Business Category'],
-      ['secondary_business_categories', 'Secondary Business Categories'],
-      ['business_model', 'Business Model'], ['service_area', 'Service Area'],
-      ['areas_served', 'Areas Served'], ['tagline', 'Tagline'],
-      ['product_short_description', 'Product Short Description (max 160 chars)'],
-      ['mission_statement', 'Mission Statement'], ['company_profile', 'Company Profile'] ] },
-    { title: 'NAP & Primary Contact', fields: [
-      ['phone', 'Phone'], ['public_email', 'Public Email'], ['address_line_1', 'Address Line 1'],
-      ['town', 'Town'], ['state', 'State'], ['pincode', 'Pincode'] ] },
-    { title: 'Web & Keywords', fields: [
-      ['domain', 'Primary Website'], ['target_page', 'Target Page'],
-      ['secondary_websites', 'Secondary Websites'],
-      ['target_customer_segments', 'Target Customer Segments'], ['seed_keywords', 'Seed Keywords'],
-      ['locations', 'Locations'], ['products_services', 'Products / Services'],
-      ['competitors', 'Competitors'] ] }
-  ];
+  // Decided 2026-10-06: field schema moved to the shared profile-fields.js
+  // (loaded above) so the Admin Profile tab here and the public
+  // onboarding.html form can never drift into different field sets.
+  var ARRAY_PROFILE_FIELDS = ProfileFields.ARRAY_PROFILE_FIELDS;
+  var LONGTEXT_PROFILE_FIELDS = ProfileFields.LONGTEXT_PROFILE_FIELDS;
+  var PROFILE_FIELD_GROUPS = ProfileFields.PROFILE_FIELD_GROUPS;
 
   function loadCustomers(search) {
     var q = search ? ('?search=' + encodeURIComponent(search)) : '';

@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Complete your business profile - Openink Hub</title>
+<!--
+  Decided 2026-10-06: "onboarding form will be sent from engine" / "wp
+  plugin will be only customer view portal" - this page, not any WP page,
+  is now where a new customer completes their onboarding profile. No
+  login: the token in the URL (emailed by EmailService) is the only
+  credential, same trust model as a password-reset link. Field schema is
+  shared with the Admin dashboard's Profile tab via profile-fields.js so
+  the two forms can never diverge.
+-->
+<style>
+  body { margin:0; background:#f4f5f7; font-family:Arial,Helvetica,sans-serif; color:#111827; }
+  .wrap { max-width:720px; margin:0 auto; padding:32px 20px 80px; }
+  .brand { font-size:20px; font-weight:bold; margin-bottom:24px; }
+  .card { background:#fff; border-radius:8px; padding:28px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h1 { font-size:20px; margin:0 0 8px; }
+  p.lead { color:#6b7280; font-size:14px; margin:0 0 24px; }
+  .profile-group h3 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:#6b7280; margin:24px 0 12px; }
+  .profile-group:first-of-type h3 { margin-top:0; }
+  .profile-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .profile-field { display:flex; flex-direction:column; font-size:13px; color:#374151; }
+  .profile-field.wide { grid-column:1 / -1; }
+  .profile-field span { margin-bottom:4px; }
+  .profile-field small { color:#9ca3af; }
+  input, textarea { font-size:14px; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-family:inherit; }
+  button.primary { background:#111827; color:#fff; border:none; padding:12px 28px; border-radius:6px; font-size:15px; cursor:pointer; }
+  button.primary:disabled { opacity:.6; cursor:default; }
+  .msg { font-size:13px; margin-left:12px; }
+  .msg.ok { color:#059669; }
+  .msg.err { color:#dc2626; }
+  .center-state { text-align:center; padding:60px 20px; color:#6b7280; }
+  @media (max-width:560px) { .profile-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">Openink Hub</div>
+  <div class="card" id="root"><p class="center-state">Loading…</p></div>
+</div>
+<script src="profile-fields.js"></script>
+<script>
+(function(){
+  var token = new URLSearchParams(window.location.search).get('token');
+  var root = document.getElementById('root');
+
+  function escapeHtml(s) {
+    return (s == null ? '' : String(s)).replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = Object.assign({}, opts.headers || {});
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    return fetch('/api/v1/onboarding' + path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function(res){
+      return res.json().then(function(data){
+        if (!res.ok) throw new Error((data && data.message) || ('Request failed: ' + res.status));
+        return data;
+      });
+    });
+  }
+
+  if (!token) {
+    root.innerHTML = '<p class="center-state">This link is missing its access token. ' +
+      'Please use the link from your onboarding email.</p>';
+    return;
+  }
+
+  api('/' + encodeURIComponent(token)).then(function(data){
+    renderForm(data);
+  }).catch(function(err){
+    root.innerHTML = '<p class="center-state">' + escapeHtml(err.message) +
+      '</p><p class="center-state">If this link has expired, contact your Openink Hub account manager for a new one.</p>';
+  });
+
+  function renderForm(data) {
+    var profile = data.profile || {};
+    var html = '<h1>Welcome' + (data.companyName ? ', ' + escapeHtml(data.companyName) : '') + '!</h1>';
+    html += '<p class="lead">Tell us about your business so we can start your SEO work. ' +
+      'You can come back and update these details any time using the same link.</p>';
+    if (data.completedAt) {
+      html += '<p class="lead" style="color:#059669;">You already submitted this on ' +
+        new Date(data.completedAt).toLocaleString() + ' - feel free to review and update below.</p>';
+    }
+    html += '<form id="onbForm">';
+    ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group){
+      html += '<div class="profile-group"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+      group.fields.forEach(function(f){
+        var key = f[0], label = f[1];
+        var raw = profile[key];
+        var isArray = ProfileFields.ARRAY_PROFILE_FIELDS.indexOf(key) !== -1;
+        var isLong = ProfileFields.LONGTEXT_PROFILE_FIELDS.indexOf(key) !== -1;
+        var value = isArray ? (Array.isArray(raw) ? raw.join('\n') : (raw || '')) : (raw || '');
+        html += '<label class="profile-field' + (isArray || isLong ? ' wide' : '') + '"><span>' +
+          escapeHtml(label) + (isArray ? ' <small>(one per line)</small>' : '') + '</span>';
+        if (isArray || isLong) {
+          html += '<textarea data-key="' + key + '" rows="' + (isArray ? 3 : 4) + '">' + escapeHtml(value) + '</textarea>';
+        } else {
+          html += '<input data-key="' + key + '" value="' + escapeHtml(value) + '" />';
+        }
+        html += '</label>';
+      });
+      html += '</div></div>';
+    });
+    html += '<div style="margin-top:28px;"><button type="submit" class="primary">Save my profile</button>' +
+      '<span id="saveMsg" class="msg"></span></div>';
+    html += '</form>';
+    root.innerHTML = html;
+    document.getElementById('onbForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      submit();
+    });
+  }
+
+  function submit() {
+    var profile = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#onbForm [data-key]'), function(el){
+      var key = el.getAttribute('data-key');
+      var isArray = ProfileFields.ARRAY_PROFILE_FIELDS.indexOf(key) !== -1;
+      profile[key] = isArray
+        ? el.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
+        : el.value;
+    });
+    var btn = document.querySelector('#onbForm button[type="submit"]');
+    var msg = document.getElementById('saveMsg');
+    btn.disabled = true;
+    msg.textContent = '';
+    api('/' + encodeURIComponent(token), { method: 'POST', body: { profile: profile } })
+      .then(function(){
+        msg.textContent = 'Saved - thank you!';
+        msg.className = 'msg ok';
+      })
+      .catch(function(err){
+        msg.textContent = 'Could not save: ' + err.message;
+        msg.className = 'msg err';
+      })
+      .finally(function(){ btn.disabled = false; });
+  }
+})();
+</script>
+</body>
+</html>

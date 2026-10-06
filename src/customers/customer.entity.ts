@@ -66,6 +66,30 @@ export class Customer {
   @Column({ nullable: true })
   assignedToUserId: string | null;
 
+  // Decided 2026-10-06: "wp plugin will be only customer view portal" /
+  // "onboarding form will be sent from engine" — new WP signups no longer
+  // get WP's own onboarding form/email; the Engine owns onboarding end to
+  // end instead. onboardingToken is the bearer credential for the public,
+  // unauthenticated onboarding form (src/onboarding/) — set once when a
+  // brand-new wp_sync customer is created, never regenerated automatically
+  // (re-sharing the same link lets a customer resume/edit before they
+  // finish). Null for a customer that never went through this flow
+  // (manually created, or synced before this feature existed).
+  @Column({ nullable: true, unique: true })
+  onboardingToken: string | null;
+
+  // Set the first time the onboarding email actually sends successfully -
+  // guards against re-emailing on every future wp-sync upsert of the same
+  // customer (upsertFromWp runs on more than just the first signup call).
+  @Column({ type: 'datetime', nullable: true })
+  onboardingEmailSentAt: Date | null;
+
+  // Set when the customer submits the onboarding form (src/onboarding/).
+  // Informational only for now - does not lock the form, since a customer
+  // may legitimately need to come back and correct something.
+  @Column({ type: 'datetime', nullable: true })
+  onboardingCompletedAt: Date | null;
+
   // Full onboarding/Company-Profile data (WP: KP21_Onboarding's ~31-field
   // form — brand_name, legal_name, entity_type, founded_year, industry,
   // business_domain, sector, primary_business_category,
