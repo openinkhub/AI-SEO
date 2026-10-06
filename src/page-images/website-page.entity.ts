@@ -28,6 +28,15 @@ export class WebsitePage {
   @Column({ nullable: true })
   pageName: string | null;
 
+  // Short stable key for the page (default: URL slug, e.g. "about-us" or
+  // "home"), editable. Used wherever a later Layer needs to refer to a page.
+  @Column({ nullable: true })
+  aliasName: string | null;
+
+  // The page's <h1> text, extracted live (fetch pages / extract H1). Editable.
+  @Column({ nullable: true })
+  h1Keyword: string | null;
+
   @Column({ nullable: true })
   libraryImageId: string | null;
 

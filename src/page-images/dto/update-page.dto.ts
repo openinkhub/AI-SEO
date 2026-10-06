@@ -9,6 +9,14 @@ export class UpdatePageDto {
   @IsString()
   pageName?: string;
 
+  @IsOptional()
+  @IsString()
+  aliasName?: string;
+
+  @IsOptional()
+  @IsString()
+  h1Keyword?: string;
+
   // Pass an empty string to explicitly un-map (never deletes the image).
   @IsOptional()
   @IsString()

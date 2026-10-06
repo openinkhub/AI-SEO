@@ -44,3 +44,17 @@ export function guessPageName(url: string): string {
     return 'Page';
   }
 }
+
+// Short stable alias for a page, derived from the last URL path segment:
+// "/our-services/" -> "our-services", site root -> "home". Editable later.
+export function aliasFromUrl(url: string): string {
+  try {
+    const segments = new URL(withProtocol(url)).pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return 'home';
+    const last = decodeURIComponent(segments[segments.length - 1]).replace(/\.(html?|php)$/i, '');
+    const alias = last.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return alias || 'page';
+  } catch {
+    return 'page';
+  }
+}

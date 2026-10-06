@@ -67,3 +67,76 @@ async function tryHomepageLinks(base: string, host: string): Promise<string[]> {
 function dedupe(urls: string[]): string[] {
   return Array.from(new Set(urls));
 }
+
+// ---- H1 extraction ----
+
+const H1_CONCURRENCY = 6;
+const MAX_HTML_BYTES = 3 * 1024 * 1024;
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(parseInt(d, 10)));
+}
+
+// First non-empty <h1> text in the HTML (tags/scripts stripped, entities
+// decoded, whitespace collapsed, capped at 200 chars), or null.
+export function extractH1FromHtml(html: string): string | null {
+  const re = /<h1\b[^>]*>([\s\S]*?)<\/h1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const inner = m[1]
+      .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ');
+    const text = decodeEntities(inner).replace(/\s+/g, ' ').trim();
+    if (text) return text.slice(0, 200);
+  }
+  return null;
+}
+
+export async function fetchH1(url: string): Promise<string | null> {
+  try {
+    const { data } = await axios.get<string>(withProtocol(url), {
+      timeout: FETCH_TIMEOUT_MS,
+      responseType: 'text',
+      maxContentLength: MAX_HTML_BYTES,
+      headers: {
+        Accept: 'text/html',
+        'User-Agent': 'Mozilla/5.0 (compatible; OpenInkHubBot/1.0)',
+      },
+    });
+    return typeof data === 'string' ? extractH1FromHtml(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Fetches H1s for many URLs with limited concurrency. Stops starting new
+// fetches once budgetMs has elapsed (keeps one HTTP request from running
+// past the host's proxy timeout); URLs not reached are simply absent from
+// the result and can be retried with the "Extract H1" action.
+export async function fetchH1Many(
+  urls: string[],
+  budgetMs: number,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  const deadline = Date.now() + budgetMs;
+  let next = 0;
+  const worker = async () => {
+    while (Date.now() < deadline) {
+      const idx = next++;
+      if (idx >= urls.length) return;
+      out.set(urls[idx], await fetchH1(urls[idx]));
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(H1_CONCURRENCY, urls.length) }, worker),
+  );
+  return out;
+}

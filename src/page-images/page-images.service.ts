@@ -12,10 +12,13 @@ import { LibraryImage } from './library-image.entity';
 import { CustomersService } from '../customers/customers.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
-import { normalizeUrl, guessPageName } from './url-utils';
-import { liveSiteScan } from './site-scanner';
+import { normalizeUrl, guessPageName, aliasFromUrl } from './url-utils';
+import { liveSiteScan, fetchH1Many } from './site-scanner';
 
 const MAX_DISTINCT_IMAGES = 30;
+// Keeps one request under the host's proxy timeout; remaining pages can be
+// finished with extractH1ForCustomer().
+const H1_BUDGET_MS = 20000;
 const UPLOAD_DIR =
   process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads', 'page-images');
 
@@ -33,7 +36,45 @@ export class PageImagesService {
 
   async listPages(customerId: string): Promise<WebsitePage[]> {
     await this.customers.findOne(customerId);
-    return this.pages.find({ where: { customerId }, order: { createdAt: 'ASC' } });
+    const rows = await this.pages.find({ where: { customerId }, order: { createdAt: 'ASC' } });
+    // Backfill alias for pages saved before aliasName existed.
+    const missing = rows.filter((p) => !p.aliasName);
+    if (missing.length > 0) {
+      missing.forEach((p) => {
+        p.aliasName = aliasFromUrl(p.pageUrl);
+      });
+      await this.pages.save(missing);
+    }
+    return rows;
+  }
+
+  // Extracts H1 for pages that don't have one yet (or all, with force).
+  // A failed/empty fetch never overwrites an existing value.
+  async extractH1ForCustomer(customerId: string, force = false): Promise<WebsitePage[]> {
+    await this.customers.findOne(customerId);
+    const rows = await this.pages.find({ where: { customerId } });
+    await this.applyH1(rows.filter((p) => force || !p.h1Keyword), H1_BUDGET_MS);
+    return this.listPages(customerId);
+  }
+
+  async extractH1ForPage(customerId: string, pageId: string): Promise<WebsitePage> {
+    const page = await this.findPage(customerId, pageId);
+    await this.applyH1([page], 10000);
+    return page;
+  }
+
+  private async applyH1(rows: WebsitePage[], budgetMs: number): Promise<void> {
+    if (rows.length === 0) return;
+    const found = await fetchH1Many(rows.map((r) => r.pageUrl), budgetMs);
+    const changed: WebsitePage[] = [];
+    rows.forEach((r) => {
+      const h1 = found.get(r.pageUrl);
+      if (h1 && h1 !== r.h1Keyword) {
+        r.h1Keyword = h1;
+        changed.push(r);
+      }
+    });
+    if (changed.length > 0) await this.pages.save(changed);
   }
 
   async fetchLivePages(customerId: string): Promise<WebsitePage[]> {
@@ -44,7 +85,10 @@ export class PageImagesService {
       );
     }
     const discovered = await liveSiteScan(customer.website);
-    return this.syncFetchedPages(customerId, discovered);
+    await this.syncFetchedPages(customerId, discovered);
+    // Pull the H1 of every page that doesn't have one yet (within the time
+    // budget; the rest can be finished with the "Extract H1" action).
+    return this.extractH1ForCustomer(customerId, false);
   }
 
   private async syncFetchedPages(
@@ -62,6 +106,8 @@ export class PageImagesService {
           pageUrl: u,
           normalizedUrl: normalizeUrl(u),
           pageName: guessPageName(u),
+          aliasName: aliasFromUrl(u),
+          h1Keyword: null,
           libraryImageId: null,
         }),
       );
@@ -89,9 +135,13 @@ export class PageImagesService {
       pageUrl: dto.pageUrl,
       normalizedUrl: normalized,
       pageName: dto.pageName || guessPageName(dto.pageUrl),
+      aliasName: dto.aliasName?.trim() || aliasFromUrl(dto.pageUrl),
+      h1Keyword: dto.h1Keyword?.trim() || null,
       libraryImageId: dto.libraryImageId || null,
     });
-    return this.pages.save(page);
+    const saved = await this.pages.save(page);
+    if (!saved.h1Keyword) await this.applyH1([saved], 10000);
+    return saved;
   }
 
   async updatePage(
@@ -114,6 +164,12 @@ export class PageImagesService {
     }
     if (dto.pageName !== undefined) {
       page.pageName = dto.pageName;
+    }
+    if (dto.aliasName !== undefined) {
+      page.aliasName = dto.aliasName.trim() || aliasFromUrl(page.pageUrl);
+    }
+    if (dto.h1Keyword !== undefined) {
+      page.h1Keyword = dto.h1Keyword.trim() || null;
     }
     return this.pages.save(page);
   }

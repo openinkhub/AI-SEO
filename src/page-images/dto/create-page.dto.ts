@@ -10,5 +10,13 @@ export class CreatePageDto {
 
   @IsOptional()
   @IsString()
+  aliasName?: string;
+
+  @IsOptional()
+  @IsString()
+  h1Keyword?: string;
+
+  @IsOptional()
+  @IsString()
   libraryImageId?: string;
 }

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -35,6 +36,16 @@ export class PageImagesController {
   @Post('pages/fetch')
   fetchPages(@Param('customerId') customerId: string) {
     return this.service.fetchLivePages(customerId);
+  }
+
+  @Post('pages/extract-h1')
+  extractH1(@Param('customerId') customerId: string, @Query('force') force?: string) {
+    return this.service.extractH1ForCustomer(customerId, force === 'true');
+  }
+
+  @Post('pages/:pageId/extract-h1')
+  extractPageH1(@Param('customerId') customerId: string, @Param('pageId') pageId: string) {
+    return this.service.extractH1ForPage(customerId, pageId);
   }
 
   @Post('pages')

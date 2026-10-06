@@ -597,9 +597,10 @@
   }
 
   // Layer 3 - Business / Profile Resolution. Mirrors WP's "Business
-  // Resolution Mapping": Google + Social customer resources only.
-  // LinkedIn, Facebook and Instagram are intentionally excluded (decided
-  // 2026-10-07: no integration needed for those three). The Website Pages &
+  // Resolution Mapping": Google resources + YouTube only. All other social
+  // profiles (LinkedIn, Facebook, Instagram, X, Threads, Pinterest, Tumblr)
+  // are intentionally NOT in this table (decided 2026-10-07) - they stay in
+  // Layer 2's Social Profiles section. The Website Pages &
   // Image Mapping library (renderLayer3Library below) also lives in Layer 3.
   var RESOURCES = [
     { name: 'Google Search Console', fields: ['gsc_property'], google: true },
@@ -609,11 +610,7 @@
     { name: 'Google Merchant Center', fields: ['gmc_account'], google: true },
     { name: 'Google Ad Manager', fields: ['gam_network'], google: true },
     { name: 'Google Business Profile', fields: ['gmb_url'], google: true },
-    { name: 'YouTube', fields: ['youtube_channel_url', 'youtube'], google: true },
-    { name: 'X / Twitter', fields: ['twitter'] },
-    { name: 'Threads', fields: ['threads'] },
-    { name: 'Pinterest', fields: ['pinterest'] },
-    { name: 'Tumblr', fields: ['tumblr'] }
+    { name: 'YouTube', fields: ['youtube_channel_url', 'youtube'], google: true }
   ];
 
   function resourceValue(res, profile) {
@@ -639,7 +636,7 @@
         '<td>' + (ok ? 'Customer resource/profile value is available.' : 'Resource has not been mapped yet.') + '</td></tr>';
     }).join('');
     var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Business Resolution Mapping</h2>' +
-      '<p class="lead">Google and Social Media customer-resource resolution, taken from the onboarding profile (Layer 2). ' +
+      '<p class="lead">Google and YouTube customer-resource resolution, taken from the onboarding profile (Layer 2). ' +
       '<strong>' + mapped + ' of ' + RESOURCES.length + '</strong> mapped. This table updates when you save a section above.</p>' +
       '<div style="overflow:auto"><table><thead><tr><th>Resource</th><th>Mapped Customer Resource</th><th>Access / Identity</th><th>Status</th><th>Exact Reason</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
     var box = document.getElementById('layer3');
@@ -694,14 +691,16 @@
     var cust = curCustomer() || {};
     var mappedCount = lib.pages.filter(function(p){ return !!p.libraryImageId && findImage(p.libraryImageId); }).length;
     var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2>' +
-      '<p class="lead">The customer\'s real website pages and the branded images mapped to them. <strong>' + mappedCount + ' of ' + lib.pages.length + '</strong> pages have an image mapped.</p>' +
+      '<p class="lead">Each page keeps its URL, alias name, H1 keyword and mapped image - the same four values are used wherever a Layer needs a page. <strong>' + mappedCount + ' of ' + lib.pages.length + '</strong> pages have an image mapped.</p>' +
       '<div id="libMsg" class="muted" style="margin-bottom:6px;"></div>';
 
     h += '<h3 class="sub-h" style="margin-top:6px">1. Website page URLs</h3>' +
       '<div class="actions" style="margin:6px 0"><button type="button" data-act="fetch"' + (cust.website ? '' : ' disabled title="Customer has no website set"') + '>Fetch live pages from website</button>' +
+      '<button type="button" data-act="extract"' + (lib.pages.length ? '' : ' disabled') + '>Extract missing H1 keywords</button>' +
       '<span class="muted" style="font-size:12px;">' + (cust.website ? escapeHtml(cust.website) : 'No website set for this customer.') + '</span></div>' +
       '<div class="actions" style="margin:6px 0"><input id="newPageUrl" placeholder="https://example.com/page" style="max-width:340px">' +
-      '<input id="newPageName" placeholder="Page name (optional)" style="max-width:220px">' +
+      '<input id="newPageName" placeholder="Page name (optional)" style="max-width:200px">' +
+      '<input id="newPageAlias" placeholder="Alias name (optional)" style="max-width:180px">' +
       '<button type="button" class="primary" data-act="add">Add page</button></div>';
 
     h += '<h3 class="sub-h">2. Branded images <span class="muted" style="font-weight:400;">(' + lib.images.length + ' of ' + MAX_IMAGES + ')</span></h3>' +
@@ -719,20 +718,23 @@
       }).join('') + '</div>';
     }
 
-    h += '<h3 class="sub-h">3. Page → image mapping</h3>';
+    h += '<h3 class="sub-h">3. Page mapping — alias name, H1 keyword &amp; image</h3>';
     if (!lib.pages.length) h += '<p class="muted">No pages yet. Fetch the live pages or add one above.</p>';
     else {
-      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>URL</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
+      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>Alias name</th><th>URL</th><th>H1 keyword</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
         lib.pages.map(function(pg){
           var img = pg.libraryImageId ? findImage(pg.libraryImageId) : null;
           var opts = '<option value="">— none —</option>' + lib.images.map(function(i){
             return '<option value="' + escapeHtml(i.id) + '"' + (img && img.id === i.id ? ' selected' : '') + '>' + escapeHtml(imageLabel(i)) + '</option>';
           }).join('');
+          var pid = escapeHtml(pg.id);
           return '<tr><td>' + escapeHtml(pg.pageName || '—') + '</td>' +
+            '<td><input data-act="alias" data-id="' + pid + '" value="' + escapeHtml(pg.aliasName || '') + '" style="min-width:130px"></td>' +
             '<td style="word-break:break-all;"><a href="' + escapeHtml(/^https?:/i.test(pg.pageUrl) ? pg.pageUrl : 'https://' + pg.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(pg.pageUrl) + '</a></td>' +
+            '<td><input data-act="h1" data-id="' + pid + '" value="' + escapeHtml(pg.h1Keyword || '') + '" placeholder="not found" style="min-width:200px"></td>' +
             '<td style="min-width:240px;">' + (img ? '<img class="thumb" src="' + escapeHtml(img.url) + '" alt="">' : '') +
-            '<select data-act="map" data-id="' + escapeHtml(pg.id) + '" style="width:auto;max-width:200px;">' + opts + '</select></td>' +
-            '<td><button type="button" style="padding:3px 10px;font-size:12px;" data-act="del-page" data-id="' + escapeHtml(pg.id) + '">Remove</button></td></tr>';
+            '<select data-act="map" data-id="' + pid + '" style="width:auto;max-width:200px;">' + opts + '</select></td>' +
+            '<td><button type="button" style="padding:3px 10px;font-size:12px;" data-act="del-page" data-id="' + pid + '">Remove</button></td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     h += '</section>';
@@ -745,20 +747,24 @@
       var act = t.getAttribute('data-act'), id = t.getAttribute('data-id');
       if (act === 'fetch') libFetchPages(t);
       else if (act === 'add') libAddPage(t);
+      else if (act === 'extract') libExtractH1(t);
       else if (act === 'upload') libUploadImage(t);
       else if (act === 'del-img') libDeleteImage(id);
       else if (act === 'del-page') libDeletePage(id);
     };
     box.onchange = function(e){
       var t = e.target;
-      if (t && t.getAttribute && t.getAttribute('data-act') === 'map') libMapPage(t.getAttribute('data-id'), t.value);
+      var act = t && t.getAttribute ? t.getAttribute('data-act') : null;
+      if (act === 'map') libMapPage(t.getAttribute('data-id'), t.value);
+      else if (act === 'alias') libEditPage(t.getAttribute('data-id'), { aliasName: t.value }, 'Alias saved.');
+      else if (act === 'h1') libEditPage(t.getAttribute('data-id'), { h1Keyword: t.value }, 'H1 keyword saved.');
     };
   }
 
   function libFetchPages(btn) {
     var cid = state.cid;
     btn.disabled = true;
-    setLibMsg('Fetching live pages… this can take a minute.', false);
+    setLibMsg('Fetching live pages and H1 keywords… this can take up to a minute.', false);
     api(libBase() + '/pages/fetch', { method: 'POST', body: {} }).then(function(pages){
       if (cid !== state.cid) return;
       lib.pages = Array.isArray(pages) ? pages : lib.pages;
@@ -775,6 +781,8 @@
     btn.disabled = true;
     var body = { pageUrl: url };
     if (name) body.pageName = name;
+    var alias = document.getElementById('newPageAlias').value.trim();
+    if (alias) body.aliasName = alias;
     api(libBase() + '/pages', { method: 'POST', body: body }).then(function(page){
       if (cid !== state.cid) return;
       lib.pages.push(page);
@@ -825,6 +833,29 @@
       lib.msg = { text: 'Page removed.', err: false };
       drawLibrary();
     }).catch(function(err){ setLibMsg('Could not remove page: ' + err.message, true); });
+  }
+
+  function libExtractH1(btn) {
+    var cid = state.cid;
+    btn.disabled = true;
+    setLibMsg('Extracting H1 keywords…', false);
+    api(libBase() + '/pages/extract-h1', { method: 'POST', body: {} }).then(function(pages){
+      if (cid !== state.cid) return;
+      lib.pages = Array.isArray(pages) ? pages : lib.pages;
+      var missing = lib.pages.filter(function(p){ return !p.h1Keyword; }).length;
+      lib.msg = { text: missing ? 'Done — ' + missing + ' page(s) still have no H1 (none found, or time ran out; click again to retry).' : 'Done — every page has an H1 keyword.', err: false };
+      drawLibrary();
+    }).catch(function(err){ btn.disabled = false; setLibMsg('Could not extract H1: ' + err.message, true); });
+  }
+
+  // Inline edit of alias / H1: saved on change, no redraw (keeps keyboard focus).
+  function libEditPage(pageId, body, okMsg) {
+    var cid = state.cid;
+    api(libBase() + '/pages/' + pageId, { method: 'PATCH', body: body }).then(function(page){
+      if (cid !== state.cid) return;
+      lib.pages = lib.pages.map(function(p){ return p.id === pageId ? page : p; });
+      setLibMsg(okMsg, false);
+    }).catch(function(err){ setLibMsg('Could not save: ' + err.message, true); });
   }
 
   function libMapPage(pageId, imageId) {
