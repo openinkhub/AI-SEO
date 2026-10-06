@@ -12,6 +12,18 @@ import * as nodemailer from 'nodemailer';
 // since no such account/key exists yet and SMTP needs only env vars - same
 // "gracefully unconfigured until real credentials exist" pattern as
 // WpClientService: every call is safe to make whether or not SMTP_* is set.
+//
+// Encryption + reply-to/cc decided 2026-10-06 (verbatim): "For SMTP you
+// have not taken encryption value, add reply path to info@openinkhub.io
+// and cc to info@openinkhub.cloud. All notification mail will be send as
+// same rule." - SMTP_ENCRYPTION ('ssl' | 'tls'/'starttls' | 'none') picks
+// the transport mode explicitly instead of inferring it only from
+// SMTP_SECURE, falling back to a sane default from the port if unset.
+// Every outbound email goes through deliver() below, so Reply-To
+// (SMTP_REPLY_TO, default info@openinkhub.io) and Cc
+// (SMTP_NOTIFICATION_CC, default info@openinkhub.cloud) apply uniformly to
+// every current and future notification email without each new send
+// method having to remember the rule itself.
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -19,16 +31,41 @@ export class EmailService {
 
   constructor(private readonly config: ConfigService) {
     if (this.isConfigured()) {
+      const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+      const encryption = this.resolveEncryption(port);
       this.transporter = nodemailer.createTransport({
         host: this.config.get<string>('SMTP_HOST'),
-        port: Number(this.config.get<string>('SMTP_PORT') ?? 587),
-        secure: this.config.get<string>('SMTP_SECURE') === 'true',
+        port,
+        secure: encryption === 'ssl',
+        requireTLS: encryption === 'tls',
         auth: {
           user: this.config.get<string>('SMTP_USER'),
           pass: this.config.get<string>('SMTP_PASS'),
         },
       });
+      this.logger.log(
+        `SMTP transporter configured (host ${this.config.get<string>('SMTP_HOST')}, port ${port}, encryption: ${encryption})`,
+      );
     }
+  }
+
+  // 'ssl' = implicit TLS from the first byte of the connection (typically
+  // port 465). 'tls' = plaintext connect then STARTTLS upgrade (typically
+  // port 587 or 25) - also accepts the legacy spelling 'starttls'. 'none' =
+  // unencrypted, only for a local/trusted relay, never recommended for a
+  // real mailbox. Falls back to SMTP_SECURE ('true' => 'ssl') for anyone
+  // who set that before SMTP_ENCRYPTION existed, then to a port-based
+  // default so an unset value still does something sensible.
+  private resolveEncryption(port: number): 'ssl' | 'tls' | 'none' {
+    const raw = (this.config.get<string>('SMTP_ENCRYPTION') || '')
+      .toLowerCase()
+      .trim();
+    if (raw === 'ssl' || raw === 'tls' || raw === 'none') return raw;
+    if (raw === 'starttls') return 'tls';
+    if (this.config.get<string>('SMTP_SECURE') === 'true') return 'ssl';
+    if (port === 465) return 'ssl';
+    if (port === 587 || port === 25) return 'tls';
+    return 'none';
   }
 
   isConfigured(): boolean {
@@ -47,6 +84,52 @@ export class EmailService {
     );
   }
 
+  private replyToAddress(): string {
+    return this.config.get<string>('SMTP_REPLY_TO') || 'info@openinkhub.io';
+  }
+
+  private notificationCc(): string | undefined {
+    return (
+      this.config.get<string>('SMTP_NOTIFICATION_CC') ||
+      'info@openinkhub.cloud'
+    );
+  }
+
+  // Every outbound notification email goes through here, so Reply-To and
+  // Cc (decided 2026-10-06, see class comment above) apply uniformly - a
+  // future notification method just builds subject/html/text and calls
+  // this, it never needs to remember the reply-to/cc rule on its own.
+  // Returns true only on a confirmed send.
+  private async deliver(opts: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<boolean> {
+    if (!this.transporter) {
+      this.logger.warn(
+        `Email to ${opts.to} ("${opts.subject}") skipped - SMTP_HOST/SMTP_USER/SMTP_PASS not configured`,
+      );
+      return false;
+    }
+    try {
+      await this.transporter.sendMail({
+        from: this.fromAddress(),
+        to: opts.to,
+        cc: this.notificationCc(),
+        replyTo: this.replyToAddress(),
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
+      });
+      this.logger.log(`Email sent to ${opts.to} ("${opts.subject}")`);
+      return true;
+    } catch (err) {
+      this.logger.error(`Email to ${opts.to} ("${opts.subject}") failed: ${err}`);
+      return false;
+    }
+  }
+
   // Returns true only on a confirmed send - callers use this to decide
   // whether to stamp onboardingEmailSentAt, so an unconfigured/failed send
   // is retried on the next sync rather than silently marked as done.
@@ -55,28 +138,12 @@ export class EmailService {
     companyName: string,
     onboardingUrl: string,
   ): Promise<boolean> {
-    if (!this.transporter) {
-      this.logger.warn(
-        `Onboarding email to ${toEmail} skipped - SMTP_HOST/SMTP_USER/SMTP_PASS not configured`,
-      );
-      return false;
-    }
-    const subject = 'Welcome to Openink Hub - complete your business profile';
-    const html = this.renderOnboardingHtml(companyName, onboardingUrl);
-    try {
-      await this.transporter.sendMail({
-        from: this.fromAddress(),
-        to: toEmail,
-        subject,
-        html,
-        text: `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.`,
-      });
-      this.logger.log(`Onboarding email sent to ${toEmail}`);
-      return true;
-    } catch (err) {
-      this.logger.error(`Onboarding email to ${toEmail} failed: ${err}`);
-      return false;
-    }
+    return this.deliver({
+      to: toEmail,
+      subject: 'Welcome to Openink Hub - complete your business profile',
+      html: this.renderOnboardingHtml(companyName, onboardingUrl),
+      text: `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.`,
+    });
   }
 
   private renderOnboardingHtml(companyName: string, onboardingUrl: string): string {
