@@ -92,6 +92,13 @@
   .placeholder .layers{font-size:13px; color:var(--muted); margin-top:10px; line-height:1.7;}
   a.jump{color:var(--accent); font-size:13px; text-decoration:none;}
   a.jump:hover{text-decoration:underline;}
+  .sub-h{font-size:14px;margin:22px 0 8px;color:var(--accent-dark);}
+  .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
+  .img-card{border:1px solid var(--border-soft);border-radius:8px;padding:8px;font-size:12px;}
+  .img-card img{width:100%;height:90px;object-fit:cover;border-radius:6px;background:#eee;display:block;margin-bottom:6px;}
+  .img-card .nm{word-break:break-word;margin-bottom:6px;}
+  .thumb{width:44px;height:32px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:8px;background:#eee;}
+  .warn{background:var(--pending-bg);color:var(--pending);border-radius:8px;padding:8px 12px;font-size:12.5px;margin:8px 0;}
   .empty{padding:40px 10px; text-align:center;}
   .danger-zone{border-color:#ecd0d0;}
 </style>
@@ -136,12 +143,13 @@
 
   function api(path, opts) {
     opts = opts || {};
+    var isForm = (typeof FormData !== 'undefined') && opts.body instanceof FormData;
     var headers = Object.assign({ 'Authorization': 'Bearer ' + token }, opts.headers || {});
-    if (opts.body) headers['Content-Type'] = 'application/json';
+    if (opts.body && !isForm) headers['Content-Type'] = 'application/json';
     return fetch('/api/v1' + path, {
       method: opts.method || 'GET',
       headers: headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined
+      body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined
     }).then(function(res){
       if (res.status === 401) {
         try { localStorage.removeItem('oh_token'); localStorage.removeItem('oh_user'); } catch(e) {}
@@ -150,8 +158,14 @@
       }
       var ct = res.headers.get('content-type') || '';
       if (ct.indexOf('text/html') !== -1) return res.text().then(function(t){ return { __html: t, ok: res.ok }; });
-      return res.json().then(function(data){
-        if (!res.ok) throw new Error((data && data.message) || ('Request failed: ' + res.status));
+      return res.text().then(function(txt){
+        var data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch(e) {}
+        if (!res.ok) {
+          var m = data && data.message;
+          if (Array.isArray(m)) m = m.join('; ');
+          throw new Error(m || (txt && txt.length < 200 ? txt.trim() : '') || ('Request failed: ' + res.status));
+        }
         return data;
       });
     });
@@ -410,7 +424,7 @@
     var html = pageHead('Profile', 'Layers 1–3 · ' + contextLine(cust));
     html += '<div class="actions" style="margin-top:0"><span class="muted">Jump to:</span>' +
       [1, 2, 3].map(function(n){ return '<a href="#" class="jump" data-target="layer' + n + '">Layer ' + n + ' · ' + escapeHtml(LAYER_TITLES[n]) + '</a>'; }).join(' · ') + '</div>';
-    html += '<div id="layer1"></div><div id="layer2"></div><div id="layer3"></div>';
+    html += '<div id="layer1"></div><div id="layer2"></div><div id="layer3"></div><div id="layer3lib"></div>';
     html += '<div class="card danger-zone"><h2>Remove customer</h2>' +
       '<p class="lead">Deletes this customer and their Month shells from the Engine. It does NOT delete their WordPress account — do that separately in wp-admin.</p>' +
       '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button></div>';
@@ -418,6 +432,7 @@
     renderLayer1(cust);
     renderLayer2(cust);
     renderLayer3(cust);
+    renderLayer3Library();
     document.getElementById('deleteCustomerBtn').addEventListener('click', function(){ deleteCustomer(cust); });
     Array.prototype.forEach.call(document.querySelectorAll('a.jump'), function(a){
       a.addEventListener('click', function(e){
@@ -581,64 +596,246 @@
     saveChunk(0);
   }
 
-  // Layer 3 - Business / Profile Resolution: which real-world resources the
-  // profile resolves to, and which parts of the Engine each one feeds.
+  // Layer 3 - Business / Profile Resolution. Mirrors WP's "Business
+  // Resolution Mapping": Google + Social customer resources only.
+  // LinkedIn, Facebook and Instagram are intentionally excluded (decided
+  // 2026-10-07: no integration needed for those three). The Website Pages &
+  // Image Mapping library (renderLayer3Library below) also lives in Layer 3.
   var RESOURCES = [
-    { name: 'Business identity', fields: ['brand_name', 'legal_name', 'industry'], feeds: 'All Layers' },
-    { name: 'Primary website', fields: ['domain'], feeds: 'On Page · Keyword Planner, Technical SEO' },
-    { name: 'Contact & NAP', fields: ['phone', 'public_email', 'address_line_1', 'town', 'state', 'pincode'], feeds: 'Off Page · Backlinks / Directories, Local SEO' },
-    { name: 'Keyword inputs', fields: ['seed_keywords', 'locations', 'target_customer_segments'], feeds: 'On Page · Keyword Planner' },
-    { name: 'Competitors', fields: ['competitors'], feeds: 'On Page · Keyword Planner, Technical SEO' },
-    { name: 'Google Search Console', fields: ['gsc_property'], feeds: 'Technical SEO · Website Audit' },
-    { name: 'Google Analytics / Tag Manager', fields: ['ga4_property', 'gtm_container'], feeds: 'Technical SEO · Google Analytics' },
-    { name: 'Google Business Profile', fields: ['gmb_url'], feeds: 'Local SEO · GMB Profile / Audit' },
-    { name: 'YouTube channel', fields: ['youtube_channel_url', 'youtube'], anyOf: true, feeds: 'Social Media · Social Analytics / Post' },
-    { name: 'Social profiles', fields: ['linkedin', 'facebook', 'instagram', 'twitter', 'threads', 'pinterest', 'tumblr'], anyOf: true, feeds: 'Social Media' },
-    { name: 'Hosting', fields: ['hosting_provider', 'hosting_url'], feeds: 'On Page · Website Development' },
-    { name: 'Domain & DNS', fields: ['dns_registrar', 'dns_provider', 'nameservers'], feeds: 'On Page · Website Development' }
+    { name: 'Google Search Console', fields: ['gsc_property'], google: true },
+    { name: 'Google Analytics 4', fields: ['ga4_property'], google: true },
+    { name: 'Google Tag Manager', fields: ['gtm_container'], google: true },
+    { name: 'Google Ads', fields: ['google_ads_id'], google: true },
+    { name: 'Google Merchant Center', fields: ['gmc_account'], google: true },
+    { name: 'Google Ad Manager', fields: ['gam_network'], google: true },
+    { name: 'Google Business Profile', fields: ['gmb_url'], google: true },
+    { name: 'YouTube', fields: ['youtube_channel_url', 'youtube'], google: true },
+    { name: 'X / Twitter', fields: ['twitter'] },
+    { name: 'Threads', fields: ['threads'] },
+    { name: 'Pinterest', fields: ['pinterest'] },
+    { name: 'Tumblr', fields: ['tumblr'] }
   ];
 
-  function fieldLabel(key) {
-    for (var i = 0; i < PROFILE_FIELD_GROUPS.length; i++) {
-      var f = PROFILE_FIELD_GROUPS[i].fields.filter(function(x){ return x[0] === key; })[0];
-      if (f) return f[1];
+  function resourceValue(res, profile) {
+    for (var i = 0; i < res.fields.length; i++) {
+      var v = profile[res.fields[i]];
+      if (isFilled(v)) return Array.isArray(v) ? v.join(', ') : String(v);
     }
-    return key;
-  }
-
-  function resolveResource(res, profile) {
-    var filled = res.fields.filter(function(k){ return isFilled(profile[k]); });
-    var status;
-    if (res.anyOf) status = filled.length ? 'mapped' : 'missing';
-    else status = filled.length === res.fields.length ? 'mapped' : (filled.length ? 'partial' : 'missing');
-    var shown = filled.map(function(k){
-      var v = profile[k];
-      return fieldLabel(k) + ': ' + (Array.isArray(v) ? v.join(', ') : v);
-    });
-    return { status: status, filled: filled, shown: shown };
+    return '';
   }
 
   function renderLayer3(cust) {
     var profile = cust.profile || {};
     var mapped = 0;
     var rows = RESOURCES.map(function(res){
-      var r = resolveResource(res, profile);
-      if (r.status === 'mapped') mapped++;
-      var badge = r.status === 'mapped' ? '<span class="badge ok">Mapped</span>'
-        : (r.status === 'partial' ? '<span class="badge pending">Partial</span>' : '<span class="badge fail">Not mapped</span>');
-      var missing = res.fields.filter(function(k){ return r.filled.indexOf(k) === -1; });
-      var detail = r.shown.length
-        ? r.shown.map(function(s){ return escapeHtml(s.length > 90 ? s.slice(0, 90) + '…' : s); }).join('<br>')
-        : '<span class="muted">—</span>';
-      if (r.status === 'partial') detail += '<br><span class="muted" style="font-size:12px;">Missing: ' + missing.map(fieldLabel).map(escapeHtml).join(', ') + '</span>';
-      return '<tr><td><strong>' + escapeHtml(res.name) + '</strong></td><td>' + badge + '</td><td>' + detail + '</td><td class="muted">' + escapeHtml(res.feeds) + '</td></tr>';
+      var val = resourceValue(res, profile);
+      var ok = val !== '';
+      if (ok) mapped++;
+      var access = res.google ? (cust.contactEmail || '') : 'Customer / Admin approved connection';
+      return '<tr><td><strong>' + escapeHtml(res.name) + '</strong></td>' +
+        '<td style="word-break:break-all;">' + escapeHtml(val) + '</td>' +
+        '<td>' + escapeHtml(access) + '</td>' +
+        '<td>' + (ok ? '<span class="badge ok">Mapped</span>' : '<span class="badge fail">Not Mapped</span>') + '</td>' +
+        '<td>' + (ok ? 'Customer resource/profile value is available.' : 'Resource has not been mapped yet.') + '</td></tr>';
     }).join('');
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>' + escapeHtml(LAYER_TITLES[3]) + '</h2>' +
-      '<p class="lead">How the saved profile resolves to the business resources the later Layers need. ' +
-      '<strong>' + mapped + ' of ' + RESOURCES.length + '</strong> resources fully mapped. Fix gaps in Layer 2 above — this table updates when you save a section.</p>' +
-      '<div style="overflow:auto"><table><thead><tr><th>Resource</th><th>Status</th><th>Resolved from profile</th><th>Feeds</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Business Resolution Mapping</h2>' +
+      '<p class="lead">Google and Social Media customer-resource resolution, taken from the onboarding profile (Layer 2). ' +
+      '<strong>' + mapped + ' of ' + RESOURCES.length + '</strong> mapped. This table updates when you save a section above.</p>' +
+      '<div style="overflow:auto"><table><thead><tr><th>Resource</th><th>Mapped Customer Resource</th><th>Access / Identity</th><th>Status</th><th>Exact Reason</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
     var box = document.getElementById('layer3');
     if (box) box.innerHTML = h;
+  }
+
+  // ---- Layer 3: Website Pages & Image Mapping (Page Image Library) ----
+  // Engine equivalent of WP's Page Image Library: 1) website page URLs,
+  // 2) branded images (max 30 per customer), 3) page -> image mapping.
+  var lib = { pages: [], images: [], msg: null };
+  var MAX_IMAGES = 30;
+  var MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+  var IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+  function imageLabel(img) {
+    return img.altText || String(img.filename || '').replace(/^\d+-/, '');
+  }
+  function findImage(id) {
+    return lib.images.filter(function(i){ return i.id === id; })[0] || null;
+  }
+  function libBase() { return '/customers/' + state.cid + '/page-images'; }
+  function setLibMsg(text, isErr) {
+    lib.msg = text ? { text: text, err: !!isErr } : null;
+    var el = document.getElementById('libMsg');
+    if (el) {
+      el.textContent = text || '';
+      el.style.color = isErr ? 'var(--fail)' : 'var(--ok)';
+    }
+  }
+
+  function renderLayer3Library() {
+    var box = document.getElementById('layer3lib');
+    if (!box) return;
+    var cid = state.cid;
+    box.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2><p class="muted">Loading…</p></section>';
+    lib.msg = null;
+    Promise.all([api(libBase() + '/pages'), api(libBase() + '/images')]).then(function(r){
+      if (cid !== state.cid) return;
+      lib.pages = Array.isArray(r[0]) ? r[0] : [];
+      lib.images = Array.isArray(r[1]) ? r[1] : [];
+      drawLibrary();
+    }).catch(function(err){
+      var b = document.getElementById('layer3lib');
+      if (b && cid === state.cid) b.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2>' +
+        '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLibrary() {
+    var box = document.getElementById('layer3lib');
+    if (!box) return;
+    var cust = curCustomer() || {};
+    var mappedCount = lib.pages.filter(function(p){ return !!p.libraryImageId && findImage(p.libraryImageId); }).length;
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2>' +
+      '<p class="lead">The customer\'s real website pages and the branded images mapped to them. <strong>' + mappedCount + ' of ' + lib.pages.length + '</strong> pages have an image mapped.</p>' +
+      '<div id="libMsg" class="muted" style="margin-bottom:6px;"></div>';
+
+    h += '<h3 class="sub-h" style="margin-top:6px">1. Website page URLs</h3>' +
+      '<div class="actions" style="margin:6px 0"><button type="button" data-act="fetch"' + (cust.website ? '' : ' disabled title="Customer has no website set"') + '>Fetch live pages from website</button>' +
+      '<span class="muted" style="font-size:12px;">' + (cust.website ? escapeHtml(cust.website) : 'No website set for this customer.') + '</span></div>' +
+      '<div class="actions" style="margin:6px 0"><input id="newPageUrl" placeholder="https://example.com/page" style="max-width:340px">' +
+      '<input id="newPageName" placeholder="Page name (optional)" style="max-width:220px">' +
+      '<button type="button" class="primary" data-act="add">Add page</button></div>';
+
+    h += '<h3 class="sub-h">2. Branded images <span class="muted" style="font-weight:400;">(' + lib.images.length + ' of ' + MAX_IMAGES + ')</span></h3>' +
+      '<div class="actions" style="margin:6px 0"><input type="file" id="newImageFile" accept="image/jpeg,image/png,image/webp,image/gif" style="max-width:300px">' +
+      '<input id="newImageAlt" placeholder="Alt text (optional)" style="max-width:220px">' +
+      '<button type="button" class="primary" data-act="upload"' + (lib.images.length >= MAX_IMAGES ? ' disabled' : '') + '>Upload image</button></div>' +
+      '<div class="muted" style="font-size:12px;">JPEG, PNG, WebP or GIF, up to 8 MB each.</div>' +
+      '<div class="warn">Interim storage: uploaded files sit on the server disk and are lost on the next deploy until image storage moves to Cloudflare R2. Re-upload if an image goes missing.</div>';
+    if (!lib.images.length) h += '<p class="muted">No images uploaded yet.</p>';
+    else {
+      h += '<div class="img-grid">' + lib.images.map(function(img){
+        return '<div class="img-card"><img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(img.altText || '') + '" loading="lazy">' +
+          '<div class="nm">' + escapeHtml(imageLabel(img)) + '</div>' +
+          '<button type="button" class="btn-danger" style="padding:3px 10px;font-size:12px;" data-act="del-img" data-id="' + escapeHtml(img.id) + '">Delete</button></div>';
+      }).join('') + '</div>';
+    }
+
+    h += '<h3 class="sub-h">3. Page → image mapping</h3>';
+    if (!lib.pages.length) h += '<p class="muted">No pages yet. Fetch the live pages or add one above.</p>';
+    else {
+      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>URL</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
+        lib.pages.map(function(pg){
+          var img = pg.libraryImageId ? findImage(pg.libraryImageId) : null;
+          var opts = '<option value="">— none —</option>' + lib.images.map(function(i){
+            return '<option value="' + escapeHtml(i.id) + '"' + (img && img.id === i.id ? ' selected' : '') + '>' + escapeHtml(imageLabel(i)) + '</option>';
+          }).join('');
+          return '<tr><td>' + escapeHtml(pg.pageName || '—') + '</td>' +
+            '<td style="word-break:break-all;"><a href="' + escapeHtml(/^https?:/i.test(pg.pageUrl) ? pg.pageUrl : 'https://' + pg.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(pg.pageUrl) + '</a></td>' +
+            '<td style="min-width:240px;">' + (img ? '<img class="thumb" src="' + escapeHtml(img.url) + '" alt="">' : '') +
+            '<select data-act="map" data-id="' + escapeHtml(pg.id) + '" style="width:auto;max-width:200px;">' + opts + '</select></td>' +
+            '<td><button type="button" style="padding:3px 10px;font-size:12px;" data-act="del-page" data-id="' + escapeHtml(pg.id) + '">Remove</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    h += '</section>';
+    box.innerHTML = h;
+    if (lib.msg) setLibMsg(lib.msg.text, lib.msg.err);
+
+    box.onclick = function(e){
+      var t = e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!t || t.disabled || t.tagName === 'SELECT') return;
+      var act = t.getAttribute('data-act'), id = t.getAttribute('data-id');
+      if (act === 'fetch') libFetchPages(t);
+      else if (act === 'add') libAddPage(t);
+      else if (act === 'upload') libUploadImage(t);
+      else if (act === 'del-img') libDeleteImage(id);
+      else if (act === 'del-page') libDeletePage(id);
+    };
+    box.onchange = function(e){
+      var t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-act') === 'map') libMapPage(t.getAttribute('data-id'), t.value);
+    };
+  }
+
+  function libFetchPages(btn) {
+    var cid = state.cid;
+    btn.disabled = true;
+    setLibMsg('Fetching live pages… this can take a minute.', false);
+    api(libBase() + '/pages/fetch', { method: 'POST', body: {} }).then(function(pages){
+      if (cid !== state.cid) return;
+      lib.pages = Array.isArray(pages) ? pages : lib.pages;
+      lib.msg = { text: 'Done — ' + lib.pages.length + ' pages in the library.', err: false };
+      drawLibrary();
+    }).catch(function(err){ btn.disabled = false; setLibMsg('Could not fetch pages: ' + err.message, true); });
+  }
+
+  function libAddPage(btn) {
+    var cid = state.cid;
+    var url = document.getElementById('newPageUrl').value.trim();
+    var name = document.getElementById('newPageName').value.trim();
+    if (!url) { setLibMsg('Enter a page URL first.', true); return; }
+    btn.disabled = true;
+    var body = { pageUrl: url };
+    if (name) body.pageName = name;
+    api(libBase() + '/pages', { method: 'POST', body: body }).then(function(page){
+      if (cid !== state.cid) return;
+      lib.pages.push(page);
+      lib.msg = { text: 'Page added.', err: false };
+      drawLibrary();
+    }).catch(function(err){ btn.disabled = false; setLibMsg('Could not add page: ' + err.message, true); });
+  }
+
+  function libUploadImage(btn) {
+    var cid = state.cid;
+    var input = document.getElementById('newImageFile');
+    var file = input.files && input.files[0];
+    if (!file) { setLibMsg('Choose an image file first.', true); return; }
+    if (IMAGE_TYPES.indexOf(file.type) === -1) { setLibMsg('Only JPEG, PNG, WebP or GIF images are allowed.', true); return; }
+    if (file.size > MAX_IMAGE_BYTES) { setLibMsg('Image exceeds the 8 MB limit.', true); return; }
+    var fd = new FormData();
+    fd.append('file', file);
+    var alt = document.getElementById('newImageAlt').value.trim();
+    if (alt) fd.append('altText', alt);
+    btn.disabled = true;
+    setLibMsg('Uploading…', false);
+    api(libBase() + '/images', { method: 'POST', body: fd }).then(function(img){
+      if (cid !== state.cid) return;
+      lib.images.unshift(img);
+      lib.msg = { text: 'Image uploaded.', err: false };
+      drawLibrary();
+    }).catch(function(err){ btn.disabled = false; setLibMsg('Upload failed: ' + err.message, true); });
+  }
+
+  function libDeleteImage(id) {
+    var cid = state.cid;
+    if (!window.confirm('Delete this image? Any page mapped to it will be un-mapped (pages are kept).')) return;
+    api(libBase() + '/images/' + id, { method: 'DELETE' }).then(function(){
+      if (cid !== state.cid) return;
+      lib.images = lib.images.filter(function(i){ return i.id !== id; });
+      lib.pages.forEach(function(p){ if (p.libraryImageId === id) p.libraryImageId = null; });
+      lib.msg = { text: 'Image deleted.', err: false };
+      drawLibrary();
+    }).catch(function(err){ setLibMsg('Could not delete image: ' + err.message, true); });
+  }
+
+  function libDeletePage(id) {
+    var cid = state.cid;
+    if (!window.confirm('Remove this page from the library? The image itself is kept.')) return;
+    api(libBase() + '/pages/' + id, { method: 'DELETE' }).then(function(){
+      if (cid !== state.cid) return;
+      lib.pages = lib.pages.filter(function(p){ return p.id !== id; });
+      lib.msg = { text: 'Page removed.', err: false };
+      drawLibrary();
+    }).catch(function(err){ setLibMsg('Could not remove page: ' + err.message, true); });
+  }
+
+  function libMapPage(pageId, imageId) {
+    var cid = state.cid;
+    setLibMsg('Saving…', false);
+    api(libBase() + '/pages/' + pageId, { method: 'PATCH', body: { libraryImageId: imageId } }).then(function(page){
+      if (cid !== state.cid) return;
+      lib.pages = lib.pages.map(function(p){ return p.id === pageId ? page : p; });
+      lib.msg = { text: imageId ? 'Image mapped.' : 'Image un-mapped.', err: false };
+      drawLibrary();
+    }).catch(function(err){ setLibMsg('Could not save mapping: ' + err.message, true); drawLibrary(); });
   }
 
   // Added 2026-10-06: cleans up throwaway signups. Server cascades the
