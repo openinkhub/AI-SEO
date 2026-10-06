@@ -11,7 +11,7 @@ import { WpClientService } from './wp-client.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
 
 // Shape returned by the WP-side read-only export route (KP21_Engine_Export,
-// plugin v8.9.256+): GET /wp-json/aiseo/v1/engine-export/customers.
+// plugin v8.9.258+): GET /wp-json/aiseo/v1/engine-export/customers.
 interface WpExportedCustomer {
   wpUserId: string;
   email: string;
@@ -148,7 +148,7 @@ export class WpIntegrationService {
   // Decided 2026-10-06: "Pull and sync real customer Data and profile
   // rows, so that we have not to create again." Pulls every WP customer's
   // account basics + full onboarding-profile snapshot from the new
-  // read-only WP route (KP21_Engine_Export, plugin v8.9.256) and merges
+  // read-only WP route (KP21_Engine_Export, plugin v8.9.258 - x-api-key auth) and merges
   // it into the matching Engine Customer row (matched/created by
   // wpUserId, same pairing as upsertFromWp), then ensures M0/M1 Month
   // shells exist for each — this is the real-data counterpart to the
@@ -161,14 +161,18 @@ export class WpIntegrationService {
     const run = this.importRuns.create({ status: ImportRunStatus.RUNNING });
     await this.importRuns.save(run);
 
-    if (!this.wpClient.isConfigured()) {
+    if (!this.wpClient.isApiKeyConfigured()) {
       run.status = ImportRunStatus.EMPTY;
-      run.notes =
-        'WP_BASE_URL/WP_APP_USER/WP_APP_PASSWORD not configured - nothing to pull.';
+      run.notes = 'WP_BASE_URL/WP_ENGINE_API_KEY not configured - nothing to pull.';
       return this.importRuns.save(run);
     }
 
-    const result = await this.wpClient.requestDetailed<WpExportResponse>(
+    // Authenticated with the shared x-api-key secret, not an Application
+    // Password - see WpClientService.requestWithApiKey() for why (that
+    // route's auth kept failing on this host even with a confirmed-good
+    // Application Password; root cause was the host stripping the
+    // Authorization header entirely, not the credential).
+    const result = await this.wpClient.requestWithApiKey<WpExportResponse>(
       '/wp-json/aiseo/v1/engine-export/customers',
     );
 
@@ -177,14 +181,13 @@ export class WpIntegrationService {
       if (result.status === 401 || result.status === 403) {
         run.notes =
           `WP responded ${result.status} (auth rejected) for /wp-json/aiseo/v1/engine-export/customers: ` +
-          `${result.error ?? 'no body'}. Check that WP_APP_USER/WP_APP_PASSWORD on Hostinger match a ` +
-          `current, un-revoked Application Password for an Administrator account. If the credential is ` +
-          `confirmed correct and this still fails, the host may be stripping the Authorization header ` +
-          `before WordPress sees it - a known issue on some shared hosting that needs an .htaccess fix.`;
+          `${result.error ?? 'no body'}. Confirm WP_ENGINE_API_KEY on Hostinger exactly matches the ` +
+          `plugin's Engine API Key setting (wp-admin -> AI-SEO -> Settings -> Engine Sync), and that ` +
+          `plugin v8.9.258+ is installed (earlier versions check a WP Application Password here instead).`;
       } else if (result.status) {
         run.notes =
           `WP responded ${result.status} for /wp-json/aiseo/v1/engine-export/customers: ` +
-          `${result.error ?? 'no body'}. Confirm plugin v8.9.256+ is installed and active.`;
+          `${result.error ?? 'no body'}. Confirm plugin v8.9.258+ is installed and active.`;
       } else {
         run.notes =
           `Could not reach WP at all (no HTTP response) - ${result.error ?? 'unknown network error'}. ` +

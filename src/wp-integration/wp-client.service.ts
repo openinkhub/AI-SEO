@@ -30,6 +30,13 @@ export class WpClientService {
     return Boolean(this.baseUrl && this.authHeader());
   }
 
+  // Gate for requestWithApiKey() below - deliberately independent of
+  // WP_APP_USER/WP_APP_PASSWORD, since that credential is no longer part
+  // of this auth path.
+  isApiKeyConfigured(): boolean {
+    return Boolean(this.baseUrl && this.config.get<string>('WP_ENGINE_API_KEY'));
+  }
+
   // Generic helper for any future WP REST route (custom KP21 routes or
   // WP core routes). Returns null (and logs) instead of throwing, so a
   // WP-side outage never crashes an Engine request that merely wants to
@@ -123,6 +130,68 @@ export class WpClientService {
       return { ok: true, status: res.status, data, error: null };
     } catch (err) {
       this.logger.error(`WP REST ${opts.method ?? 'GET'} ${path} failed: ${err}`);
+      return { ok: false, status: null, data: null, error: String(err) };
+    }
+  }
+
+  // Added 2026-10-06 for KP21_Engine_Export (/wp-json/aiseo/v1/engine-export/
+  // customers) after that route kept failing with the same generic
+  // auth-rejected error even once the user confirmed/regenerated the WP
+  // Application Password - root-caused to Hostinger silently stripping the
+  // Authorization header before PHP/WordPress ever sees it on this host (a
+  // known shared-hosting gotcha with Basic Auth, unrelated to whether the
+  // credential itself is correct). x-api-key is a plain custom header, not
+  // Authorization, so it isn't subject to that stripping - proven by the
+  // WP -> Engine direction, which already authenticates every wp-sync call
+  // this same way successfully. Reuses the same WP_ENGINE_API_KEY secret
+  // already shared between WP and Engine, rather than introducing a second
+  // credential to keep in sync.
+  async requestWithApiKey<T = unknown>(
+    path: string,
+  ): Promise<{
+    ok: boolean;
+    status: number | null;
+    data: T | null;
+    error: string | null;
+  }> {
+    const base = this.baseUrl;
+    const key = this.config.get<string>('WP_ENGINE_API_KEY');
+    if (!base || !key) {
+      return {
+        ok: false,
+        status: null,
+        data: null,
+        error: 'WP_BASE_URL/WP_ENGINE_API_KEY not configured',
+      };
+    }
+    const url = `${base.replace(/\/+$/, '')}${path}`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+      });
+      const text = await res.text();
+      let data: T | null = null;
+      try {
+        data = text ? (JSON.parse(text) as T) : null;
+      } catch {
+        // Non-JSON body (an HTML error page, a WAF block page, etc.) -
+        // leave data null, the raw text still goes in error.
+      }
+      if (!res.ok) {
+        this.logger.error(
+          `WP REST GET ${path} -> ${res.status}: ${text.slice(0, 300)}`,
+        );
+        return {
+          ok: false,
+          status: res.status,
+          data,
+          error: text.slice(0, 300) || `HTTP ${res.status}`,
+        };
+      }
+      return { ok: true, status: res.status, data, error: null };
+    } catch (err) {
+      this.logger.error(`WP REST GET ${path} failed: ${err}`);
       return { ok: false, status: null, data: null, error: String(err) };
     }
   }
