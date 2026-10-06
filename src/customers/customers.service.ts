@@ -38,9 +38,23 @@ export class CustomersService {
     return customer;
   }
 
+  // Fixed 2026-10-07: Object.assign(customer, dto) used to overwrite
+  // customer.profile wholesale with whatever dto.profile was sent. The
+  // dashboard's Profile tab only ever submits the subset of fields it
+  // renders (profile-fields.js) - after a real WP profile import landed
+  // ~75 fields in Customer.profile but the dashboard only showed ~31,
+  // the very next "Save profile" would have silently wiped the other
+  // ~45 (hosting/DNS/social/Google IDs/legal) the UI never sent back.
+  // Mirrors OnboardingService.submitProfile()'s existing merge pattern -
+  // a key present in dto.profile overwrites, a key simply absent (not
+  // rendered by whichever form submitted) is preserved, never dropped.
   async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
     const customer = await this.findOne(id);
-    Object.assign(customer, dto);
+    const { profile, ...rest } = dto;
+    Object.assign(customer, rest);
+    if (profile) {
+      customer.profile = { ...(customer.profile ?? {}), ...profile };
+    }
     return this.repo.save(customer);
   }
 
