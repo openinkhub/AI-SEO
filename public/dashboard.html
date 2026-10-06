@@ -26,6 +26,8 @@
   button.primary:hover{background:var(--accent-dark);}
   button.ghost{background:transparent;}
   button:disabled{opacity:.5; cursor:default;}
+  .btn-danger{background:var(--fail-bg); color:var(--fail); border-color:var(--fail);}
+  .btn-danger:hover{background:var(--fail); color:#fff;}
   main{padding:24px 28px;}
   .cols{display:grid; grid-template-columns:340px 1fr; gap:20px;}
   @media (max-width:860px){ .cols{grid-template-columns:1fr;} }
@@ -237,6 +239,35 @@
     document.getElementById('detailCol').innerHTML = '<p class="muted">Loading…</p>';
   }
 
+  // Added 2026-10-06, after a round of real test signups left throwaway
+  // customers with no way to clean them up from here - deletes the
+  // Customer row and its Month shells (server-side cascade, see
+  // CustomersService.remove()). Does not touch the WP user account; that
+  // still needs deleting separately in wp-admin.
+  function deleteCustomer(customer) {
+    var ok = window.confirm(
+      'Delete "' + (customer.companyName || 'this customer') + '" from the Engine? ' +
+      'This removes their profile and Month data here. It does NOT delete their ' +
+      'WordPress account - do that separately in wp-admin if needed.'
+    );
+    if (!ok) return;
+    var btn = document.getElementById('deleteCustomerBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    api('/customers/' + customer.id, { method: 'DELETE' })
+      .then(function(){
+        selectedCustomerId = null;
+        return loadCustomers();
+      })
+      .then(function(){
+        if (customers.length) selectCustomer(customers[0].id);
+        else document.getElementById('detailCol').innerHTML = '<p class="muted">No customers yet.</p>';
+      })
+      .catch(function(err){
+        alert('Could not delete customer: ' + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete customer'; }
+      });
+  }
+
   function loadRuns(customerId) {
     return api('/customers/' + customerId + '/audits').then(function(data){
       currentRuns = Array.isArray(data) ? data : (data.items || []);
@@ -273,6 +304,7 @@
     html += '<div class="detail-header">';
     html += '<div><h2>' + escapeHtml(customer.companyName || '') + '</h2>';
     html += '<div class="site-link">' + escapeHtml(customer.website || 'no website') + '</div></div>';
+    html += '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button>';
     html += '</div>';
     html += '<div class="tabbar">';
     [['profile','Profile'],['months','Months'],['audits','Layer 69 Audits']].forEach(function(t){
@@ -289,6 +321,8 @@
         renderDetail();
       });
     });
+    var deleteBtn = document.getElementById('deleteCustomerBtn');
+    if (deleteBtn) deleteBtn.addEventListener('click', function(){ deleteCustomer(customer); });
     if (activeTab === 'profile') renderProfileTab(customer);
     else if (activeTab === 'months') renderMonthsTab();
     else renderAuditsTab();

@@ -4,12 +4,14 @@ import { Repository } from 'typeorm';
 import { Customer } from './customer.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { ProjectsService } from '../projects/projects.service';
 
 @Injectable()
 export class CustomersService {
   constructor(
     @InjectRepository(Customer)
     private readonly repo: Repository<Customer>,
+    private readonly projects: ProjectsService,
   ) {}
 
   create(dto: CreateCustomerDto): Promise<Customer> {
@@ -42,8 +44,13 @@ export class CustomersService {
     return this.repo.save(customer);
   }
 
+  // Added 2026-10-06 so throwaway test signups (and any future deletion)
+  // don't leave orphaned Month rows - customerId on Project is a plain
+  // column, not an enforced FK/cascade, so it has to be cleaned up
+  // explicitly before the Customer row itself goes.
   async remove(id: string): Promise<void> {
     const customer = await this.findOne(id);
+    await this.projects.removeByCustomer(id);
     await this.repo.remove(customer);
   }
 }

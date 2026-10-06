@@ -39,8 +39,12 @@ export class CustomersController {
     return this.service.update(id, dto);
   }
 
+  // Returns a small JSON body rather than void/204 - the dashboard's
+  // fetch helper always calls res.json() on a non-HTML response, which
+  // throws on a truly empty body.
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  async remove(@Param('id') id: string) {
+    await this.service.remove(id);
+    return { deleted: true, id };
   }
 }

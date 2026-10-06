@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -32,6 +33,14 @@ export class WpSyncController {
   @Get('customers/:wpUserId')
   getByWpUserId(@Param('wpUserId') wpUserId: string) {
     return this.service.findCustomerByWpUserId(wpUserId);
+  }
+
+  // Decided 2026-10-06: a customer deleted in wp-admin should disappear
+  // from the Engine too, not linger as a stale row needing manual
+  // cleanup. Called from KP21_Customer_Signup's delete_user hook.
+  @Delete('customers/:wpUserId')
+  deleteByWpUserId(@Param('wpUserId') wpUserId: string) {
+    return this.service.removeByWpUserId(wpUserId);
   }
 }
 

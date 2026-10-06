@@ -262,4 +262,22 @@ export class WpIntegrationService {
     }
     return customer;
   }
+
+  // Mirrors upsertFromWp() in the other direction - decided 2026-10-06
+  // after a round of real test signups needed manual Engine-side cleanup
+  // with no way to keep the two systems in sync automatically. WP's
+  // delete_user hook calls this (DELETE /api/v1/wp-sync/customers/:wpUserId,
+  // same x-api-key auth as every other wp-sync call) whenever a
+  // keyword_planner_customer account is deleted in wp-admin. Idempotent
+  // and silent on a miss - a WP user who never successfully synced (e.g.
+  // the Engine-sync fallback case) has no Customer row to delete, and
+  // that's not an error.
+  async removeByWpUserId(wpUserId: string): Promise<{ deleted: boolean }> {
+    const customer = await this.customers.findOne({ where: { wpUserId } });
+    if (!customer) return { deleted: false };
+    await this.projects.removeByCustomer(customer.id);
+    await this.customers.remove(customer);
+    this.logger.log(`Deleted customer ${customer.id} (WP user ${wpUserId}) - WP-side deletion`);
+    return { deleted: true };
+  }
 }

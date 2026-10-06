@@ -47,6 +47,17 @@ export class ProjectsService {
     await this.repo.remove(project);
   }
 
+  // Added 2026-10-06 for CustomersService.remove() - customerId here is a
+  // plain column, not a TypeORM relation with an enforced FK/cascade, so
+  // deleting a Customer alone leaves its Month rows orphaned (referencing a
+  // customerId that no longer exists) unless the caller cleans them up
+  // first. Used when deleting a customer outright (a throwaway test
+  // signup, say) so no orphaned Months are left behind.
+  async removeByCustomer(customerId: string): Promise<void> {
+    const projects = await this.findAllForCustomer(customerId);
+    if (projects.length) await this.repo.remove(projects);
+  }
+
   // Decided 2026-10-06: "M0 & M1 should be present, with no data" — creates
   // the two Month shells for a WP-migrated customer if they don't already
   // exist. Idempotent (checked by the customerId+monthIndex unique index),
