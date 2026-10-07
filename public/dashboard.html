@@ -216,7 +216,7 @@
   // Mirrors WP KP21_Section_Mapping::map() - labels, subsections, layers.
   function rng(a, b) { var o = []; for (var i = a; i <= b; i++) o.push(i); return o; }
   var NAV = [
-    { key: 'profile', label: 'Profile', subs: [], layers: [1, 2, 3] },
+    { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
@@ -350,8 +350,10 @@
     var h = (window.location.hash || '').replace(/^#\/?/, '');
     var parts = h.split('/');
     var sec = NAV.filter(function(n){ return n.key === parts[0]; })[0];
-    if (!sec) return { sec: NAV[0], sub: null };
+    if (!sec) return { sec: NAV[0], sub: NAV[0].subs[0] || null };
     var sub = sec.subs.filter(function(s){ return s[0] === parts[1]; })[0] || null;
+    // Profile always lands on a subsection - Account by default.
+    if (!sub && sec.key === 'profile') sub = sec.subs[0];
     return { sec: sec, sub: sub };
   }
 
@@ -359,9 +361,9 @@
     var r = parseRoute();
     var html = '';
     NAV.forEach(function(n){
-      if (n.key === 'profile' || !n.subs.length) {
+      if (!n.subs.length) {
         var act = (r.sec.key === n.key) ? ' active' : '';
-        html += '<a class="' + act.trim() + '" href="#' + n.key + '"' + (n.key !== 'profile' ? ' style="margin-top:10px;"' : '') + '>' + escapeHtml(n.label) + '</a>';
+        html += '<a class="' + act.trim() + '" href="#' + n.key + '" style="margin-top:10px;">' + escapeHtml(n.label) + '</a>';
         return;
       }
       html += '<div class="grp">' + escapeHtml(n.label) + '</div>';
@@ -403,7 +405,7 @@
       return;
     }
     var r = parseRoute();
-    if (r.sec.key === 'profile') return renderProfilePage(cust);
+    if (r.sec.key === 'profile') return renderProfilePage(cust, r.sub);
     var cm = currentMonth();
     if (cm && cm.monthIndex === 0) return renderM0Empty(cust, r);
     if (r.sec.key === 'technical' && r.sub && r.sub[0] === 'brand-audit') return renderBrandAuditPage(cust);
@@ -459,19 +461,25 @@
     return window.location.origin + '/onboarding.html?token=' + cust.onboardingToken;
   }
 
-  function renderProfilePage(cust) {
-    var html = pageHead('Profile', 'Layers 1–3 · ' + contextLine(cust));
+  function renderProfilePage(cust, sub) {
+    var key = sub ? sub[0] : 'account';
+    if (key === 'settings') return renderProfileSettings(cust);
+    if (key === 'billing') return renderProfileBilling(cust);
+    return renderProfileAccount(cust);
+  }
+
+  // Profile > Account = Layer 1 + Layer 2
+  function renderProfileAccount(cust) {
+    var html = pageHead('Profile · Account', 'Layers 1–2 · ' + contextLine(cust));
     html += '<div class="actions" style="margin-top:0"><span class="muted">Jump to:</span>' +
-      [1, 2, 3].map(function(n){ return '<a href="#" class="jump" data-target="layer' + n + '">Layer ' + n + ' · ' + escapeHtml(LAYER_TITLES[n]) + '</a>'; }).join(' · ') + '</div>';
-    html += '<div id="layer1"></div><div id="layer2"></div><div id="layer3"></div><div id="layer3lib"></div>';
+      [1, 2].map(function(n){ return '<a href="#" class="jump" data-target="layer' + n + '">Layer ' + n + ' · ' + escapeHtml(LAYER_TITLES[n]) + '</a>'; }).join(' · ') + '</div>';
+    html += '<div id="layer1"></div><div id="layer2"></div>';
     html += '<div class="card danger-zone"><h2>Remove customer</h2>' +
       '<p class="lead">Deletes this customer and their Month shells from the Engine. It does NOT delete their WordPress account — do that separately in wp-admin.</p>' +
       '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button></div>';
     document.getElementById('page').innerHTML = html;
     renderLayer1(cust);
     renderLayer2(cust);
-    renderLayer3(cust);
-    renderLayer3Library();
     document.getElementById('deleteCustomerBtn').addEventListener('click', function(){ deleteCustomer(cust); });
     Array.prototype.forEach.call(document.querySelectorAll('a.jump'), function(a){
       a.addEventListener('click', function(e){
@@ -480,6 +488,23 @@
         if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
+  }
+
+  // Profile > Settings = Layer 3 (resource mapping + website pages & images)
+  function renderProfileSettings(cust) {
+    var html = pageHead('Profile · Settings', 'Layer 3 · ' + contextLine(cust));
+    html += '<div id="layer3"></div><div id="layer3lib"></div>';
+    document.getElementById('page').innerHTML = html;
+    renderLayer3(cust);
+    renderLayer3Library();
+  }
+
+  // Profile > Billing = Layer 3 placeholder until its fields are defined
+  function renderProfileBilling(cust) {
+    var html = pageHead('Profile · Billing', 'Layer 3 · ' + contextLine(cust));
+    html += '<section class="card placeholder"><h2><span class="layer-tag">Layer 3</span>Billing</h2>' +
+      '<p class="muted">Nothing here yet. Billing details will appear on this page once the fields are defined.</p></section>';
+    document.getElementById('page').innerHTML = html;
   }
 
   // Layer 1 - ACT Account Registration (mirrors WP's Layer 1 card: User ID,
