@@ -137,16 +137,27 @@ export class EmailService {
     toEmail: string,
     companyName: string,
     onboardingUrl: string,
+    resend = false,
   ): Promise<boolean> {
+    // resend = an admin sending the link again so the customer can finish or
+    // update the profile. The form opens pre-filled with what is already saved.
     return this.deliver({
       to: toEmail,
-      subject: 'Welcome to Openink Hub - complete your business profile',
-      html: this.renderOnboardingHtml(companyName, onboardingUrl),
-      text: `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.`,
+      subject: resend
+        ? 'Openink Hub - review and update your business profile'
+        : 'Welcome to Openink Hub - complete your business profile',
+      html: this.renderOnboardingHtml(companyName, onboardingUrl, resend),
+      text: resend
+        ? `Hello!\n\nPlease review and complete your business profile here:\n${onboardingUrl}\n\nThe details we already have are filled in. Update anything and save - no field is mandatory.\n\nThis link is unique to your account - no need to create a separate login.`
+        : `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.`,
     });
   }
 
-  private renderOnboardingHtml(companyName: string, onboardingUrl: string): string {
+  private renderOnboardingHtml(
+    companyName: string,
+    onboardingUrl: string,
+    resend = false,
+  ): string {
     const safeName = companyName
       ? companyName.replace(/</g, '&lt;').replace(/>/g, '&gt;')
       : 'there';
@@ -160,10 +171,13 @@ export class EmailService {
             <span style="color:#ffffff;font-size:20px;font-weight:bold;">Openink Hub</span>
           </td></tr>
           <tr><td style="padding:32px;">
-            <h1 style="font-size:20px;margin:0 0 16px;color:#111827;">Welcome, ${safeName}!</h1>
+            <h1 style="font-size:20px;margin:0 0 16px;color:#111827;">${resend ? 'Hello' : 'Welcome'}, ${safeName}!</h1>
             <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 20px;">
-              Your account is ready. The last step is telling us about your business so we
-              can start your SEO work - takes about 5 minutes.
+              ${
+                resend
+                  ? 'Please review and complete your business profile. The details we already have are filled in - update anything and save. No field is mandatory.'
+                  : 'Your account is ready. The last step is telling us about your business so we can start your SEO work - takes about 5 minutes.'
+              }
             </p>
             <p style="text-align:center;margin:0 0 24px;">
               <a href="${onboardingUrl}" style="display:inline-block;background:#111827;color:#ffffff;

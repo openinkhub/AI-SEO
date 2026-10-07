@@ -591,12 +591,13 @@
     var profile = cust.profile || {};
     var link = onboardingLink(cust);
     var h = '<section class="card"><h2><span class="layer-tag">Layer 2</span>' + escapeHtml(LAYER_TITLES[2]) + '</h2>' +
-      '<p class="lead">The company profile. The customer fills it from the onboarding link; the admin can edit any section here. Each section saves on its own.</p>';
+      '<p class="lead">The company profile. The customer fills it from the onboarding link; the admin can edit any section here. Each section saves on its own. No field is mandatory — use “Send again” to let the customer finish or update it; the form opens pre-filled with everything already saved.</p>';
     h += '<dl class="kv">' +
       '<dt>Onboarding</dt><dd>' + (cust.onboardingCompletedAt
         ? '<span class="badge ok">Submitted</span> ' + escapeHtml(fmtDate(cust.onboardingCompletedAt))
         : '<span class="badge pending">Not submitted yet</span>') + '</dd>' +
-      '<dt>Onboarding email</dt><dd>' + (cust.onboardingEmailSentAt ? 'Sent ' + escapeHtml(fmtDate(cust.onboardingEmailSentAt)) : 'Not sent') + '</dd>' +
+      '<dt>Onboarding email</dt><dd>' + (cust.onboardingEmailSentAt ? 'Sent ' + escapeHtml(fmtDate(cust.onboardingEmailSentAt)) : 'Not sent') +
+        ' · <button type="button" id="resendOnbBtn" style="padding:3px 10px;font-size:12px;">' + (cust.onboardingEmailSentAt ? 'Send again' : 'Send now') + '</button> <span id="resendMsg" class="muted" style="font-size:12px;"></span></dd>' +
       '<dt>Onboarding link</dt><dd>' + (link
         ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener">Open form</a> · <button type="button" id="copyLinkBtn" style="padding:3px 10px;font-size:12px;">Copy link</button> <span id="copyMsg" class="muted" style="font-size:12px;"></span>'
         : '—') + '</dd></dl>';
@@ -629,6 +630,24 @@
       btn.addEventListener('click', function(){ saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10)); });
     });
     var copyBtn = document.getElementById('copyLinkBtn');
+    var resendBtn = document.getElementById('resendOnbBtn');
+    if (resendBtn) resendBtn.addEventListener('click', function(){
+      var cid = state.cid;
+      var to = cust.notificationEmail || cust.contactEmail || cust.accountEmail || 'the customer';
+      if (!window.confirm('Send the onboarding link to ' + to + '? The form opens pre-filled with everything already saved.')) return;
+      var m = document.getElementById('resendMsg');
+      resendBtn.disabled = true; m.textContent = 'Sending…'; m.style.color = '';
+      api('/customers/' + cid + '/onboarding/resend', { method: 'POST', body: {} }).then(function(updated){
+        var idx = state.customers.findIndex(function(c){ return c.id === cid; });
+        if (idx !== -1) state.customers[idx] = updated;
+        if (cid !== state.cid) return;
+        renderPage();
+        var m2 = document.getElementById('resendMsg');
+        if (m2) { m2.textContent = 'Sent to ' + to + '.'; m2.style.color = 'var(--ok)'; }
+      }).catch(function(err){
+        m.textContent = 'Failed: ' + err.message; m.style.color = 'var(--fail)'; resendBtn.disabled = false;
+      });
+    });
     if (copyBtn) copyBtn.addEventListener('click', function(){
       var m = document.getElementById('copyMsg');
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -795,10 +814,10 @@
       '<button type="button" class="primary" data-act="add">Add page</button></div>';
 
     h += '<h3 class="sub-h">2. Branded images <span class="muted" style="font-weight:400;">(' + lib.images.length + ' of ' + MAX_IMAGES + ')</span></h3>' +
-      '<div class="actions" style="margin:6px 0"><input type="file" id="newImageFile" accept="image/jpeg,image/png,image/webp,image/gif" style="max-width:300px">' +
+      '<div class="actions" style="margin:6px 0"><input type="file" id="newImageFile" multiple accept="image/jpeg,image/png,image/webp,image/gif" style="max-width:300px">' +
       '<input id="newImageAlt" placeholder="Alt text (optional)" style="max-width:220px">' +
       '<button type="button" class="primary" data-act="upload"' + (lib.images.length >= MAX_IMAGES || lib.storage === 'unconfigured' ? ' disabled' : '') + '>Upload image</button></div>' +
-      '<div class="muted" style="font-size:12px;">JPEG, PNG, WebP or GIF, up to 8 MB each.</div>' +
+      '<div class="muted" style="font-size:12px;">JPEG, PNG, WebP or GIF, up to 8 MB each. Select several files at once; alt text is applied only when a single image is chosen.</div>' +
       storageNoticeHtml();
     if (!lib.images.length) h += '<p class="muted">No images uploaded yet.</p>';
     else {
@@ -901,22 +920,48 @@
   function libUploadImage(btn) {
     var cid = state.cid;
     var input = document.getElementById('newImageFile');
-    var file = input.files && input.files[0];
-    if (!file) { setLibMsg('Choose an image file first.', true); return; }
-    if (IMAGE_TYPES.indexOf(file.type) === -1) { setLibMsg('Only JPEG, PNG, WebP or GIF images are allowed.', true); return; }
-    if (file.size > MAX_IMAGE_BYTES) { setLibMsg('Image exceeds the 8 MB limit.', true); return; }
-    var fd = new FormData();
-    fd.append('file', file);
-    var alt = document.getElementById('newImageAlt').value.trim();
-    if (alt) fd.append('altText', alt);
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) { setLibMsg('Choose one or more image files first.', true); return; }
+    var alt = files.length === 1 ? document.getElementById('newImageAlt').value.trim() : '';
+    var room = MAX_IMAGES - lib.images.length;
+    var skipped = [];
+    var queue = files.filter(function(f){
+      if (IMAGE_TYPES.indexOf(f.type) === -1) { skipped.push(f.name + ' (not JPEG/PNG/WebP/GIF)'); return false; }
+      if (f.size > MAX_IMAGE_BYTES) { skipped.push(f.name + ' (over 8 MB)'); return false; }
+      return true;
+    });
+    if (queue.length > room) {
+      queue.slice(Math.max(room, 0)).forEach(function(f){ skipped.push(f.name + ' (library limit of ' + MAX_IMAGES + ')'); });
+      queue = queue.slice(0, Math.max(room, 0));
+    }
+    if (!queue.length) { setLibMsg('Nothing to upload: ' + skipped.join('; '), true); return; }
     btn.disabled = true;
-    setLibMsg('Uploading…', false);
-    api(libBase() + '/images', { method: 'POST', body: fd }).then(function(img){
+    var done = 0, failed = [], total = queue.length;
+    // One request per file, one after another - keeps every request small
+    // enough for Hostinger's edge and lets one bad file fail on its own.
+    function next() {
       if (cid !== state.cid) return;
-      lib.images.unshift(img);
-      lib.msg = { text: 'Image uploaded.', err: false };
-      drawLibrary();
-    }).catch(function(err){ btn.disabled = false; setLibMsg('Upload failed: ' + err.message, true); });
+      if (!queue.length) {
+        var parts = [done + ' image' + (done === 1 ? '' : 's') + ' uploaded'];
+        var bad = skipped.concat(failed);
+        if (bad.length) parts.push('not uploaded: ' + bad.join('; '));
+        lib.msg = { text: parts.join('. ') + '.', err: done === 0 && bad.length > 0 };
+        drawLibrary();
+        return;
+      }
+      var file = queue.shift();
+      setLibMsg('Uploading ' + (total - queue.length) + ' of ' + total + ': ' + file.name + '…', false);
+      var fd = new FormData();
+      fd.append('file', file);
+      if (alt) fd.append('altText', alt);
+      api(libBase() + '/images', { method: 'POST', body: fd }).then(function(img){
+        if (cid === state.cid) lib.images.unshift(img);
+        done++;
+      }).catch(function(err){
+        failed.push(file.name + ' (' + err.message + ')');
+      }).then(next);
+    }
+    next();
   }
 
   function libDeleteImage(id) {

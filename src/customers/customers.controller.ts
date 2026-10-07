@@ -13,11 +13,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { OnboardingService } from '../onboarding/onboarding.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers')
 export class CustomersController {
-  constructor(private readonly service: CustomersService) {}
+  constructor(
+    private readonly service: CustomersService,
+    private readonly onboarding: OnboardingService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateCustomerDto) {
@@ -37,6 +41,13 @@ export class CustomersController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.service.update(id, dto);
+  }
+
+  // Admin "Send onboarding email again" - returns the updated customer so
+  // the dashboard can refresh the "Sent <date>" line.
+  @Post(':id/onboarding/resend')
+  resendOnboarding(@Param('id') id: string) {
+    return this.onboarding.resendOnboardingEmail(id);
   }
 
   // Returns a small JSON body rather than void/204 - the dashboard's

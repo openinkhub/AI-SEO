@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
@@ -57,6 +63,31 @@ export class OnboardingService {
     );
     if (sent) customer.onboardingEmailSentAt = new Date();
     await this.customers.save(customer);
+  }
+
+  // Admin action ("Send again"): re-sends the onboarding link so the
+  // customer can finish or update the profile. No field is mandatory, and
+  // the form opens pre-filled with everything already recorded. Unlike the
+  // signup path this does NOT no-op after the first send, and it fails
+  // loudly (the admin is watching) instead of swallowing a mail error.
+  async resendOnboardingEmail(customerId: string): Promise<Customer> {
+    const customer = await this.customers.findOne({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException(`Customer ${customerId} not found`);
+    const to = customer.notificationEmail || customer.contactEmail || customer.accountEmail;
+    if (!to) throw new BadRequestException('This customer has no email address on file.');
+    if (!customer.onboardingToken) customer.onboardingToken = this.generateToken();
+    const base =
+      process.env.ENGINE_PUBLIC_URL?.replace(/\/+$/, '') ||
+      'https://app.openinkhub.cloud';
+    const link = `${base}/onboarding.html?token=${customer.onboardingToken}`;
+    const sent = await this.email.sendOnboardingEmail(to, customer.companyName, link, true);
+    if (!sent) {
+      throw new ServiceUnavailableException(
+        'The email could not be sent. Check the SMTP settings on the server.',
+      );
+    }
+    customer.onboardingEmailSentAt = new Date();
+    return this.customers.save(customer);
   }
 
   async findByToken(token: string): Promise<Customer> {
