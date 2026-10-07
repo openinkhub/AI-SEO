@@ -107,6 +107,13 @@
       html += '<p class="lead" style="color:#059669;">You already submitted this on ' +
         new Date(data.completedAt).toLocaleString() + ' - feel free to review and update below.</p>';
     }
+    html += '<div class="profile-group" id="notifGroup"><h3>Account &amp; notifications</h3><div class="profile-grid">' +
+      '<label class="profile-field"><span>Registered email <small>(your login email)</small></span>' +
+      '<input value="' + escapeHtml(data.accountEmail || '') + '" disabled /></label>' +
+      '<label class="profile-field"><span>Notification email <small>(optional - leave blank to use your registered email)</small></span>' +
+      '<input id="notifEmail" type="email" value="' + escapeHtml(data.notificationEmail || '') + '" placeholder="' + escapeHtml(data.accountEmail || 'name@example.com') + '" /></label>' +
+      '</div><div class="group-save-row"><button type="button" class="secondary" id="notifSaveBtn">Save notification email</button>' +
+      ' <span id="notifMsg" class="msg"></span></div></div>';
     html += '<form id="onbForm">';
     ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group, gi){
       html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
@@ -142,6 +149,7 @@
       });
     });
     document.getElementById('finalSubmitBtn').addEventListener('click', submitComplete);
+    document.getElementById('notifSaveBtn').addEventListener('click', saveNotification);
   }
 
   // Confirmed by direct testing 2026-10-07: Hostinger's edge (hcdn) blocks
@@ -154,6 +162,34 @@
   // OnboardingService.submitProfile() merges into Customer.profile rather
   // than replacing it.
   var ONBOARDING_SAVE_CHUNK_SIZE = 8;
+
+  // Notification email is account-level (not part of the profile blob), so it
+  // is saved on its own with a tiny request. Blank = clear it, which falls
+  // back to the registered email.
+  function saveNotification() {
+    var btn = document.getElementById('notifSaveBtn');
+    var msg = document.getElementById('notifMsg');
+    var value = document.getElementById('notifEmail').value.trim();
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      msg.textContent = 'Please enter a valid email address.';
+      msg.className = 'msg err';
+      return;
+    }
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    msg.className = 'msg';
+    api('/' + encodeURIComponent(token), { method: 'POST', body: { notificationEmail: value } })
+      .then(function () {
+        msg.textContent = value ? 'Saved.' : 'Saved - notifications will use your registered email.';
+        msg.className = 'msg ok';
+        btn.disabled = false;
+      })
+      .catch(function (err) {
+        msg.textContent = 'Could not save: ' + err.message;
+        msg.className = 'msg err';
+        btn.disabled = false;
+      });
+  }
 
   function submitGroup(groupIndex) {
     var groupEl = document.querySelector('#onbForm .profile-group[data-group-index="' + groupIndex + '"]');

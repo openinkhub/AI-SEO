@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { OnboardingService } from './onboarding.service';
 import { SubmitOnboardingDto } from './dto/submit-onboarding.dto';
+import { Customer } from '../customers/customer.entity';
 
 // Deliberately NOT JWT-guarded - this is the public, customer-facing
 // onboarding form (decided 2026-10-06: "onboarding form will be sent
@@ -15,20 +16,22 @@ export class OnboardingController {
   @Get(':token')
   async get(@Param('token') token: string) {
     const customer = await this.onboarding.findByToken(token);
-    return {
-      companyName: customer.companyName,
-      profile: customer.profile ?? {},
-      completedAt: customer.onboardingCompletedAt,
-    };
+    return this.view(customer);
   }
 
   @Post(':token')
   async submit(@Param('token') token: string, @Body() dto: SubmitOnboardingDto) {
     const customer = await this.onboarding.submitProfile(token, dto);
+    return this.view(customer);
+  }
+
+  private view(customer: Customer) {
     return {
       companyName: customer.companyName,
       profile: customer.profile ?? {},
       completedAt: customer.onboardingCompletedAt,
+      accountEmail: customer.accountEmail ?? customer.contactEmail ?? '',
+      notificationEmail: customer.notificationEmail ?? '',
     };
   }
 }

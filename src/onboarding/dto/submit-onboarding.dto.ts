@@ -1,4 +1,4 @@
-import { IsBoolean, IsObject, IsOptional } from 'class-validator';
+import { IsBoolean, IsEmail, IsObject, IsOptional, ValidateIf } from 'class-validator';
 
 // Deliberately a single schemaless object, matching Customer.profile -
 // the public onboarding form posts back exactly what it rendered, keyed
@@ -23,4 +23,11 @@ export class SubmitOnboardingDto {
   @IsOptional()
   @IsBoolean()
   complete?: boolean;
+
+  // Notification email, editable by the customer on the onboarding form.
+  // Empty string = clear it (fall back to the account email).
+  @IsOptional()
+  @ValidateIf((o) => o.notificationEmail !== '')
+  @IsEmail()
+  notificationEmail?: string;
 }

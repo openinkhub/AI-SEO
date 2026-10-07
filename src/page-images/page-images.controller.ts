@@ -68,6 +68,11 @@ export class PageImagesController {
   }
 
   // Images
+  @Get('storage')
+  storage() {
+    return this.service.storageBackend();
+  }
+
   @Get('images')
   listImages(@Param('customerId') customerId: string) {
     return this.service.listImages(customerId);

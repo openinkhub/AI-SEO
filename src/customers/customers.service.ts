@@ -53,6 +53,9 @@ export class CustomersService {
     const customer = await this.findOne(id);
     const { profile, ...rest } = dto;
     Object.assign(customer, rest);
+    if (rest.notificationEmail !== undefined) {
+      customer.notificationEmail = rest.notificationEmail.trim() || null;
+    }
     if (profile) {
       customer.profile = {
         ...(customer.profile ?? {}),

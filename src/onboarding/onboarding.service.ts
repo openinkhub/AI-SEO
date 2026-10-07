@@ -101,6 +101,9 @@ export class OnboardingService {
         customer.website = domain.trim();
       }
     }
+    if (dto.notificationEmail !== undefined) {
+      customer.notificationEmail = dto.notificationEmail.trim() || null;
+    }
     if (dto.complete) {
       customer.onboardingCompletedAt = new Date();
       if (customer.status === CustomerStatus.ONBOARDING) {

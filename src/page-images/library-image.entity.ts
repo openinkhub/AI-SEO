@@ -24,6 +24,10 @@ export class LibraryImage {
   @Column()
   url: string;
 
+  // Object key in Cloudflare R2 (null for a legacy local-disk image).
+  @Column({ type: 'varchar', nullable: true })
+  storageKey: string | null;
+
   @Column({ nullable: true })
   altText: string | null;
 

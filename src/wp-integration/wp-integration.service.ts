@@ -17,6 +17,10 @@ interface WpExportedCustomer {
   email: string;
   displayName: string;
   registeredAt: string;
+  // Optional - only sent by newer plugin builds; the Engine copes without.
+  userLogin?: string;
+  notificationEmail?: string;
+  actDate?: string;
   onboardingStatus: string;
   profile: Record<string, unknown>;
 }
@@ -72,8 +76,18 @@ export class WpIntegrationService {
     customer.contactPhone = dto.contactPhone ?? customer.contactPhone ?? null;
     customer.address = dto.address ?? customer.address ?? null;
     customer.competitors = dto.competitors ?? customer.competitors ?? null;
+    // Layer 1 account basics for a brand-new signup: WP creates the account
+    // moments before this call, so "now" (UTC, WP's own storage format) is
+    // the registration time; a later "Sync WP Customer Profiles" overwrites
+    // it with WP's exact user_registered.
+    if (!customer.registeredAt) {
+      customer.registeredAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+    customer.accountEmail = customer.accountEmail ?? dto.contactEmail ?? null;
+    customer.userName = customer.userName ?? dto.contactName ?? dto.companyName ?? null;
 
     const saved = await this.customers.save(customer);
+    await this.projects.ensureMonths(saved.id);
     this.logger.log(
       `${isNew ? 'Created' : 'Synced'} customer from WP user ${dto.wpUserId} -> ${saved.id}`,
     );
@@ -219,6 +233,14 @@ export class WpIntegrationService {
         string | string[] | boolean
       >;
       customer.profile = { ...(customer.profile ?? {}), ...profile };
+      // Layer 1 "ACT Account Registration" basics, straight from the WP account.
+      customer.accountEmail = wp.email || customer.accountEmail || null;
+      customer.userName = wp.userLogin || wp.displayName || customer.userName || null;
+      if (wp.registeredAt) customer.registeredAt = String(wp.registeredAt).slice(0, 19);
+      if (wp.actDate) customer.actDate = String(wp.actDate).slice(0, 19);
+      if (wp.notificationEmail && !customer.notificationEmail) {
+        customer.notificationEmail = wp.notificationEmail;
+      }
       customer.companyName =
         (profile.brand_name as string) ||
         customer.companyName ||

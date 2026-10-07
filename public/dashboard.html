@@ -99,6 +99,14 @@
   .img-card .nm{word-break:break-word;margin-bottom:6px;}
   .thumb{width:44px;height:32px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:8px;background:#eee;}
   .warn{background:var(--pending-bg);color:var(--pending);border-radius:8px;padding:8px 12px;font-size:12.5px;margin:8px 0;}
+  .l1-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 28px;margin-top:6px;}
+  @media (max-width:900px){ .l1-grid{grid-template-columns:1fr;} }
+  .l1-field > span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+  .l1-field b{font-size:16px;word-break:break-word;}
+  .chip{font-style:normal;font-size:11px;font-weight:700;background:var(--ok-bg);color:var(--ok);padding:3px 9px;border-radius:999px;margin-left:8px;white-space:nowrap;display:inline-block;}
+  .progress-chip{font-size:12px;font-weight:600;background:#F1F3FA;border-radius:999px;padding:5px 12px;white-space:nowrap;}
+  .notif-edit{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+  .notif-edit input{max-width:260px;}
   .empty{padding:40px 10px; text-align:center;}
   .danger-zone{border-color:#ecd0d0;}
 </style>
@@ -221,9 +229,9 @@
       layers: [61, 62, 63, 64, 65, 66, 67, 68].concat(rng(163, 192)) }
   ];
   var LAYER_TITLES = {
-    1: 'User Login & Month Context',
+    1: 'ACT Account Registration',
     2: 'Onboarding & Profile Ownership',
-    3: 'Business / Profile Resolution'
+    3: 'Business Resolution Mapping'
   };
 
   function fmtLayers(arr) {
@@ -273,16 +281,29 @@
       state.months = (Array.isArray(data) ? data : (data.items || [])).slice()
         .sort(function(a, b){ return (a.monthIndex || 0) - (b.monthIndex || 0); });
       var ids = state.months.map(function(m){ return m.id; });
-      if (ids.indexOf(state.mid) === -1) {
-        // default to the latest month that is not in the future, else last
-        state.mid = ids.length ? ids[ids.length - 1] : null;
-      }
+      if (ids.indexOf(state.mid) === -1) state.mid = pickDefaultMonth(state.months);
       renderMonthSelect();
       renderPage();
     }).catch(function(err){
       state.months = []; state.mid = null; renderMonthSelect();
       document.getElementById('page').innerHTML = '<p class="muted">Failed to load months: ' + escapeHtml(err.message) + '</p>';
     });
+  }
+
+  // The month whose cycle contains today; else the latest one already started;
+  // else the first.
+  function pickDefaultMonth(months) {
+    if (!months.length) return null;
+    var d = new Date();
+    var pad = function(n){ return (n < 10 ? '0' : '') + n; };
+    var today = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    var cur = null, started = null;
+    months.forEach(function(m){
+      if (!m.monthStartDate || !m.monthEndDate) return;
+      if (m.monthStartDate <= today) started = m;
+      if (m.monthStartDate <= today && today <= m.monthEndDate) cur = m;
+    });
+    return (cur || started || months[0]).id;
   }
 
   // ---- sidebar ------------------------------------------------------
@@ -378,6 +399,8 @@
     }
     var r = parseRoute();
     if (r.sec.key === 'profile') return renderProfilePage(cust);
+    var cm = currentMonth();
+    if (cm && cm.monthIndex === 0) return renderM0Empty(cust, r);
     if (r.sec.key === 'technical' && r.sub && r.sub[0] === 'brand-audit') return renderBrandAuditPage(cust);
     return renderPlaceholderPage(cust, r.sec, r.sub);
   }
@@ -395,6 +418,17 @@
     var m = currentMonth();
     return escapeHtml(cust.companyName || '') + (cust.website ? ' · ' + escapeHtml(cust.website) : '') +
       (m ? ' · ' + escapeHtml(m.monthCode || '') : '');
+  }
+
+  // M0 data already lives on the customer panel; the admin panel deliberately
+  // shows nothing for it (decided 2026-10-07). Profile (Layers 1-3) is
+  // customer-level and stays visible.
+  function renderM0Empty(cust, r) {
+    var title = r.sub ? r.sub[1] : r.sec.label;
+    var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
+    html += '<div class="card placeholder"><h2>No data for M0</h2>' +
+      '<p class="muted">M0 data is shown on the customer panel only. Pick another month to see data here.</p></div>';
+    document.getElementById('page').innerHTML = html;
   }
 
   // ---- placeholder pages -------------------------------------------
@@ -443,57 +477,71 @@
     });
   }
 
-  // Layer 1 - User Login & Month Context
+  // Layer 1 - ACT Account Registration (mirrors WP's Layer 1 card: User ID,
+  // User Name, Registered Email, Notification Email, Registration Date,
+  // Month Context). Months are no longer managed here: they follow the
+  // registration-date rule automatically (M0 = registration date + 1 day,
+  // then 30-day cycles, M0..M12) - see ProjectsService.ensureMonths().
+  function monthContextText() {
+    var m = currentMonth();
+    if (!m) return '';
+    return (m.monthCode || '') + (m.monthStartDate ? ' · ' + fmtDay(m.monthStartDate) + ' to ' + fmtDay(m.monthEndDate) : '');
+  }
+
+  function l1Field(label, value, chip, extra) {
+    return '<div class="l1-field"><span>' + escapeHtml(label) + '</span><div><b>' +
+      (value ? escapeHtml(value) : '<span class="muted" style="font-weight:400;">—</span>') + '</b>' +
+      (chip ? '<em class="chip">' + escapeHtml(chip) + '</em>' : '') + '</div>' + (extra || '') + '</div>';
+  }
+
   function renderLayer1(cust) {
-    var link = onboardingLink(cust);
-    var hasM0 = state.months.some(function(m){ return m.monthIndex === 0; });
-    var hasM1 = state.months.some(function(m){ return m.monthIndex === 1; });
-    var hasM2 = state.months.some(function(m){ return m.monthIndex === 2; });
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
-      '<p class="lead">Who the customer is, how they log in, and which Months exist for them.</p>';
-    h += '<dl class="kv">' +
-      '<dt>Company</dt><dd>' + escapeHtml(cust.companyName || '—') + '</dd>' +
-      '<dt>Website</dt><dd>' + escapeHtml(cust.website || '—') + '</dd>' +
-      '<dt>Login / contact email</dt><dd>' + escapeHtml(cust.contactEmail || '—') + '</dd>' +
-      '<dt>Status</dt><dd>' + statusBadge(cust.status) + '</dd>' +
-      (cust.source ? '<dt>Source</dt><dd>' + escapeHtml(cust.source) + '</dd>' : '') +
-      '<dt>Customer ID</dt><dd><code>' + escapeHtml(cust.id) + '</code></dd>' +
-      '</dl>';
-    h += '<h3 style="font-size:14px;margin:18px 0 8px;">Months</h3>';
-    h += '<div class="actions" style="margin-top:0">';
-    if (!hasM0 || !hasM1) {
-      h += '<button class="primary" id="ensureM0M1Btn">Ensure M0 &amp; M1 exist</button>' +
-        '<span class="muted">Profile/onboarding months only — Layer 4+ data for these stays on WP for now.</span>';
-    } else if (!hasM2) {
-      h += '<button class="primary" id="startM2Btn">Start M2 (first month worked here)</button>';
-    } else {
-      h += '<span class="muted">M0, M1 and M2 all exist.</span>';
-    }
-    h += '</div>';
-    h += '<div style="overflow:auto"><table><thead><tr><th>Month</th><th>Status</th><th>Source</th><th>Start</th><th>End</th></tr></thead><tbody>';
-    if (!state.months.length) h += '<tr><td colspan="5" class="muted">No months yet.</td></tr>';
-    state.months.forEach(function(m){
-      h += '<tr><td>' + escapeHtml(m.monthCode) + '</td><td>' + statusBadge(m.status) + '</td>' +
-        '<td>' + escapeHtml(m.source) + '</td><td>' + escapeHtml(m.monthStartDate || '—') + '</td><td>' + escapeHtml(m.monthEndDate || '—') + '</td></tr>';
-    });
-    h += '</tbody></table></div></section>';
+    var reg = cust.actDate || cust.registeredAt || '';
+    var accountEmail = cust.accountEmail || cust.contactEmail || '';
+    var notif = cust.notificationEmail || '';
+    var effective = notif || accountEmail;
+    var userName = cust.userName || cust.companyName || '';
+    var ctx = monthContextText();
+    var filled = [cust.wpUserId, userName, accountEmail, effective, reg, ctx].filter(Boolean).length;
+    var pct = Math.round(filled / 6 * 100);
+    var h = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
+      '<span class="progress-chip">' + (pct === 100 ? 'Complete · 100%' : 'In Progress · ' + pct + '%') + '</span></div>';
+    h += '<div class="l1-grid">' +
+      l1Field('User ID', cust.wpUserId || '', 'Permanent User Reference') +
+      l1Field('User Name', userName, 'Login Identity') +
+      l1Field('Registered Email', accountEmail, 'Account Email') +
+      l1Field('Notification Email', effective, notif ? 'Custom Notification Email' : 'Registered Email Fallback',
+        '<div class="notif-edit"><input id="notifEmailInput" type="email" placeholder="' + escapeHtml(accountEmail || 'notification email') + '" value="' + escapeHtml(notif) + '">' +
+        '<button type="button" class="primary" id="notifSaveBtn">Save</button>' +
+        '<button type="button" id="notifResetBtn"' + (notif ? '' : ' disabled') + '>Use registered email</button>' +
+        '<span id="notifMsg" class="muted" style="font-size:12px;"></span></div>') +
+      l1Field('Registration Date', reg, reg ? 'ACT' : '',
+        reg ? '' : '<div class="muted" style="font-size:12px;margin-top:4px;">Not synced yet — use “Sync WP Customer Profiles” in the sidebar.</div>') +
+      l1Field('Month Context', ctx, '') +
+      '</div></section>';
     document.getElementById('layer1').innerHTML = h;
-    var ensureBtn = document.getElementById('ensureM0M1Btn');
-    if (ensureBtn) ensureBtn.addEventListener('click', function(){
-      ensureBtn.disabled = true;
-      api('/customers/' + state.cid + '/projects/ensure-m0-m1', { method: 'POST', body: {} })
-        .then(function(){ return loadMonths(); })
-        .catch(function(err){ alert('Could not create M0/M1: ' + err.message); ensureBtn.disabled = false; });
-    });
-    var startM2Btn = document.getElementById('startM2Btn');
-    if (startM2Btn) startM2Btn.addEventListener('click', function(){
-      startM2Btn.disabled = true;
-      var today = new Date().toISOString().slice(0, 10);
-      api('/customers/' + state.cid + '/projects', { method: 'POST',
-          body: { monthIndex: 2, monthCode: 'M2', status: 'active', source: 'manual', monthStartDate: today } })
-        .then(function(){ return loadMonths(); })
-        .catch(function(err){ alert('Could not start M2: ' + err.message); startM2Btn.disabled = false; });
-    });
+
+    function saveNotif(value) {
+      var cid = state.cid;
+      var msg = document.getElementById('notifMsg');
+      value = (value || '').trim();
+      if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { msg.textContent = 'Enter a valid email address.'; msg.style.color = 'var(--fail)'; return; }
+      document.getElementById('notifSaveBtn').disabled = true;
+      msg.textContent = 'Saving…'; msg.style.color = '';
+      api('/customers/' + cid, { method: 'PATCH', body: { notificationEmail: value } }).then(function(updated){
+        var idx = state.customers.findIndex(function(c){ return c.id === cid; });
+        if (idx !== -1) state.customers[idx] = updated;
+        if (cid !== state.cid) return;
+        renderLayer1(updated);
+        var m2 = document.getElementById('notifMsg');
+        if (m2) { m2.textContent = 'Saved.'; m2.style.color = 'var(--ok)'; }
+      }).catch(function(err){
+        var m3 = document.getElementById('notifMsg');
+        if (m3) { m3.textContent = 'Failed: ' + err.message; m3.style.color = 'var(--fail)'; }
+        var b = document.getElementById('notifSaveBtn'); if (b) b.disabled = false;
+      });
+    }
+    document.getElementById('notifSaveBtn').addEventListener('click', function(){ saveNotif(document.getElementById('notifEmailInput').value); });
+    document.getElementById('notifResetBtn').addEventListener('click', function(){ saveNotif(''); });
   }
 
   // Layer 2 - Onboarding & Profile Ownership
@@ -646,7 +694,7 @@
   // ---- Layer 3: Website Pages & Image Mapping (Page Image Library) ----
   // Engine equivalent of WP's Page Image Library: 1) website page URLs,
   // 2) branded images (max 30 per customer), 3) page -> image mapping.
-  var lib = { pages: [], images: [], msg: null };
+  var lib = { pages: [], images: [], msg: null, storage: '' };
   var MAX_IMAGES = 30;
   var MAX_IMAGE_BYTES = 8 * 1024 * 1024;
   var IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -673,8 +721,9 @@
     var cid = state.cid;
     box.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2><p class="muted">Loading…</p></section>';
     lib.msg = null;
-    Promise.all([api(libBase() + '/pages'), api(libBase() + '/images')]).then(function(r){
+    Promise.all([api(libBase() + '/pages'), api(libBase() + '/images'), api(libBase() + '/storage').catch(function(){ return { backend: '' }; })]).then(function(r){
       if (cid !== state.cid) return;
+      lib.storage = (r[2] && r[2].backend) || '';
       lib.pages = Array.isArray(r[0]) ? r[0] : [];
       lib.images = Array.isArray(r[1]) ? r[1] : [];
       drawLibrary();
@@ -706,9 +755,9 @@
     h += '<h3 class="sub-h">2. Branded images <span class="muted" style="font-weight:400;">(' + lib.images.length + ' of ' + MAX_IMAGES + ')</span></h3>' +
       '<div class="actions" style="margin:6px 0"><input type="file" id="newImageFile" accept="image/jpeg,image/png,image/webp,image/gif" style="max-width:300px">' +
       '<input id="newImageAlt" placeholder="Alt text (optional)" style="max-width:220px">' +
-      '<button type="button" class="primary" data-act="upload"' + (lib.images.length >= MAX_IMAGES ? ' disabled' : '') + '>Upload image</button></div>' +
+      '<button type="button" class="primary" data-act="upload"' + (lib.images.length >= MAX_IMAGES || lib.storage === 'unconfigured' ? ' disabled' : '') + '>Upload image</button></div>' +
       '<div class="muted" style="font-size:12px;">JPEG, PNG, WebP or GIF, up to 8 MB each.</div>' +
-      '<div class="warn">Interim storage: uploaded files sit on the server disk and are lost on the next deploy until image storage moves to Cloudflare R2. Re-upload if an image goes missing.</div>';
+      storageNoticeHtml();
     if (!lib.images.length) h += '<p class="muted">No images uploaded yet.</p>';
     else {
       h += '<div class="img-grid">' + lib.images.map(function(img){
@@ -759,6 +808,22 @@
       else if (act === 'alias') libEditPage(t.getAttribute('data-id'), { aliasName: t.value }, 'Alias saved.');
       else if (act === 'h1') libEditPage(t.getAttribute('data-id'), { h1Keyword: t.value }, 'H1 keyword saved.');
     };
+  }
+
+  // Upload rule: images go to Cloudflare R2 only. Until R2 is configured on
+  // the server, uploads are refused (never written to the wiped local disk).
+  function storageNoticeHtml() {
+    if (lib.storage === 'unconfigured') {
+      return '<div class="warn">Image uploads are blocked until Cloudflare R2 is configured on the server ' +
+        '(R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_URL). Existing images are unaffected.</div>';
+    }
+    if (lib.storage === 'local') {
+      return '<div class="warn">Development mode: images are stored on the local disk, not in R2.</div>';
+    }
+    if (lib.storage === 'r2') {
+      return '<div class="muted" style="font-size:12px;margin:6px 0;">Images are stored in Cloudflare R2.</div>';
+    }
+    return '';
   }
 
   function libFetchPages(btn) {

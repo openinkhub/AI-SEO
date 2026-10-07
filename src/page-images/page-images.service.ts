@@ -5,8 +5,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as fs from 'fs';
-import * as path from 'path';
 import { WebsitePage } from './website-page.entity';
 import { LibraryImage } from './library-image.entity';
 import { CustomersService } from '../customers/customers.service';
@@ -14,14 +12,12 @@ import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 import { normalizeUrl, guessPageName, aliasFromUrl } from './url-utils';
 import { liveSiteScan, fetchH1Many } from './site-scanner';
+import { StorageService } from './storage.service';
 
 const MAX_DISTINCT_IMAGES = 30;
 // Keeps one request under the host's proxy timeout; remaining pages can be
 // finished with extractH1ForCustomer().
 const H1_BUDGET_MS = 20000;
-const UPLOAD_DIR =
-  process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads', 'page-images');
-
 @Injectable()
 export class PageImagesService {
   constructor(
@@ -30,6 +26,7 @@ export class PageImagesService {
     @InjectRepository(LibraryImage)
     private readonly images: Repository<LibraryImage>,
     private readonly customers: CustomersService,
+    private readonly storage: StorageService,
   ) {}
 
   // ---- Pages ----
@@ -187,6 +184,10 @@ export class PageImagesService {
 
   // ---- Images ----
 
+  storageBackend(): { backend: string } {
+    return { backend: this.storage.backend() };
+  }
+
   async listImages(customerId: string): Promise<LibraryImage[]> {
     await this.customers.findOne(customerId);
     return this.images.find({ where: { customerId }, order: { createdAt: 'DESC' } });
@@ -205,16 +206,17 @@ export class PageImagesService {
       );
     }
 
-    const dir = path.join(UPLOAD_DIR, customerId);
-    fs.mkdirSync(dir, { recursive: true });
-    const safeName = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-    const fullPath = path.join(dir, safeName);
-    fs.writeFileSync(fullPath, file.buffer);
-
+    const stored = await this.storage.put(
+      customerId,
+      file.originalname,
+      file.buffer,
+      file.mimetype,
+    );
     const image = this.images.create({
       customerId,
-      filename: safeName,
-      url: `/uploads/page-images/${customerId}/${safeName}`,
+      filename: stored.filename,
+      url: stored.url,
+      storageKey: stored.storageKey,
       altText: altText || null,
     });
     return this.images.save(image);
@@ -227,12 +229,7 @@ export class PageImagesService {
     // Un-map (never delete) any page that referenced this image.
     await this.pages.update({ customerId, libraryImageId: imageId }, { libraryImageId: null });
 
-    const fullPath = path.join(UPLOAD_DIR, customerId, image.filename);
-    try {
-      fs.unlinkSync(fullPath);
-    } catch {
-      // File already gone (e.g. wiped by a Hostinger redeploy) — not fatal.
-    }
+    await this.storage.remove(customerId, image.filename, image.storageKey);
     await this.images.remove(image);
   }
 

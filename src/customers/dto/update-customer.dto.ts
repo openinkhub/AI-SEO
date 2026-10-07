@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { CustomerStatus } from '../customer.entity';
 
@@ -40,6 +41,13 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   contactPhone?: string;
+
+  // Where notifications go. Empty string = clear it (fall back to the
+  // account email).
+  @IsOptional()
+  @ValidateIf((o) => o.notificationEmail !== '')
+  @IsEmail()
+  notificationEmail?: string;
 
   @IsOptional()
   @IsString()

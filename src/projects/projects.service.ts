@@ -4,12 +4,16 @@ import { Repository } from 'typeorm';
 import { Project, ProjectStatus } from './project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { Customer } from '../customers/customer.entity';
+import { MONTH_COUNT, cycleDates, statusForCycle, todayInTz } from './month-cycle';
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly repo: Repository<Project>,
+    @InjectRepository(Customer)
+    private readonly customerRepo: Repository<Customer>,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -58,30 +62,52 @@ export class ProjectsService {
     if (projects.length) await this.repo.remove(projects);
   }
 
-  // Decided 2026-10-06: "M0 & M1 should be present, with no data" — creates
-  // the two Month shells for a WP-migrated customer if they don't already
-  // exist. Idempotent (checked by the customerId+monthIndex unique index),
-  // so it's safe to call again. No profile/task data is attached here —
-  // that's a separate step (PATCH .../profile) — this just ensures the
-  // Month rows exist so M2 has somewhere to follow from.
+  // Month Cycle rule (decided 2026-10-07: "Month cycle to be started as per
+  // registration date rule"): creates M0..M12 for the customer if missing and
+  // (re)applies WP's date rule to every one of them - see month-cycle.ts.
+  // Idempotent and cheap: only rows that are new or whose dates/status
+  // changed are written, so it is safe to call on every profile save.
+  // M0/M1 stay empty shells (their Layer data lives on WP); the status of
+  // each month follows today's date (completed / active / pending).
   async ensureMonths(customerId: string): Promise<Project[]> {
+    const customer = await this.customerRepo.findOne({ where: { id: customerId } });
+    const fallback = customer?.createdAt
+      ? customer.createdAt.toISOString().slice(0, 19).replace('T', ' ')
+      : null;
+    const base = customer?.actDate || customer?.registeredAt || fallback;
     const existing = await this.findAllForCustomer(customerId);
-    const have = new Set(existing.map((p) => p.monthIndex));
-    const shells: Array<[number, string]> = [
-      [0, 'M0'],
-      [1, 'M1'],
-    ];
-    for (const [monthIndex, monthCode] of shells) {
-      if (have.has(monthIndex)) continue;
-      const project = this.repo.create({
-        customerId,
-        monthIndex,
-        monthCode,
-        status: ProjectStatus.COMPLETED,
-        source: 'wp_sync',
-      });
-      await this.repo.save(project);
+    const byIndex = new Map(existing.map((p) => [p.monthIndex, p]));
+    const today = todayInTz();
+    const toSave: Project[] = [];
+    for (let i = 0; i < MONTH_COUNT; i++) {
+      const dates = base ? cycleDates(base, i) : null;
+      const found = byIndex.get(i);
+      const p =
+        found ??
+        this.repo.create({
+          customerId,
+          monthIndex: i,
+          monthCode: `M${i}`,
+          source: i <= 1 ? 'wp_sync' : 'act_rule',
+          status: i <= 1 ? ProjectStatus.COMPLETED : ProjectStatus.PENDING,
+        });
+      let changed = !found;
+      if (dates) {
+        const status = statusForCycle(dates.start, dates.end, today);
+        if (
+          p.monthStartDate !== dates.start ||
+          p.monthEndDate !== dates.end ||
+          p.status !== status
+        ) {
+          p.monthStartDate = dates.start;
+          p.monthEndDate = dates.end;
+          p.status = status;
+          changed = true;
+        }
+      }
+      if (changed) toSave.push(p);
     }
+    if (toSave.length) await this.repo.save(toSave);
     return this.findAllForCustomer(customerId);
   }
 }

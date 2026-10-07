@@ -50,6 +50,30 @@ export class Customer {
   @Column({ nullable: true })
   contactEmail: string | null;
 
+  // ---- Layer 1 "ACT Account Registration" (mirrors the WP account) ----
+  // WP user_email: the account / login email ("Registered Email").
+  @Column({ nullable: true })
+  accountEmail: string | null;
+
+  // WP display/login name ("User Name - Login Identity").
+  @Column({ nullable: true })
+  userName: string | null;
+
+  // WP user_registered, kept as the raw 'YYYY-MM-DD HH:mm:ss' string WP
+  // stores (the Month Cycle rule uses only its date part, no timezone shift).
+  @Column({ type: 'varchar', length: 19, nullable: true })
+  registeredAt: string | null;
+
+  // Admin-only "ACT authoritative date" override; null = use registeredAt.
+  @Column({ type: 'varchar', length: 19, nullable: true })
+  actDate: string | null;
+
+  // Where notifications go. Null = fall back to accountEmail (WP behaviour:
+  // "Registered Email Fallback"). Editable by Admin and by the customer in
+  // the onboarding form.
+  @Column({ nullable: true })
+  notificationEmail: string | null;
+
   @Column({ nullable: true })
   contactPhone: string | null;
 
