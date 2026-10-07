@@ -16,5 +16,6 @@ import { CustomersModule } from '../customers/customers.module';
   ],
   providers: [PageImagesService, StorageService],
   controllers: [PageImagesController],
+  exports: [StorageService],
 })
 export class PageImagesModule {}

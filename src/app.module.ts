@@ -11,6 +11,7 @@ import { AuditsModule } from './audits/audits.module';
 import { WpIntegrationModule } from './wp-integration/wp-integration.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { EmailModule } from './email/email.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EmailModule } from './email/email.module';
     CustomersModule,
     ProjectsModule,
     PageImagesModule,
+    BillingModule,
     AuditsModule,
     EmailModule,
     OnboardingModule,

@@ -135,6 +135,23 @@
       html += '</div><div class="group-save-row"><button type="button" class="secondary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
         ' <span id="saveMsg_' + gi + '" class="msg"></span></div></div>';
     });
+    // Billing details: its own card + Save button (saved independently, like the sections above).
+    lastProfile = profile;
+    billingCtx = {
+      companyName: data.companyName || '',
+      getAddress: function () {
+        var p = {};
+        ['address_line_1', 'address_line_2', 'town', 'state', 'pincode'].forEach(function (k) {
+          var el = document.querySelector('#onbForm [data-key="' + k + '"]');
+          p[k] = el ? el.value : lastProfile[k];
+        });
+        return ProfileFields.composeAddress(p);
+      }
+    };
+    html += '<div class="profile-group" id="billingGroup"><h3>Billing details</h3>' +
+      ProfileFields.billingFormHtml(profile, data.companyName) +
+      '<div class="group-save-row"><button type="button" class="secondary" id="billSaveBtn">Save billing details</button>' +
+      ' <span id="billMsg" class="msg"></span></div></div>';
     html += '<div class="final-submit"><button type="button" id="finalSubmitBtn" class="primary">' +
       (data.completedAt ? 'Mark profile complete again' : 'Submit profile') + '</button>' +
       '<span id="finalSubmitMsg" class="msg"></span>' +
@@ -150,6 +167,8 @@
     });
     document.getElementById('finalSubmitBtn').addEventListener('click', submitComplete);
     document.getElementById('notifSaveBtn').addEventListener('click', saveNotification);
+    ProfileFields.wireBilling(document.getElementById('billingGroup'), billingCtx);
+    document.getElementById('billSaveBtn').addEventListener('click', saveBilling);
   }
 
   // Confirmed by direct testing 2026-10-07: Hostinger's edge (hcdn) blocks
@@ -162,6 +181,36 @@
   // OnboardingService.submitProfile() merges into Customer.profile rather
   // than replacing it.
   var ONBOARDING_SAVE_CHUNK_SIZE = 8;
+
+  var lastProfile = {};
+  var billingCtx = null;
+
+  // Billing details save like the other sections: one small request,
+  // nothing mandatory, filled values are format-checked first.
+  function saveBilling() {
+    var btn = document.getElementById('billSaveBtn');
+    var msg = document.getElementById('billMsg');
+    var r = ProfileFields.collectBilling(document.getElementById('billingGroup'), billingCtx);
+    if (r.error) { msg.textContent = r.error; msg.className = 'msg err'; return; }
+    var chunks = ProfileFields.chunkProfile(r.values, ONBOARDING_SAVE_CHUNK_SIZE);
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    msg.className = 'msg';
+    function next(i) {
+      if (i >= chunks.length) return Promise.resolve();
+      return api('/' + encodeURIComponent(token), { method: 'POST', body: { profile: chunks[i] } }).then(function () { return next(i + 1); });
+    }
+    next(0).then(function () {
+      Object.keys(r.values).forEach(function (k) { lastProfile[k] = r.values[k]; });
+      msg.textContent = 'Saved.';
+      msg.className = 'msg ok';
+      btn.disabled = false;
+    }).catch(function (err) {
+      msg.textContent = 'Could not save: ' + err.message;
+      msg.className = 'msg err';
+      btn.disabled = false;
+    });
+  }
 
   // Notification email is account-level (not part of the profile blob), so it
   // is saved on its own with a tiny request. Blank = clear it, which falls

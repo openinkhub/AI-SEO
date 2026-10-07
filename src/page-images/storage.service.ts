@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -22,6 +23,11 @@ export type StorageBackend = 'r2' | 'local' | 'unconfigured';
 
 const LOCAL_DIR =
   process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads', 'page-images');
+
+// Local-disk (dev only) folder for a given logical folder.
+function localBase(folder: string): string {
+  return folder === 'page-images' ? LOCAL_DIR : path.join(path.dirname(LOCAL_DIR), folder);
+}
 
 @Injectable()
 export class StorageService {
@@ -66,11 +72,15 @@ export class StorageService {
     originalName: string,
     buffer: Buffer,
     contentType: string,
+    folder = 'page-images',
   ): Promise<{ url: string; storageKey: string | null; filename: string }> {
     const backend = this.backend();
-    const filename = `${Date.now()}-${originalName.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+    // Non-image folders (invoices) sit in a public bucket, so their names carry
+    // a random token and cannot be guessed from the customer id and date.
+    const token = folder === 'page-images' ? '' : `${randomBytes(8).toString('hex')}-`;
+    const filename = `${Date.now()}-${token}${originalName.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
     if (backend === 'r2') {
-      const key = `page-images/${customerId}/${filename}`;
+      const key = `${folder}/${customerId}/${filename}`;
       await this.getClient().send(
         new PutObjectCommand({
           Bucket: process.env.R2_BUCKET,
@@ -84,25 +94,30 @@ export class StorageService {
       return { url: `${base}/${key}`, storageKey: key, filename };
     }
     if (backend === 'local') {
-      const dir = path.join(LOCAL_DIR, customerId);
+      const dir = path.join(localBase(folder), customerId);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, filename), buffer);
-      return { url: `/uploads/page-images/${customerId}/${filename}`, storageKey: null, filename };
+      return { url: `/uploads/${folder}/${customerId}/${filename}`, storageKey: null, filename };
     }
     throw new BadRequestException(
-      'Image storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, ' +
-        'R2_BUCKET and R2_PUBLIC_URL (Cloudflare R2) in the server environment before uploading images.',
+      'File storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, ' +
+        'R2_BUCKET and R2_PUBLIC_URL (Cloudflare R2) in the server environment before uploading files.',
     );
   }
 
-  async remove(customerId: string, filename: string, storageKey: string | null): Promise<void> {
+  async remove(
+    customerId: string,
+    filename: string,
+    storageKey: string | null,
+    folder = 'page-images',
+  ): Promise<void> {
     try {
       if (storageKey && this.r2Configured()) {
         await this.getClient().send(
           new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: storageKey }),
         );
       } else if (!storageKey) {
-        fs.unlinkSync(path.join(LOCAL_DIR, customerId, filename));
+        fs.unlinkSync(path.join(localBase(folder), customerId, filename));
       }
     } catch (err) {
       // Already gone (or a legacy local file wiped by a redeploy) - not fatal.

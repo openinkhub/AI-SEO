@@ -499,12 +499,173 @@
     renderLayer3Library();
   }
 
-  // Profile > Billing = Layer 3 placeholder until its fields are defined
+  // Profile > Billing = Layer 3: the customer's billing details (filled on the
+  // onboarding form, editable here) and the monthly bills the admin uploads.
+  var bill = { items: [], msg: null };
+
   function renderProfileBilling(cust) {
     var html = pageHead('Profile · Billing', 'Layer 3 · ' + contextLine(cust));
-    html += '<section class="card placeholder"><h2><span class="layer-tag">Layer 3</span>Billing</h2>' +
-      '<p class="muted">Nothing here yet. Billing details will appear on this page once the fields are defined.</p></section>';
+    html += '<section class="card" id="billDetails"></section><section class="card" id="billInvoices"></section>';
     document.getElementById('page').innerHTML = html;
+    renderBillingDetails(cust);
+    bill.items = []; bill.msg = null;
+    drawInvoices(true);
+    loadInvoices();
+  }
+
+  function renderBillingDetails(cust) {
+    var box = document.getElementById('billDetails');
+    if (!box) return;
+    var profile = cust.profile || {};
+    var ctx = { companyName: cust.companyName || '', getAddress: function(){ return ProfileFields.composeAddress(cust.profile || {}); } };
+    box.innerHTML = '<h2><span class="layer-tag">Layer 3</span>Billing details</h2>' +
+      '<p class="lead">Filled by the customer on the onboarding form. The admin can correct them here.</p>' +
+      ProfileFields.billingFormHtml(profile, cust.companyName) +
+      '<div class="group-save-row"><button type="button" class="primary" id="billSaveBtn">Save billing details</button> <span id="billMsg" class="muted" style="font-size:12px;"></span></div>';
+    ProfileFields.wireBilling(box, ctx);
+    document.getElementById('billSaveBtn').addEventListener('click', function(){
+      var cid = state.cid;
+      var msg = document.getElementById('billMsg');
+      var r = ProfileFields.collectBilling(box, ctx);
+      if (r.error) { msg.textContent = r.error; msg.style.color = 'var(--fail)'; return; }
+      var btn = document.getElementById('billSaveBtn');
+      btn.disabled = true; msg.textContent = 'Saving…'; msg.style.color = '';
+      api('/customers/' + cid, { method: 'PATCH', body: { profile: r.values } }).then(function(updated){
+        var idx = state.customers.findIndex(function(c){ return c.id === cid; });
+        if (idx !== -1) state.customers[idx] = updated;
+        if (cid !== state.cid) return;
+        renderBillingDetails(updated);
+        var m2 = document.getElementById('billMsg');
+        if (m2) { m2.textContent = 'Saved.'; m2.style.color = 'var(--ok)'; }
+      }).catch(function(err){
+        msg.textContent = 'Failed: ' + err.message; msg.style.color = 'var(--fail)'; btn.disabled = false;
+      });
+    });
+  }
+
+  function money(n) {
+    return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function cycleText(i) {
+    return escapeHtml(i.monthCode || ('M' + i.monthIndex)) + (i.cycleStart ? ' · ' + escapeHtml(fmtDay(i.cycleStart)) + ' – ' + escapeHtml(fmtDay(i.cycleEnd)) : '');
+  }
+  function todayIso() {
+    var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function loadInvoices() {
+    var cid = state.cid;
+    api('/customers/' + cid + '/invoices').then(function(list){
+      if (cid !== state.cid) return;
+      bill.items = Array.isArray(list) ? list : [];
+      drawInvoices(false);
+    }).catch(function(err){
+      var box = document.getElementById('billInvoices');
+      if (box && cid === state.cid) box.innerHTML = '<h2><span class="layer-tag">Layer 3</span>Monthly bills</h2><p class="muted">Could not load bills: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function setBillMsg(text, isErr) {
+    bill.msg = { text: text, err: !!isErr };
+    var el = document.getElementById('invMsg');
+    if (el) { el.textContent = text; el.style.color = isErr ? 'var(--fail)' : 'var(--ok)'; }
+  }
+
+  function drawInvoices(loading) {
+    var box = document.getElementById('billInvoices');
+    if (!box) return;
+    var cur = currentMonth();
+    var monthOpts = state.months.map(function(m){
+      return '<option value="' + m.monthIndex + '"' + (cur && cur.id === m.id ? ' selected' : '') + '>' + escapeHtml(m.monthCode || ('M' + m.monthIndex)) +
+        (m.monthStartDate ? ' · ' + escapeHtml(fmtDay(m.monthStartDate)) + ' – ' + escapeHtml(fmtDay(m.monthEndDate)) : '') + '</option>';
+    }).join('');
+    var unpaid = bill.items.filter(function(i){ return i.status !== 'paid'; });
+    var unpaidTotal = unpaid.reduce(function(a, i){ return a + Number(i.amount || 0); }, 0);
+    var h = '<h2><span class="layer-tag">Layer 3</span>Monthly bills</h2>' +
+      '<p class="lead">Upload each month\'s bill with its cycle, date, invoice number and amount, and mark it paid or unpaid.' +
+      (bill.items.length ? ' <strong>' + unpaid.length + ' unpaid</strong> · ' + money(unpaidTotal) + ' outstanding.' : '') + '</p>';
+    h += '<div class="actions" style="margin:6px 0;flex-wrap:wrap;align-items:flex-end;gap:8px;">' +
+      '<label class="profile-field" style="min-width:210px"><span>Month cycle</span><select id="invMonth">' + monthOpts + '</select></label>' +
+      '<label class="profile-field"><span>Invoice date</span><input id="invDate" type="date" value="' + todayIso() + '"></label>' +
+      '<label class="profile-field"><span>Invoice no.</span><input id="invNo" placeholder="e.g. OIH-2026-014" style="max-width:170px"></label>' +
+      '<label class="profile-field"><span>Amount (₹)</span><input id="invAmount" type="number" min="0" step="0.01" style="max-width:130px"></label>' +
+      '<label class="profile-field"><span>Status</span><select id="invStatus"><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select></label>' +
+      '<label class="profile-field"><span>Bill file <small>(PDF/image, 10 MB)</small></span><input id="invFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" style="max-width:240px"></label>' +
+      '<button type="button" class="primary" data-act="inv-add">Add bill</button>' +
+      '<span id="invMsg" style="font-size:12px;' + (bill.msg ? 'color:' + (bill.msg.err ? 'var(--fail)' : 'var(--ok)') : '') + '">' + (bill.msg ? escapeHtml(bill.msg.text) : '') + '</span></div>';
+    if (loading) h += '<p class="muted">Loading bills…</p>';
+    else if (!bill.items.length) h += '<p class="muted">No bills uploaded yet.</p>';
+    else {
+      h += '<div style="overflow:auto"><table><thead><tr><th>Month cycle</th><th>Invoice date</th><th>Invoice no.</th><th>Amount</th><th>Status</th><th>Bill</th><th></th></tr></thead><tbody>' +
+        bill.items.map(function(i){
+          var paid = i.status === 'paid';
+          var id = escapeHtml(i.id);
+          return '<tr><td>' + cycleText(i) + '</td><td>' + escapeHtml(fmtDay(i.invoiceDate)) + '</td><td>' + escapeHtml(i.invoiceNo) + '</td>' +
+            '<td>' + money(i.amount) + '</td>' +
+            '<td>' + (paid ? '<span class="badge ok">Paid</span>' + (i.paidDate ? ' <span class="muted" style="font-size:12px;">' + escapeHtml(fmtDay(i.paidDate)) + '</span>' : '') : '<span class="badge pending">Unpaid</span>') + '</td>' +
+            '<td>' + (i.fileUrl ? '<a href="' + escapeHtml(i.fileUrl) + '" target="_blank" rel="noopener">' + escapeHtml(i.fileName || 'Open') + '</a>' : '<span class="muted">—</span>') + '</td>' +
+            '<td style="white-space:nowrap;"><button type="button" style="padding:3px 10px;font-size:12px;" data-act="inv-toggle" data-id="' + id + '" data-status="' + (paid ? 'unpaid' : 'paid') + '">' + (paid ? 'Mark unpaid' : 'Mark paid') + '</button> ' +
+            '<button type="button" style="padding:3px 10px;font-size:12px;" data-act="inv-del" data-id="' + id + '">Delete</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    box.innerHTML = h;
+    box.onclick = function(e){
+      var t = e.target;
+      var act = t && t.getAttribute ? t.getAttribute('data-act') : null;
+      if (act === 'inv-add') addInvoice(t);
+      else if (act === 'inv-toggle') toggleInvoice(t.getAttribute('data-id'), t.getAttribute('data-status'));
+      else if (act === 'inv-del') deleteInvoice(t.getAttribute('data-id'));
+    };
+  }
+
+  function addInvoice(btn) {
+    var cid = state.cid;
+    var no = document.getElementById('invNo').value.trim();
+    var amount = document.getElementById('invAmount').value.trim();
+    var date = document.getElementById('invDate').value;
+    if (!no) { setBillMsg('Enter the invoice number.', true); return; }
+    if (!date) { setBillMsg('Pick the invoice date.', true); return; }
+    if (amount === '' || isNaN(Number(amount)) || Number(amount) < 0) { setBillMsg('Enter the invoice amount.', true); return; }
+    var file = document.getElementById('invFile').files[0];
+    if (file && file.size > 10 * 1024 * 1024) { setBillMsg('The bill file exceeds 10 MB.', true); return; }
+    var fd = new FormData();
+    fd.append('monthIndex', document.getElementById('invMonth').value);
+    fd.append('invoiceDate', date);
+    fd.append('invoiceNo', no);
+    fd.append('amount', amount);
+    fd.append('status', document.getElementById('invStatus').value);
+    if (file) fd.append('file', file);
+    btn.disabled = true;
+    setBillMsg('Saving…', false);
+    api('/customers/' + cid + '/invoices', { method: 'POST', body: fd }).then(function(inv){
+      if (cid !== state.cid) return;
+      bill.items.push(inv);
+      bill.items.sort(function(a, b){ return (a.monthIndex - b.monthIndex) || String(a.invoiceDate).localeCompare(String(b.invoiceDate)); });
+      bill.msg = { text: 'Bill added.', err: false };
+      drawInvoices(false);
+    }).catch(function(err){ btn.disabled = false; setBillMsg('Could not add the bill: ' + err.message, true); });
+  }
+
+  function toggleInvoice(id, status) {
+    var cid = state.cid;
+    api('/customers/' + cid + '/invoices/' + id, { method: 'PATCH', body: { status: status } }).then(function(inv){
+      if (cid !== state.cid) return;
+      bill.items = bill.items.map(function(i){ return i.id === id ? inv : i; });
+      bill.msg = null;
+      drawInvoices(false);
+    }).catch(function(err){ setBillMsg('Could not update: ' + err.message, true); });
+  }
+
+  function deleteInvoice(id) {
+    if (!window.confirm('Delete this bill (and its uploaded file)?')) return;
+    var cid = state.cid;
+    api('/customers/' + cid + '/invoices/' + id, { method: 'DELETE' }).then(function(){
+      if (cid !== state.cid) return;
+      bill.items = bill.items.filter(function(i){ return i.id !== id; });
+      bill.msg = { text: 'Bill deleted.', err: false };
+      drawInvoices(false);
+    }).catch(function(err){ setBillMsg('Could not delete: ' + err.message, true); });
   }
 
   // Layer 1 - ACT Account Registration (mirrors WP's Layer 1 card: User ID,
