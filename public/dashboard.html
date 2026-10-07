@@ -941,7 +941,7 @@
   // ---- Layer 3: Website Pages & Image Mapping (Page Image Library) ----
   // Engine equivalent of WP's Page Image Library: 1) website page URLs,
   // 2) branded images (max 30 per customer), 3) page -> image mapping.
-  var lib = { pages: [], images: [], msg: null, storage: '' };
+  var lib = { pages: [], images: [], msg: null, storage: '', original: null };
   var MAX_IMAGES = 30;
   var MAX_IMAGE_BYTES = 8 * 1024 * 1024;
   var IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -968,8 +968,9 @@
     var cid = state.cid;
     box.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2><p class="muted">Loading…</p></section>';
     lib.msg = null;
-    Promise.all([api(libBase() + '/pages'), api(libBase() + '/images'), api(libBase() + '/storage').catch(function(){ return { backend: '' }; })]).then(function(r){
+    Promise.all([api(libBase() + '/pages'), api(libBase() + '/images'), api(libBase() + '/storage').catch(function(){ return { backend: '' }; }), api(libBase() + '/pages/summary').catch(function(){ return null; })]).then(function(r){
       if (cid !== state.cid) return;
+      lib.original = (r[3] && r[3].original != null) ? r[3].original : null;
       lib.storage = (r[2] && r[2].backend) || '';
       lib.pages = Array.isArray(r[0]) ? r[0] : [];
       lib.images = Array.isArray(r[1]) ? r[1] : [];
@@ -990,7 +991,7 @@
       '<p class="lead">Each page keeps its URL, alias name, H1 keyword and mapped image - the same four values are used wherever a Layer needs a page. <strong>' + mappedCount + ' of ' + lib.pages.length + '</strong> pages have an image mapped.</p>' +
       '<div id="libMsg" class="muted" style="margin-bottom:6px;"></div>';
 
-    h += '<h3 class="sub-h" style="margin-top:6px">1. Website page URLs</h3>' +
+    h += '<h3 class="sub-h" style="margin-top:6px">1. Website page URLs</h3>' + pageCountHtml() +
       '<div class="actions" style="margin:6px 0"><button type="button" data-act="fetch"' + (cust.website ? '' : ' disabled title="Customer has no website set"') + '>Fetch live pages from website</button>' +
       '<button type="button" data-act="extract"' + (lib.pages.length ? '' : ' disabled') + '>Extract missing H1 keywords</button>' +
       '<span class="muted" style="font-size:12px;">' + (cust.website ? escapeHtml(cust.website) : 'No website set for this customer.') + '</span></div>' +
@@ -1073,6 +1074,18 @@
     return '';
   }
 
+  // WP parity: "Originally Fetched: N page(s) · Current Total: M page(s) (+x since original fetch)".
+  function pageCountHtml() {
+    var cur = lib.pages.length;
+    var h = '<p class="muted" style="margin:4px 0 8px;font-size:13px;"><strong>Originally fetched:</strong> ' +
+      (lib.original == null ? '—' : lib.original) + ' page(s) &nbsp;·&nbsp; <strong>Current total:</strong> ' + cur + ' page(s)';
+    if (lib.original != null && cur !== lib.original) {
+      var d = cur - lib.original;
+      h += ' <span style="color:var(--accent,#2563eb);">(' + (d > 0 ? '+' : '') + d + ' since original fetch)</span>';
+    }
+    return h + '</p>';
+  }
+
   function libFetchPages(btn) {
     var cid = state.cid;
     btn.disabled = true;
@@ -1081,6 +1094,8 @@
       if (cid !== state.cid) return;
       lib.pages = Array.isArray(pages) ? pages : lib.pages;
       lib.msg = { text: 'Done — ' + lib.pages.length + ' pages in the library.', err: false };
+      // the first fetch (or one on an empty library) sets the baseline server-side
+      api(libBase() + '/pages/summary').then(function(sm){ if (cid === state.cid && sm) { lib.original = sm.original; drawLibrary(); } }).catch(function(){});
       drawLibrary();
     }).catch(function(err){ btn.disabled = false; setLibMsg('Could not fetch pages: ' + err.message, true); });
   }

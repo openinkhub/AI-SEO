@@ -68,6 +68,11 @@ export class Customer {
   @Column({ type: 'varchar', length: 19, nullable: true })
   actDate: string | null;
 
+  // Page Image Library: how many pages the first live fetch found (WP's
+  // "Originally Fetched"). Re-baselined when a fetch runs on an empty library.
+  @Column({ type: 'int', nullable: true })
+  pagesFetchedCount: number | null;
+
   // Where notifications go. Null = fall back to accountEmail (WP behaviour:
   // "Registered Email Fallback"). Editable by Admin and by the customer in
   // the onboarding form.

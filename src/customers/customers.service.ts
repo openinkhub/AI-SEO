@@ -91,6 +91,10 @@ export class CustomersService {
     return saved;
   }
 
+  async setPagesFetchedCount(id: string, count: number): Promise<void> {
+    await this.repo.update(id, { pagesFetchedCount: count });
+  }
+
   // Added 2026-10-06 so throwaway test signups (and any future deletion)
   // don't leave orphaned Month rows - customerId on Project is a plain
   // column, not an enforced FK/cascade, so it has to be cleaned up

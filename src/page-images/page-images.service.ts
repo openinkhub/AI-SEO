@@ -112,7 +112,27 @@ export class PageImagesService {
     if (toInsert.length > 0) {
       await this.pages.save(toInsert);
     }
+    // "Originally fetched": set by the first fetch, and again when a fetch
+    // runs on an empty library (same as WP's re-baseline after Delete All).
+    const customer = await this.customers.findOne(customerId);
+    if (customer.pagesFetchedCount == null || existing.length === 0) {
+      await this.customers.setPagesFetchedCount(customerId, existing.length + toInsert.length);
+    }
     return this.listPages(customerId);
+  }
+
+  // Counts shown above the page list: the baseline from the first fetch and
+  // the live total (so manual adds/removes show up as a +/- change).
+  async pageSummary(customerId: string): Promise<{ original: number | null; current: number }> {
+    const customer = await this.customers.findOne(customerId);
+    const current = await this.pages.count({ where: { customerId } });
+    let original = customer.pagesFetchedCount;
+    // Libraries filled before this counter existed: snapshot what is there now.
+    if (original == null && current > 0) {
+      original = current;
+      await this.customers.setPagesFetchedCount(customerId, current);
+    }
+    return { original: original ?? null, current };
   }
 
   async addPage(customerId: string, dto: CreatePageDto): Promise<WebsitePage> {

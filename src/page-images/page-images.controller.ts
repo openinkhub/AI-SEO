@@ -33,6 +33,11 @@ export class PageImagesController {
     return this.service.listPages(customerId);
   }
 
+  @Get('pages/summary')
+  pageSummary(@Param('customerId') customerId: string) {
+    return this.service.pageSummary(customerId);
+  }
+
   @Post('pages/fetch')
   fetchPages(@Param('customerId') customerId: string) {
     return this.service.fetchLivePages(customerId);
