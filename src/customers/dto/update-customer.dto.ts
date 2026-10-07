@@ -5,6 +5,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -48,6 +49,31 @@ export class UpdateCustomerDto {
   @ValidateIf((o) => o.notificationEmail !== '')
   @IsEmail()
   notificationEmail?: string;
+
+  // Manual account details for customers that were created in the Engine
+  // before the WP sync could pair them (new signups fill these in
+  // automatically). Empty string = clear.
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d*$/, { message: 'WP User ID must be a number.' })
+  wpUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  userName?: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.accountEmail !== '')
+  @IsEmail()
+  accountEmail?: string;
+
+  // Registration (ACT) date that anchors the 30-day month cycle.
+  @IsOptional()
+  @ValidateIf((o) => o.actDate !== '')
+  @Matches(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, {
+    message: 'Registration date must look like YYYY-MM-DD.',
+  })
+  actDate?: string;
 
   @IsOptional()
   @IsString()

@@ -107,6 +107,11 @@
   .progress-chip{font-size:12px;font-weight:600;background:#F1F3FA;border-radius:999px;padding:5px 12px;white-space:nowrap;}
   .notif-edit{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;}
   .notif-edit input{max-width:260px;}
+  .l1-edit{margin-top:20px;border-top:1px solid #E5E7EB;padding-top:12px;}
+  .l1-edit summary{cursor:pointer;font-weight:600;font-size:13px;}
+  .l1-edit-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0;}
+  @media (max-width:900px){ .l1-edit-grid{grid-template-columns:1fr;} }
+  .l1-edit-grid label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:4px;}
   .empty{padding:40px 10px; text-align:center;}
   .danger-zone{border-color:#ecd0d0;}
 </style>
@@ -503,6 +508,7 @@
     var ctx = monthContextText();
     var filled = [cust.wpUserId, userName, accountEmail, effective, reg, ctx].filter(Boolean).length;
     var pct = Math.round(filled / 6 * 100);
+    var needsSetup = !cust.wpUserId || !reg;
     var h = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
       '<span class="progress-chip">' + (pct === 100 ? 'Complete · 100%' : 'In Progress · ' + pct + '%') + '</span></div>';
     h += '<div class="l1-grid">' +
@@ -517,7 +523,18 @@
       l1Field('Registration Date', reg, reg ? 'ACT' : '',
         reg ? '' : '<div class="muted" style="font-size:12px;margin-top:4px;">Not synced yet — use “Sync WP Customer Profiles” in the sidebar.</div>') +
       l1Field('Month Context', ctx, '') +
-      '</div></section>';
+      '</div>' +
+      '<details class="l1-edit"' + (needsSetup ? ' open' : '') + '><summary>Edit account details' +
+      (needsSetup ? ' — some values are missing, set them manually' : '') + '</summary>' +
+      '<div class="l1-edit-grid">' +
+      '<label>WP User ID<input id="accWpId" inputmode="numeric" value="' + escapeHtml(cust.wpUserId || '') + '" placeholder="e.g. 12"></label>' +
+      '<label>User Name<input id="accUserName" value="' + escapeHtml(cust.userName || '') + '" placeholder="' + escapeHtml(cust.companyName || '') + '"></label>' +
+      '<label>Registered Email<input id="accEmail" type="email" value="' + escapeHtml(cust.accountEmail || '') + '" placeholder="' + escapeHtml(cust.contactEmail || '') + '"></label>' +
+      '<label>Registration Date<input id="accRegDate" type="date" value="' + escapeHtml(String(reg).slice(0, 10)) + '"></label>' +
+      '</div><div class="notif-edit"><button type="button" class="primary" id="accSaveBtn">Save account details</button>' +
+      '<span id="accMsg" class="muted" style="font-size:12px;"></span></div>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0;">New signups fill these automatically. Manual entry is for customers created before the WP sync. Saving a registration date recalculates the month cycle (M0–M12).</p>' +
+      '</details></section>';
     document.getElementById('layer1').innerHTML = h;
 
     function saveNotif(value) {
@@ -542,6 +559,31 @@
     }
     document.getElementById('notifSaveBtn').addEventListener('click', function(){ saveNotif(document.getElementById('notifEmailInput').value); });
     document.getElementById('notifResetBtn').addEventListener('click', function(){ saveNotif(''); });
+
+    document.getElementById('accSaveBtn').addEventListener('click', function(){
+      var cid = state.cid;
+      var msg = document.getElementById('accMsg');
+      var btn = document.getElementById('accSaveBtn');
+      var v = function(id){ return document.getElementById(id).value.trim(); };
+      var body = { wpUserId: v('accWpId'), userName: v('accUserName'), accountEmail: v('accEmail'), actDate: v('accRegDate') };
+      if (body.wpUserId && !/^\d+$/.test(body.wpUserId)) { msg.textContent = 'WP User ID must be a number.'; msg.style.color = 'var(--fail)'; return; }
+      if (body.accountEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.accountEmail)) { msg.textContent = 'Enter a valid email address.'; msg.style.color = 'var(--fail)'; return; }
+      btn.disabled = true; msg.textContent = 'Saving…'; msg.style.color = '';
+      api('/customers/' + cid, { method: 'PATCH', body: body }).then(function(updated){
+        var idx = state.customers.findIndex(function(c){ return c.id === cid; });
+        if (idx !== -1) state.customers[idx] = updated;
+        if (cid !== state.cid) return;
+        // months were recalculated server-side - reload them and redraw
+        return loadMonths().then(function(){
+          var m2 = document.getElementById('accMsg');
+          if (m2) { m2.textContent = 'Saved.'; m2.style.color = 'var(--ok)'; }
+        });
+      }).catch(function(err){
+        var m3 = document.getElementById('accMsg');
+        if (m3) { m3.textContent = 'Failed: ' + err.message; m3.style.color = 'var(--fail)'; }
+        var b = document.getElementById('accSaveBtn'); if (b) b.disabled = false;
+      });
+    });
   }
 
   // Layer 2 - Onboarding & Profile Ownership

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer } from './customer.entity';
@@ -56,13 +56,39 @@ export class CustomersService {
     if (rest.notificationEmail !== undefined) {
       customer.notificationEmail = rest.notificationEmail.trim() || null;
     }
+    if (rest.userName !== undefined) customer.userName = rest.userName.trim() || null;
+    if (rest.accountEmail !== undefined) {
+      customer.accountEmail = rest.accountEmail.trim() || null;
+    }
+    if (rest.wpUserId !== undefined) {
+      const wpId = rest.wpUserId.trim();
+      if (wpId) {
+        const dup = await this.repo.findOne({ where: { wpUserId: wpId } });
+        if (dup && dup.id !== id) {
+          throw new ConflictException(
+            `WP User ID ${wpId} already belongs to "${dup.companyName}".`,
+          );
+        }
+      }
+      customer.wpUserId = wpId || null;
+    }
+    const cycleChanged = rest.actDate !== undefined;
+    if (rest.actDate !== undefined) {
+      const m = rest.actDate
+        .trim()
+        .match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2})(?::(\d{2}))?)?$/);
+      customer.actDate = m ? `${m[1]} ${m[2] ?? '00:00'}:${m[3] ?? '00'}` : null;
+    }
     if (profile) {
       customer.profile = {
         ...(customer.profile ?? {}),
         ...normalizeProfile(profile),
       };
     }
-    return this.repo.save(customer);
+    const saved = await this.repo.save(customer);
+    // A new registration date moves every month of the cycle (M0..M12).
+    if (cycleChanged) await this.projects.ensureMonths(saved.id);
+    return saved;
   }
 
   // Added 2026-10-06 so throwaway test signups (and any future deletion)

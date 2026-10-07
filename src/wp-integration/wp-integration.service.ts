@@ -237,7 +237,8 @@ export class WpIntegrationService {
       customer.accountEmail = wp.email || customer.accountEmail || null;
       customer.userName = wp.userLogin || wp.displayName || customer.userName || null;
       if (wp.registeredAt) customer.registeredAt = String(wp.registeredAt).slice(0, 19);
-      if (wp.actDate) customer.actDate = String(wp.actDate).slice(0, 19);
+      // Only fills a blank: a date entered by hand in the dashboard wins.
+      if (wp.actDate && !customer.actDate) customer.actDate = String(wp.actDate).slice(0, 19);
       if (wp.notificationEmail && !customer.notificationEmail) {
         customer.notificationEmail = wp.notificationEmail;
       }
