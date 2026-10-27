@@ -210,7 +210,14 @@ var ProfileFields = (function () {
     T.industries.forEach(function (i) { industries[i.name] = i.domains; industryNames.push(i.name); });
     var fields = {
       industry: function () { return industryNames; },
-      business_domain: function () { var ind = valueOf('industry'); return industries[ind] || []; },
+      // Industry chosen -> only its domains. No industry yet -> every domain (grouped by industry in the list).
+      business_domain: function () {
+        var ind = valueOf('industry');
+        if (industries[ind]) return industries[ind];
+        var all = [];
+        industryNames.forEach(function (n) { industries[n].forEach(function (d) { all.push(d); }); });
+        return all;
+      },
       sector: function () { return T.sectors; },
       primary_business_category: function () { return T.categories; },
       business_model: function () { return T.businessModels; }
@@ -238,15 +245,32 @@ var ProfileFields = (function () {
             input.value = sel.value;
           }
           input.dispatchEvent(new Event('input', { bubbles: true }));
+          // Picking a domain while Industry is still blank fills in that domain's Industry.
+          if (key === 'business_domain' && sel.value && sel.value !== NEW_VALUE && !valueOf('industry')) {
+            var parentInd = sel.options[sel.selectedIndex].getAttribute('data-ind');
+            if (parentInd && inputFor('industry')) {
+              inputFor('industry').value = parentInd;
+              inputFor('industry').dispatchEvent(new Event('input', { bubbles: true }));
+              build('industry', true);
+              build('business_domain', true);
+            }
+          }
           if (key === 'industry') { if (inputFor('business_domain')) { inputFor('business_domain').value = ''; build('business_domain', false); } }
         });
       }
       var options = fields[key]();
       var current = keepValue ? input.value : '';
       var html = '<option value="">— Select —</option>';
-      options.forEach(function (o) {
-        html += '<option value="' + o.replace(/"/g, '&quot;') + '">' + o.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
-      });
+      function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+      if (key === 'business_domain' && !industries[valueOf('industry')]) {
+        industryNames.forEach(function (n) {
+          html += '<optgroup label="' + esc(n) + '">';
+          industries[n].forEach(function (d) { html += '<option value="' + esc(d) + '" data-ind="' + esc(n) + '">' + esc(d) + '</option>'; });
+          html += '</optgroup>';
+        });
+      } else {
+        options.forEach(function (o) { html += '<option value="' + esc(o) + '">' + esc(o) + '</option>'; });
+      }
       html += '<option value="' + NEW_VALUE + '">+ Add new…</option>';
       sel.innerHTML = html;
       if (current && options.indexOf(current) !== -1) { sel.value = current; input.style.display = 'none'; }
