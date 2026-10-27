@@ -43,6 +43,10 @@
   .msg.ok { color:#059669; }
   .msg.err { color:#dc2626; }
   .center-state { text-align:center; padding:60px 20px; color:#6b7280; }
+  body.embed { background:#fff; }
+  body.embed .brand { display:none; }
+  body.embed .wrap { max-width:none; padding:0; }
+  body.embed .card { box-shadow:none; padding:4px; }
   @media (max-width:560px) { .profile-grid { grid-template-columns:1fr; } }
 </style>
 </head>
@@ -57,6 +61,18 @@
 (function(){
   var token = new URLSearchParams(window.location.search).get('token');
   var root = document.getElementById('root');
+  // ?embed=1: shown inside the WordPress customer portal. Tell the parent page how tall
+  // the form is (so it needs no inner scrollbar) and when the profile has been submitted.
+  var embed = new URLSearchParams(window.location.search).get('embed') === '1';
+  if (embed) {
+    document.body.className += ' embed';
+    var postHeight = function () {
+      try { window.parent.postMessage({ type: 'openink-onboarding-height', height: document.documentElement.scrollHeight }, '*'); } catch (e) {}
+    };
+    if (window.ResizeObserver) new ResizeObserver(postHeight).observe(document.body);
+    window.addEventListener('load', postHeight);
+    setInterval(postHeight, 1000);
+  }
 
   function escapeHtml(s) {
     return (s == null ? '' : String(s)).replace(/[&<>"']/g, function(c){
@@ -308,6 +324,7 @@
         msg.textContent = 'Saved - thank you!';
         msg.className = 'msg ok';
         btn.disabled = false;
+        if (embed) { try { window.parent.postMessage({ type: 'openink-onboarding-submitted' }, '*'); } catch (e) {} }
       })
       .catch(function (err) {
         msg.textContent = 'Could not submit: ' + err.message;
