@@ -1,6 +1,6 @@
 // Predefined directory (Industry > Business Domain, Sector, Category, Business Model).
 // Generated from the plugin's KP21_Taxonomy (OpenInkHub Industry/Domain/Sector/Category mapping).
-// Business Model list is the standard Engine list (not part of the original mapping).
+// Business Model and Entity Type lists are the standard Engine lists (not part of the original mapping).
 window.OpeninkTaxonomy = {
     "industries": [
         {
@@ -766,6 +766,21 @@ window.OpeninkTaxonomy = {
         "Operations",
         "Technology",
         "Market & Customers"
+    ],
+    "entityTypes": [
+        "Sole Proprietorship",
+        "Partnership Firm",
+        "Limited Liability Partnership (LLP)",
+        "One Person Company (OPC)",
+        "Private Limited Company",
+        "Public Limited Company",
+        "Section 8 Company / NGO",
+        "Trust / Society",
+        "Hindu Undivided Family (HUF)",
+        "Cooperative Society",
+        "Government / PSU",
+        "Individual / Freelancer",
+        "Other"
     ],
     "businessModels": [
         "B2B",

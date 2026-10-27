@@ -218,6 +218,7 @@ var ProfileFields = (function () {
         industryNames.forEach(function (n) { industries[n].forEach(function (d) { all.push(d); }); });
         return all;
       },
+      entity_type: function () { return T.entityTypes || []; },
       sector: function () { return T.sectors; },
       primary_business_category: function () { return T.categories; },
       business_model: function () { return T.businessModels; }
@@ -279,6 +280,7 @@ var ProfileFields = (function () {
     }
     build('industry', true);
     build('business_domain', true);
+    build('entity_type', true);
     build('sector', true);
     build('primary_business_category', true);
     build('business_model', true);
