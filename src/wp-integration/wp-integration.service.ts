@@ -84,7 +84,10 @@ export class WpIntegrationService {
       customer.registeredAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
     customer.accountEmail = customer.accountEmail ?? dto.contactEmail ?? null;
-    customer.userName = customer.userName ?? dto.contactName ?? dto.companyName ?? null;
+    // The WP login name is authoritative when WP sends it (signup does).
+    if (dto.userLogin) customer.userName = dto.userLogin;
+    else customer.userName = customer.userName ?? dto.contactName ?? dto.companyName ?? null;
+    if (dto.loginUrl) customer.portalLoginUrl = dto.loginUrl;
 
     const saved = await this.customers.save(customer);
     await this.projects.ensureMonths(saved.id);

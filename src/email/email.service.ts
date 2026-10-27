@@ -138,7 +138,11 @@ export class EmailService {
     companyName: string,
     onboardingUrl: string,
     resend = false,
+    account: { username?: string | null; loginUrl?: string | null } = {},
   ): Promise<boolean> {
+    const loginText = account.username
+      ? `\n\nYour username: ${account.username}\nYou can also sign in with your email address.${account.loginUrl ? '\nLog in: ' + account.loginUrl : ''}`
+      : '';
     // resend = an admin sending the link again so the customer can finish or
     // update the profile. The form opens pre-filled with what is already saved.
     return this.deliver({
@@ -146,10 +150,10 @@ export class EmailService {
       subject: resend
         ? 'Openink Hub - review and update your business profile'
         : 'Welcome to Openink Hub - complete your business profile',
-      html: this.renderOnboardingHtml(companyName, onboardingUrl, resend),
+      html: this.renderOnboardingHtml(companyName, onboardingUrl, resend, account),
       text: resend
-        ? `Hello!\n\nPlease review and complete your business profile here:\n${onboardingUrl}\n\nThe details we already have are filled in. Update anything and save - no field is mandatory.\n\nThis link is unique to your account - no need to create a separate login.`
-        : `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.`,
+        ? `Hello!\n\nPlease review and complete your business profile here:\n${onboardingUrl}\n\nThe details we already have are filled in. Update anything and save - no field is mandatory.\n\nThis link is unique to your account - no need to create a separate login.${loginText}`
+        : `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.${loginText}`,
     });
   }
 
@@ -157,10 +161,19 @@ export class EmailService {
     companyName: string,
     onboardingUrl: string,
     resend = false,
+    account: { username?: string | null; loginUrl?: string | null } = {},
   ): string {
     const safeName = companyName
       ? companyName.replace(/</g, '&lt;').replace(/>/g, '&gt;')
       : 'there';
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const loginHtml = account.username
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="background:#f3f4f6;border-radius:6px;padding:14px 16px;font-size:14px;color:#374151;">` +
+        `Your username: <b style="font-size:16px;color:#111827;">${esc(account.username)}</b><br>` +
+        `You can also sign in with your email address.` +
+        (account.loginUrl ? ` <a href="${esc(account.loginUrl)}" style="color:#2563eb;">Log in</a>` : '') +
+        `</td></tr></table>`
+      : '';
     return `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
@@ -185,6 +198,7 @@ export class EmailService {
                 Complete your business profile
               </a>
             </p>
+            ${loginHtml}
             <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0;">
               This link is unique to your account - no separate login needed. You can come back
               and update these details any time.

@@ -49,4 +49,14 @@ export class WpSyncCustomerDto {
   @IsOptional()
   @IsArray()
   competitors?: string[];
+
+  // WP login name (user_login) and the customer portal URL, sent at signup
+  // so the welcome email can tell the customer how to log in.
+  @IsOptional()
+  @IsString()
+  userLogin?: string;
+
+  @IsOptional()
+  @IsString()
+  loginUrl?: string;
 }

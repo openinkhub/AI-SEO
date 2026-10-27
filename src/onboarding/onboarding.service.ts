@@ -60,9 +60,20 @@ export class OnboardingService {
       customer.contactEmail,
       customer.companyName,
       link,
+      false,
+      this.accountInfo(customer),
     );
     if (sent) customer.onboardingEmailSentAt = new Date();
     await this.customers.save(customer);
+  }
+
+  // Username + login URL shown in the onboarding email. Only customers that
+  // came from WordPress have a real login name.
+  private accountInfo(customer: Customer): { username: string | null; loginUrl: string | null } {
+    return {
+      username: customer.wpUserId ? customer.userName : null,
+      loginUrl: customer.portalLoginUrl || process.env.CUSTOMER_PORTAL_URL || null,
+    };
   }
 
   // Admin action ("Send again"): re-sends the onboarding link so the
@@ -80,7 +91,13 @@ export class OnboardingService {
       process.env.ENGINE_PUBLIC_URL?.replace(/\/+$/, '') ||
       'https://app.openinkhub.cloud';
     const link = `${base}/onboarding.html?token=${customer.onboardingToken}`;
-    const sent = await this.email.sendOnboardingEmail(to, customer.companyName, link, true);
+    const sent = await this.email.sendOnboardingEmail(
+      to,
+      customer.companyName,
+      link,
+      true,
+      this.accountInfo(customer),
+    );
     if (!sent) {
       throw new ServiceUnavailableException(
         'The email could not be sent. Check the SMTP settings on the server.',

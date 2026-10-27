@@ -73,6 +73,11 @@ export class Customer {
   @Column({ type: 'int', nullable: true })
   pagesFetchedCount: number | null;
 
+  // Where this customer logs in to the WP customer portal (sent by WP at
+  // signup); used in the welcome / resend emails.
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  portalLoginUrl: string | null;
+
   // Where notifications go. Null = fall back to accountEmail (WP behaviour:
   // "Registered Email Fallback"). Editable by Admin and by the customer in
   // the onboarding form.
