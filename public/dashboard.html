@@ -141,8 +141,8 @@
   </aside>
   <main id="page"><p class="muted">Loading…</p></main>
 </div>
-<script src="taxonomy.js"></script>
-<script src="profile-fields.js"></script>
+<script src="taxonomy.js?v=20261027a"></script>
+<script src="profile-fields.js?v=20261027a"></script>
 <script>
 (function(){
   var token = null, userRaw = null;
@@ -814,7 +814,7 @@
     });
     h += '</div></section>';
     document.getElementById('layer2').innerHTML = h;
-    ProfileFields.wireTaxonomy(document.getElementById('profileForm'));
+    if (ProfileFields.wireTaxonomy) ProfileFields.wireTaxonomy(document.getElementById('profileForm'));
     PROFILE_FIELD_GROUPS.forEach(function(g, gi){ updateGroupCount(gi); });
     Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
       btn.addEventListener('click', function(){ saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10)); });

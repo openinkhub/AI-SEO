@@ -51,8 +51,8 @@
   <div class="brand">Openink Hub</div>
   <div class="card" id="root"><p class="center-state">Loading…</p></div>
 </div>
-<script src="taxonomy.js"></script>
-<script src="profile-fields.js"></script>
+<script src="taxonomy.js?v=20261027a"></script>
+<script src="profile-fields.js?v=20261027a"></script>
 <script>
 (function(){
   var token = new URLSearchParams(window.location.search).get('token');
@@ -169,7 +169,7 @@
       'it tells us your profile is ready, it does not save any fields itself.</p></div>';
     html += '</form>';
     root.innerHTML = html;
-    ProfileFields.wireTaxonomy(document.getElementById('onbForm'));
+    if (ProfileFields.wireTaxonomy) ProfileFields.wireTaxonomy(document.getElementById('onbForm'));
     document.getElementById('onbForm').addEventListener('submit', function(e){ e.preventDefault(); });
     Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
       btn.addEventListener('click', function(){
