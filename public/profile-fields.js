@@ -197,7 +197,71 @@ var ProfileFields = (function () {
     return { values: values, error: error };
   }
 
+  // Predefined-directory dropdowns (Industry > Business Domain, Sector, Primary Business
+  // Category, Business Model) with a "+ Add new..." escape hatch. Runs AFTER a form is
+  // rendered: each plain text input[data-key] is kept as the source of truth (so save /
+  // count / collect code is untouched) and gets a <select> in front of it. Choosing
+  // "+ Add new..." reveals the input for a typed value. No-op if taxonomy.js is missing.
+  var NEW_VALUE = '__new__';
+  function wireTaxonomy(rootEl) {
+    var T = window.OpeninkTaxonomy;
+    if (!T || !rootEl) return;
+    var industries = {}, industryNames = [];
+    T.industries.forEach(function (i) { industries[i.name] = i.domains; industryNames.push(i.name); });
+    var fields = {
+      industry: function () { return industryNames; },
+      business_domain: function () { var ind = valueOf('industry'); return industries[ind] || []; },
+      sector: function () { return T.sectors; },
+      primary_business_category: function () { return T.categories; },
+      business_model: function () { return T.businessModels; }
+    };
+    function inputFor(key) { return rootEl.querySelector('input[data-key="' + key + '"]'); }
+    function valueOf(key) { var el = inputFor(key); return el ? el.value : ''; }
+    var selects = {};
+    function build(key, keepValue) {
+      var input = inputFor(key);
+      if (!input) return;
+      var sel = selects[key];
+      if (!sel) {
+        sel = document.createElement('select');
+        sel.className = 'tax-select';
+        input.parentNode.insertBefore(sel, input);
+        selects[key] = sel;
+        sel.addEventListener('change', function () {
+          if (sel.value === NEW_VALUE) {
+            input.style.display = '';
+            input.value = '';
+            input.placeholder = 'Type the new value';
+            input.focus();
+          } else {
+            input.style.display = 'none';
+            input.value = sel.value;
+          }
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          if (key === 'industry') { if (inputFor('business_domain')) { inputFor('business_domain').value = ''; build('business_domain', false); } }
+        });
+      }
+      var options = fields[key]();
+      var current = keepValue ? input.value : '';
+      var html = '<option value="">— Select —</option>';
+      options.forEach(function (o) {
+        html += '<option value="' + o.replace(/"/g, '&quot;') + '">' + o.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+      });
+      html += '<option value="' + NEW_VALUE + '">+ Add new…</option>';
+      sel.innerHTML = html;
+      if (current && options.indexOf(current) !== -1) { sel.value = current; input.style.display = 'none'; }
+      else if (current) { sel.value = NEW_VALUE; input.style.display = ''; input.placeholder = 'Type the new value'; }
+      else { sel.value = ''; input.style.display = 'none'; input.value = ''; }
+    }
+    build('industry', true);
+    build('business_domain', true);
+    build('sector', true);
+    build('primary_business_category', true);
+    build('business_model', true);
+  }
+
   return {
+    wireTaxonomy: wireTaxonomy,
     chunkProfile: chunkProfile,
     BILLING_KEYS: BILLING_KEYS,
     composeAddress: composeAddress,

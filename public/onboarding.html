@@ -31,6 +31,8 @@
   .profile-field.wide { grid-column:1 / -1; }
   .profile-field span { margin-bottom:4px; }
   .profile-field small { color:#9ca3af; }
+  .tax-select { font-family:inherit; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; color:#262420; width:100%; background:#fff; }
+  .tax-select + input { margin-top:6px; }
   input, textarea { font-size:14px; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-family:inherit; }
   button.primary { background:#111827; color:#fff; border:none; padding:12px 28px; border-radius:6px; font-size:15px; cursor:pointer; }
   button.primary:disabled { opacity:.6; cursor:default; }
@@ -49,6 +51,7 @@
   <div class="brand">Openink Hub</div>
   <div class="card" id="root"><p class="center-state">Loading…</p></div>
 </div>
+<script src="taxonomy.js"></script>
 <script src="profile-fields.js"></script>
 <script>
 (function(){
@@ -166,6 +169,7 @@
       'it tells us your profile is ready, it does not save any fields itself.</p></div>';
     html += '</form>';
     root.innerHTML = html;
+    ProfileFields.wireTaxonomy(document.getElementById('onbForm'));
     document.getElementById('onbForm').addEventListener('submit', function(e){ e.preventDefault(); });
     Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
       btn.addEventListener('click', function(){

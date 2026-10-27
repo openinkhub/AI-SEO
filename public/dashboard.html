@@ -84,6 +84,8 @@
   .profile-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);}
   .profile-field.wide{grid-column:1 / -1;}
   .profile-field input,.profile-field textarea{font-family:'Work Sans',sans-serif;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:#262420;width:100%;resize:vertical;}
+  .tax-select { font-family:inherit; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; color:#262420; width:100%; background:#fff; }
+  .tax-select + input { margin-top:6px; }
   .run-row{border:1px solid var(--border-soft);border-radius:8px;padding:12px;margin-bottom:10px;}
   .run-row .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
   .row-actions{display:flex;gap:8px;flex-wrap:wrap;}
@@ -139,6 +141,7 @@
   </aside>
   <main id="page"><p class="muted">Loading…</p></main>
 </div>
+<script src="taxonomy.js"></script>
 <script src="profile-fields.js"></script>
 <script>
 (function(){
@@ -811,6 +814,7 @@
     });
     h += '</div></section>';
     document.getElementById('layer2').innerHTML = h;
+    ProfileFields.wireTaxonomy(document.getElementById('profileForm'));
     PROFILE_FIELD_GROUPS.forEach(function(g, gi){ updateGroupCount(gi); });
     Array.prototype.forEach.call(document.querySelectorAll('.group-save-btn'), function(btn){
       btn.addEventListener('click', function(){ saveProfileGroup(parseInt(btn.getAttribute('data-group-index'), 10)); });
