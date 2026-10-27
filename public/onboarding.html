@@ -22,6 +22,9 @@
   p.lead { color:#6b7280; font-size:14px; margin:0 0 24px; }
   .profile-group { border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px; }
   .profile-group h3 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:#6b7280; margin:0 0 12px; }
+  .save-note { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px; margin:0 0 20px; font-size:14px; color:#1e3a8a; }
+  .save-note b { display:block; margin-bottom:4px; }
+  .group-save-hint { font-size:12px; color:#6b7280; }
   .group-save-row { display:flex; align-items:center; gap:10px; margin-top:14px; }
   .profile-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .profile-field { display:flex; flex-direction:column; font-size:13px; color:#374151; }
@@ -103,6 +106,10 @@
     html += '<p class="lead">Tell us about your business so we can start your SEO work. ' +
       'Save each section as you go - there is no need to fill in everything at once. ' +
       'You can come back and update these details any time using the same link.</p>';
+    html += '<div class="save-note"><b>Please save each section before moving on.</b>' +
+      'This form has 9 sections, and each one has its own save button: <em>Save to Proceed further</em>. ' +
+      'Click it at the end of every section - anything you type but do not save is not recorded. ' +
+      'When all sections are saved, click Submit profile at the bottom.</div>';
     if (data.completedAt) {
       html += '<p class="lead" style="color:#059669;">You already submitted this on ' +
         new Date(data.completedAt).toLocaleString() + ' - feel free to review and update below.</p>';
@@ -112,7 +119,7 @@
       '<input value="' + escapeHtml(data.accountEmail || '') + '" disabled /></label>' +
       '<label class="profile-field"><span>Notification email <small>(optional - leave blank to use your registered email)</small></span>' +
       '<input id="notifEmail" type="email" value="' + escapeHtml(data.notificationEmail || '') + '" placeholder="' + escapeHtml(data.accountEmail || 'name@example.com') + '" /></label>' +
-      '</div><div class="group-save-row"><button type="button" class="secondary" id="notifSaveBtn">Save notification email</button>' +
+      '</div><div class="group-save-row"><button type="button" class="secondary" id="notifSaveBtn">Save to Proceed further</button>' +
       ' <span id="notifMsg" class="msg"></span></div></div>';
     html += '<form id="onbForm">';
     ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group, gi){
@@ -132,7 +139,7 @@
         }
         html += '</label>';
       });
-      html += '</div><div class="group-save-row"><button type="button" class="secondary group-save-btn" data-group-index="' + gi + '">Save this section</button>' +
+      html += '</div><div class="group-save-row"><button type="button" class="secondary group-save-btn" data-group-index="' + gi + '">Save to Proceed further</button>' +
         ' <span id="saveMsg_' + gi + '" class="msg"></span></div></div>';
     });
     // Billing details: its own card + Save button (saved independently, like the sections above).
@@ -150,7 +157,7 @@
     };
     html += '<div class="profile-group" id="billingGroup"><h3>Billing details</h3>' +
       ProfileFields.billingFormHtml(profile, data.companyName) +
-      '<div class="group-save-row"><button type="button" class="secondary" id="billSaveBtn">Save billing details</button>' +
+      '<div class="group-save-row"><button type="button" class="secondary" id="billSaveBtn">Save to Proceed further</button>' +
       ' <span id="billMsg" class="msg"></span></div></div>';
     html += '<div class="final-submit"><button type="button" id="finalSubmitBtn" class="primary">' +
       (data.completedAt ? 'Mark profile complete again' : 'Submit profile') + '</button>' +
