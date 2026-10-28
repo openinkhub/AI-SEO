@@ -372,6 +372,45 @@ function renderCrawl(d: Record<string, any>): string {
   return h;
 }
 
+function renderGsc(d: Record<string, any>): string {
+  const f = (v: any) => (v == null ? '' : String(v));
+  const t = d.totals ?? {};
+  const c = d.change ?? {};
+  const delta = (v: any) => (v == null ? '' : ` (${v > 0 ? '+' : ''}${v}%)`);
+  let h = kvTable([
+    ['Property', d.property],
+    ['Period', d.period ? `${d.period.start} to ${d.period.end} (${d.period.days} days, compared with the ${d.period.days} days before)` : null],
+    ['Clicks', t.clicks != null ? `${t.clicks}${delta(c.clicks)}` : null],
+    ['Impressions', t.impressions != null ? `${t.impressions}${delta(c.impressions)}` : null],
+    ['Average click rate', t.ctr != null ? `${t.ctr}%` : null],
+    ['Average position', t.position != null ? `${t.position}${c.position != null ? ` (${c.position > 0 ? '+' : ''}${c.position} vs before)` : ''}` : null],
+  ]);
+  const q = (d.topQueries ?? []) as Array<Record<string, any>>;
+  if (q.length) h += '<h4>Top search queries</h4>' + grid(['Query', 'Clicks', 'Impressions', 'Click rate %', 'Position'], q.slice(0, 15).map((x) => [x.query, f(x.clicks), f(x.impressions), f(x.ctr), f(x.position)]));
+  const p = (d.topPages ?? []) as Array<Record<string, any>>;
+  if (p.length) h += '<h4>Top pages</h4>' + grid(['Page', 'Clicks', 'Impressions', 'Position', 'Clicks change'], p.slice(0, 15).map((x) => [x.page, f(x.clicks), f(x.impressions), f(x.position), x.change != null ? `${x.change > 0 ? '+' : ''}${x.change}%` : '']));
+  const w = (d.quickWins ?? []) as Array<Record<string, any>>;
+  if (w.length) h += '<h4>Quick wins (ranking 4-20, close to page one)</h4>' + grid(['Query', 'Position', 'Impressions', 'Extra clicks if top 3'], w.map((x) => [x.query, f(x.position), f(x.impressions), f(x.extraClicksIfTop3)]));
+  const l = (d.lowCtr ?? []) as Array<Record<string, any>>;
+  if (l.length) h += '<h4>Ranking well but rarely clicked (rewrite title / description)</h4>' + grid(['Query', 'Position', 'Impressions', 'Click rate %', 'Normal for this position %'], l.map((x) => [x.query, f(x.position), f(x.impressions), f(x.ctr), f(x.expectedCtr)]));
+  const k = (d.cannibalization ?? []) as Array<Record<string, any>>;
+  if (k.length) h += '<h4>Pages competing for the same query</h4>' + grid(['Query', 'Impressions', 'Pages (position)'], k.map((x) => [x.query, f(x.impressions), (x.pages ?? []).map((y: any) => `${y.page} (#${y.position})`).join(' | ')]));
+  const dc = (d.decaying ?? []) as Array<Record<string, any>>;
+  if (dc.length) h += '<h4>Pages losing traffic</h4>' + grid(['Page', 'Clicks before', 'Clicks now', 'Change'], dc.map((x) => [x.page, f(x.prevClicks), f(x.clicks), x.change != null ? `${x.change}%` : '']));
+  const ix = d.indexing ?? {};
+  if (ix.inspected) {
+    h += `<h4>Indexing check (${esc(ix.inspected)} top pages inspected)</h4>`;
+    h += (ix.notIndexed ?? []).length ? grid(['Page', 'Verdict', 'Reason'], ix.notIndexed.map((x: any) => [x.url, x.verdict, x.coverage])) : '<p>All inspected pages are indexed by Google.</p>';
+    if ((ix.canonicalMismatch ?? []).length) h += '<h4>Google chose a different canonical</h4>' + grid(['Page', 'Google canonical', 'Declared canonical'], ix.canonicalMismatch.map((x: any) => [x.url, x.google, x.declared]));
+  }
+  const sm = (d.sitemaps ?? []) as Array<Record<string, any>>;
+  if (sm.length) h += '<h4>Sitemaps</h4>' + grid(['Sitemap', 'Submitted', 'Indexed', 'Errors', 'Warnings'], sm.map((x) => [x.path, f(x.submitted), f(x.indexed), f(x.errors), f(x.warnings)]));
+  const dv = (d.devices ?? []) as Array<Record<string, any>>;
+  if (dv.length) h += '<h4>Devices</h4>' + grid(['Device', 'Clicks', 'Impressions', 'Click rate %', 'Position'], dv.map((x) => [x.device, f(x.clicks), f(x.impressions), f(x.ctr), f(x.position)]));
+  if ((d.notes ?? []).length) h += `<p class="ev-src">Parts Google did not return: ${esc((d.notes as string[]).join('; '))}</p>`;
+  return h;
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -430,6 +469,7 @@ function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
   if (type === 'site_crawl') return 'Website crawl (your own pages)';
+  if (type === 'gsc_performance') return 'Google Search Console (search performance and indexing)';
   if (type === 'moz_authority') return 'Domain Authority (Moz)';
   if (type === 'ahrefs_domain_rating') return 'Domain Rating (Ahrefs)';
   if (type === 'research_keywords') return 'Keyword research';
@@ -446,7 +486,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : tool === 'sitescan' ? 'Openink Hub site crawl' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'gsc' ? 'Google Search Console' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : tool === 'sitescan' ? 'Openink Hub site crawl' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer', opts: { side?: 'internal' | 'external'; heading?: string } = {}): string {
@@ -466,6 +506,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'site_crawl' ? renderCrawl(d)
+        : e.evidenceType === 'gsc_performance' ? renderGsc(d)
         : e.evidenceType === 'moz_authority' ? renderMoz(d)
         : e.evidenceType === 'ahrefs_domain_rating' ? renderAhrefsDr(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')

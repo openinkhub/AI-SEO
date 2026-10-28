@@ -1,6 +1,7 @@
 import { mangoolsGet } from '../../customer-apis/mangools/client';
 import { serpSearch, SerpResult } from './serp';
 import { captureHomepage } from './screenshots';
+import { analyseGsc } from './gsc';
 
 export interface Research {
   type: string; // evidence type
@@ -20,6 +21,8 @@ export interface ResearchInput {
   serpApiKey?: string;
   customerId?: string;
   screenshotKey?: string;
+  // Pulls the raw Search Console export from WordPress (plugin route); undefined when the customer has no WP user.
+  gscFetch?: () => Promise<Record<string, any>>;
   storeImage?: (name: string, buf: Buffer, contentType: string) => Promise<string | null>;
 }
 
@@ -123,6 +126,12 @@ export async function runFetchResearch(i: ResearchInput): Promise<Research[]> {
   const shots = await captureHomepage(i.screenshotKey, i.domain, i.customerId ?? 'customer', i.storeImage);
   if (!shots.some((s) => s.ok)) throw new Error(`ScreenshotOne: ${shots.map((s) => `${s.device} ${s.error}`).join('; ')}`);
   return [{ type: 'screenshots', tool: 'screenshotone', label: 'Homepage screenshots', data: { site: i.domain, captured: shots } }];
+}
+
+// Search Console (clicks, queries, pages, indexing) read through the WordPress plugin's common Google account.
+export async function runGscResearch(i: ResearchInput): Promise<Research[]> {
+  if (!i.gscFetch) throw new Error('Search Console is not reachable: this customer has no WordPress user id, or WP_BASE_URL / WP_ENGINE_API_KEY is not set on the Engine.');
+  return [{ type: 'gsc_performance', tool: 'gsc', label: 'Google Search Console', data: analyseGsc(await i.gscFetch()) }];
 }
 
 export async function runLocalResearch(i: ResearchInput): Promise<Research[]> {

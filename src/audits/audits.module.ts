@@ -13,6 +13,7 @@ import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { EvidenceService } from './evidence/evidence.service';
 import { EvidenceController } from './evidence/evidence.controller';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
+import { WpClientService } from '../wp-integration/wp-client.service';
 import { CustomerApisModule } from '../customer-apis/customer-apis.module';
 import { WpAuditsController } from './wp-audits.controller';
 import { Project } from '../projects/project.entity';
@@ -28,7 +29,7 @@ import { PackageController } from './package/package.controller';
     PageImagesModule,
     MulterModule.register({}),
   ],
-  providers: [AuditsService, EvidenceService, PackageService, WpApiKeyGuard],
+  providers: [AuditsService, EvidenceService, PackageService, WpApiKeyGuard, WpClientService],
   controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController],
 })
 export class AuditsModule {}

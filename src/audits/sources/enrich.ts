@@ -4,7 +4,7 @@ import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
 import { LIVE_SOURCES, SOURCE_LABEL, SourceKey, TASK_SOURCE } from './task-map';
 import { crawlSite } from './site-crawl';
-import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runKeywordResearch, runLocalResearch } from './runners';
+import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runGscResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
 
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
@@ -17,6 +17,7 @@ const FEEDS: Partial<Record<SourceKey, string[]>> = {
   local: ['research_local'],
   pagespeed: ['pagespeed_report'],
   fetch: ['site_crawl', 'screenshots'],
+  gsc: ['gsc_performance'],
 };
 
 export interface EnrichDeps {
@@ -65,6 +66,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     ['competitors', () => runCompetitorResearch(input)],
     ['local', () => runLocalResearch(input)],
     ['fetch', () => runFetchResearch(input)],
+    ['gsc', () => runGscResearch(input)],
   ];
   const failed = new Map<SourceKey, string>();
   let step = 0;

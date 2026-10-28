@@ -155,7 +155,7 @@ export const SOURCE_LABEL: Record<SourceKey, string> = {
   local: 'Local search research (Google local results)',
   pagespeed: 'Google PageSpeed Insights',
   fetch: 'Page fetch / screenshot tools',
-  gsc: 'Google Search Console / GA4',
+  gsc: 'Google Search Console',
   na: 'Not an SEO audit task',
 };
 
@@ -177,7 +177,7 @@ export const SOURCE_SIDE: Record<SourceKey, AuditSide> = {
   na: 'other',
 };
 
-const EXTERNAL_TOOLS = new Set(['mangools', 'serpapi', 'moz', 'ahrefs', 'frase']);
+const EXTERNAL_TOOLS = new Set(['mangools', 'serpapi', 'moz', 'ahrefs', 'frase', 'gsc']);
 const EXTERNAL_TYPE = /^(mangools_|research_|moz_|ahrefs_|frase_)/;
 export function evidenceSide(tool: string | null | undefined, type: string | null | undefined): 'internal' | 'external' {
   if (type && EXTERNAL_TYPE.test(type)) return 'external';
@@ -187,7 +187,7 @@ export function evidenceSide(tool: string | null | undefined, type: string | nul
 
 // Sources the Engine can run today, in run order ('ai' last: it reads everything the others collected).
 // Everything else stays an honest "pending" row.
-export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'pagespeed', 'fetch', 'ai'];
+export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'pagespeed', 'fetch', 'gsc', 'ai'];
 
 // Which API / tool feeds each source, whether the Engine can run it today, and which key it needs.
 export const SOURCE_API: Record<SourceKey, { api: string; key: string; wired: boolean }> = {
@@ -201,7 +201,7 @@ export const SOURCE_API: Record<SourceKey, { api: string; key: string; wired: bo
   local: { api: 'SerpApi Google local results', key: 'Customer key: SerpApi', wired: true },
   pagespeed: { api: 'Google PageSpeed Insights', key: 'Customer key: PageSpeed', wired: true },
   fetch: { api: 'Engine page crawl + ScreenshotOne homepage screenshots', key: 'Customer key: ScreenshotOne', wired: true },
-  gsc: { api: 'Google Search Console / GA4 - not built', key: 'Google OAuth on the Engine', wired: false },
+  gsc: { api: 'Google Search Console (via the WP plugin, common Google account)', key: 'WP plugin v8.9.277+ and Google access to the customer property', wired: true },
   na: { api: 'Not an SEO audit task', key: '-', wired: false },
 };
 

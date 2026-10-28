@@ -25,6 +25,8 @@ import { AuditPackage } from './package/audit-package.entity';
 import { pendingCustomerPageHtml } from './package/package-builder';
 import { createHash } from 'crypto';
 import { StorageService } from '../page-images/storage.service';
+import { WpClientService } from '../wp-integration/wp-client.service';
+import { fetchGscExport } from './sources/gsc';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
 const ymd = (v: unknown): string | null => {
@@ -87,6 +89,7 @@ export class AuditsService implements OnModuleInit {
     private readonly apis: CustomerApisService,
     private readonly globals: GlobalApisService,
     private readonly storage: StorageService,
+    private readonly wp: WpClientService,
   ) {}
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":
@@ -271,6 +274,8 @@ export class AuditsService implements OnModuleInit {
           serpApiKey: keys.serpapi?.apiKey,
           customerId,
           screenshotKey: keys.screenshotone?.apiKey,
+          // Search Console comes from the WP plugin (common Google account), so it needs the customer's WP user id.
+          gscFetch: customer.wpUserId ? () => fetchGscExport((p) => this.wp.requestWithApiKey<any>(p), customer.wpUserId, site, keys.google_ids?.gscProperty) : undefined,
           storeImage: async (name, buf, contentType) => {
             try {
               return (await this.storage.put(customerId, name, buf, contentType, 'audit-screenshots')).url;
