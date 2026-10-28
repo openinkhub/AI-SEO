@@ -255,6 +255,7 @@ export class PackageService {
       run,
       tasks,
       evidence,
+      pages: await this.audits.reportPages(customerId),
       strategy,
       preview,
       signedAt,

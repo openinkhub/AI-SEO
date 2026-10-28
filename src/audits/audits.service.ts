@@ -114,7 +114,7 @@ export class AuditsService implements OnModuleInit {
   ) {}
 
   // The customer's website pages for the report's "Website pages" list (page, URL, H1 keyword, meta tags).
-  private async reportPages(customerId: string) {
+  async reportPages(customerId: string) {
     const rows = await this.pageRepo.find({ where: { customerId }, order: { pageUrl: 'ASC' } });
     const images = new Map((await this.imageRepo.find({ where: { customerId } })).map((i) => [i.id, i]));
     return rows.map((p) => {
