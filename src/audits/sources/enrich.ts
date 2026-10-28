@@ -54,8 +54,18 @@ function withTimeout<T>(p: Promise<T>, label: string, ms = STEP_TIMEOUT_MS): Pro
 
 export type EnrichProgress = (message: string) => Promise<void> | void;
 
-export async function enrichRun(deps: EnrichDeps, customerId: string, runId: string, input: ResearchInput, site: string, onProgress?: EnrichProgress): Promise<string[]> {
+export interface EnrichOptions {
+  // Collect only the sources that still have an unfinished task; finished tasks keep their result and their sources are not re-fetched.
+  blockedOnly?: boolean;
+}
+
+export async function enrichRun(deps: EnrichDeps, customerId: string, runId: string, input: ResearchInput, site: string, onProgress?: EnrichProgress, opts: EnrichOptions = {}): Promise<string[]> {
   const notes: string[] = [];
+  const pendingSources = new Set<string>();
+  if (opts.blockedOnly) {
+    for (const t of await deps.taskRepo.find({ where: { auditRunId: runId } })) if (!t.isAutomated && TASK_SOURCE[t.skillId]) pendingSources.add(TASK_SOURCE[t.skillId]);
+    if (!pendingSources.size) notes.push('Nothing blocked - no source needed collecting.');
+  }
   const progress = async (m: string) => {
     try {
       await onProgress?.(m);
@@ -75,6 +85,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
   let step = 0;
   for (const [key, run] of runners) {
     step += 1;
+    if (opts.blockedOnly && !pendingSources.has(key)) continue; // all its tasks are finished: do not fetch it again
     await progress(`step ${step}/${runners.length + LIVE_SOURCES.length}: collecting ${SOURCE_LABEL[key]}`);
     try {
       for (const r of await withTimeout(run(), SOURCE_LABEL[key])) await saveResearch(deps, customerId, runId, r);

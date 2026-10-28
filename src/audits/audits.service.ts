@@ -231,12 +231,12 @@ export class AuditsService implements OnModuleInit {
 
   // Keyword / competitor / local research + per-task write-ups. Runs in the background after the audit is saved
   // (many sequential calls), and can be run again for an existing run (the audit itself is once per cycle).
-  async startEnrich(customerId: string, runId: string): Promise<AuditRun> {
+  async startEnrich(customerId: string, runId: string, blockedOnly = false): Promise<AuditRun> {
     const run = await this.findOne(customerId, runId);
     run.enrichStatus = 'running';
-    run.enrichNote = this.stamp('starting');
+    run.enrichNote = this.stamp(blockedOnly ? 'starting (blocked sources only)' : 'starting');
     const saved = await this.runRepo.save(run);
-    void this.enrich(customerId, runId);
+    void this.enrich(customerId, runId, blockedOnly);
     return saved;
   }
 
@@ -246,7 +246,7 @@ export class AuditsService implements OnModuleInit {
     return `${t} · ${message}`;
   }
 
-  private async enrich(customerId: string, runId: string): Promise<void> {
+  private async enrich(customerId: string, runId: string, blockedOnly = false): Promise<void> {
     let status = 'done';
     let note: string | null = null;
     try {
@@ -303,6 +303,7 @@ export class AuditsService implements OnModuleInit {
         async (message) => {
           await this.runRepo.update({ id: runId }, { enrichNote: this.stamp(message).slice(0, 300) });
         },
+        { blockedOnly },
       );
       if (!keys.screenshotone?.apiKey) skipped.push('ScreenshotOne: no key set for this customer (no screenshots taken)');
       const all = [...skipped, ...notes];

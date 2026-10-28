@@ -1397,6 +1397,11 @@
         resBtn.disabled = true;
         api('/customers/' + state.cid + '/audits/' + r.id + '/enrich', { method: 'POST' }).then(function(){ loadRuns(); }).catch(function(err){ resBtn.disabled = false; alert('Could not start research: ' + err.message); });
       });
+      var resBlkBtn = document.getElementById('research-blocked-' + r.id);
+      if (resBlkBtn) resBlkBtn.addEventListener('click', function(){
+        resBlkBtn.disabled = true;
+        api('/customers/' + state.cid + '/audits/' + r.id + '/enrich?mode=blocked', { method: 'POST' }).then(function(){ loadRuns(); }).catch(function(err){ resBlkBtn.disabled = false; alert('Could not start research: ' + err.message); });
+      });
       var refreshBtn = document.getElementById('refresh-' + r.id);
       if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
     });
@@ -1426,6 +1431,7 @@
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
     html += '<button id="evidence-' + r.id + '">' + (panel === 'evidence' ? 'Hide evidence' : 'Evidence') + '</button>';
     html += '<button id="research-' + r.id + '"' + (r.status !== 'completed' || r.enrichStatus === 'running' ? ' disabled' : '') + '>Run research</button>';
+    html += '<button id="research-blocked-' + r.id + '" title="Collect only the sources that still have blocked or waiting tasks"' + (r.status !== 'completed' || r.enrichStatus === 'running' ? ' disabled' : '') + '>Run blocked only</button>';
     html += '<button id="package-' + r.id + '">' + (panel === 'package' ? 'Hide package' : 'Package') + '</button>';
     html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;

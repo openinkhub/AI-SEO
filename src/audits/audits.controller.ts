@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditsService } from './audits.service';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
@@ -28,8 +28,9 @@ export class AuditsController {
 
   // Re-run the research enrichment for an existing run (keyword / competitor / local sources + task write-ups).
   @Post(':runId/enrich')
-  enrich(@Param('customerId') customerId: string, @Param('runId') runId: string) {
-    return this.service.startEnrich(customerId, runId);
+  // ?mode=blocked collects only the sources that still have unfinished (blocked / waiting) tasks.
+  enrich(@Param('customerId') customerId: string, @Param('runId') runId: string, @Query('mode') mode?: string) {
+    return this.service.startEnrich(customerId, runId, mode === 'blocked');
   }
 
   @Get(':runId')
