@@ -1317,10 +1317,33 @@
     if (!box) return;
     box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Day 3</span>SEO Audit</h2>' +
       '<button class="primary" id="runAuditBtn">Run SEO Audit</button></div>' +
-      '<p class="lead">Audits the customer’s website with the SEO skill matrix (each skill is a task). The branded report is what the customer sees in Layer 3 of their panel.</p>' +
+      '<p class="lead">Audits the customer’s website with the SEO skill matrix (each skill is a task). It runs once per month cycle, from Day 3. The customer sees one compiled document (SEO Report + Strategy + Deliverables + Terms &amp; Conditions) after you compile it from the Package button.</p>' +
+      '<div id="auditRule" class="muted" style="margin:6px 0 10px">Checking the month cycle…</div>' +
       '<div id="runsList"><p class="muted">Loading audits…</p></div></section>';
     document.getElementById('runAuditBtn').addEventListener('click', runAudit);
+    loadRule();
     loadRuns();
+  }
+
+  function loadRule() {
+    var cid = state.cid;
+    return api('/customers/' + cid + '/audits/rule').then(function(r){
+      if (cid !== state.cid) return;
+      state.rule = r;
+      var box = document.getElementById('auditRule');
+      var btn = document.getElementById('runAuditBtn');
+      if (box) {
+        var bits = [];
+        if (r.monthCode) bits.push('<strong>' + escapeHtml(r.monthCode) + '</strong> ' + escapeHtml(fmtDay(r.monthStart)) + ' – ' + escapeHtml(fmtDay(r.monthEnd)));
+        if (r.unlockDate) bits.push('unlocks ' + escapeHtml(fmtDay(r.unlockDate)) + ' (Day 3)');
+        box.innerHTML = '<span class="badge ' + (r.canRun ? 'ok' : 'pending') + '">' + (r.canRun ? 'can run now' : (r.runExists ? 'done this cycle' : 'locked')) + '</span> ' +
+          (bits.length ? bits.join(' · ') + '<br>' : '') + escapeHtml(r.reason || '');
+      }
+      if (btn) { btn.disabled = !r.canRun; btn.title = r.canRun ? '' : (r.reason || ''); }
+    }).catch(function(err){
+      var box = document.getElementById('auditRule');
+      if (box) box.textContent = 'Could not check the month cycle: ' + err.message;
+    });
   }
 
   function loadRuns() {
@@ -1347,6 +1370,7 @@
       .finally(function(){
         var b = document.getElementById('runAuditBtn');
         if (b) { b.disabled = false; b.textContent = 'Run SEO Audit'; }
+        loadRule();
       });
   }
 
@@ -1364,6 +1388,8 @@
       if (pushesBtn) pushesBtn.addEventListener('click', function(){ togglePanel(r.id, 'pushes'); });
       var evBtn = document.getElementById('evidence-' + r.id);
       if (evBtn) evBtn.addEventListener('click', function(){ togglePanel(r.id, 'evidence'); });
+      var pkgBtn = document.getElementById('package-' + r.id);
+      if (pkgBtn) pkgBtn.addEventListener('click', function(){ togglePanel(r.id, 'package'); });
       var refreshBtn = document.getElementById('refresh-' + r.id);
       if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
     });
@@ -1371,6 +1397,7 @@
       if (state.expanded[r.id] === 'tasks') loadTasks(r.id);
       if (state.expanded[r.id] === 'pushes') loadPushes(r.id);
       if (state.expanded[r.id] === 'evidence') loadEvidence(r.id);
+      if (state.expanded[r.id] === 'package') loadPackage(r.id);
     });
   }
 
@@ -1387,6 +1414,7 @@
     html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
     html += '<button id="evidence-' + r.id + '">' + (panel === 'evidence' ? 'Hide evidence' : 'Evidence') + '</button>';
+    html += '<button id="package-' + r.id + '">' + (panel === 'package' ? 'Hide package' : 'Package') + '</button>';
     html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;
   }
@@ -1751,6 +1779,102 @@
         .then(next);
     }
     next();
+  }
+
+  // ---- Customer package: Strategy + sign-off + Compile ----------------
+
+  function pkgBase(runId) { return evBase(runId) + '/package'; }
+
+  function loadPackage(runId) {
+    var panel = document.getElementById('panel-' + runId);
+    if (!panel) return;
+    panel.innerHTML = '<p class="muted">Loading package…</p>';
+    api(pkgBase(runId)).then(function(st){ renderPackage(runId, st); })
+      .catch(function(err){
+        var p = document.getElementById('panel-' + runId);
+        if (p) p.innerHTML = '<p class="muted">Failed to load package: ' + escapeHtml(err.message) + '</p>';
+      });
+  }
+
+  function pkgAct(runId, path, method, body, busyMsg) {
+    var note = document.getElementById('pkgMsg-' + runId);
+    if (note) note.textContent = busyMsg || 'Working…';
+    return api(pkgBase(runId) + path, { method: method || 'POST', body: body || {} })
+      .then(function(st){ renderPackage(runId, st); })
+      .catch(function(err){
+        var n = document.getElementById('pkgMsg-' + runId);
+        if (n) n.innerHTML = '<span style="color:var(--fail)">' + escapeHtml(err.message) + '</span>';
+      });
+  }
+
+  function renderPackage(runId, st) {
+    var panel = document.getElementById('panel-' + runId);
+    if (!panel) return;
+    var gates = (st.gates || []).map(function(g){
+      var items = (g.items || []).map(function(i){
+        return '<li style="margin:2px 0">' + (i.ok ? '✓' : '✗') + ' ' + escapeHtml(i.label) + ' <span class="muted">— ' + escapeHtml(i.detail) + '</span></li>';
+      }).join('');
+      return '<div style="margin:6px 0"><span class="badge ' + (g.ok ? 'ok' : 'pending') + '">' + (g.ok ? 'done' : 'to do') + '</span> <strong>' + escapeHtml(g.label) + '</strong> ' +
+        '<span class="muted">' + escapeHtml(g.detail) + '</span>' + (items ? '<ul style="margin:4px 0 0 28px;padding:0;list-style:none;font-size:13px">' + items + '</ul>' : '') + '</div>';
+    }).join('');
+    var s = st.strategy;
+    var stratHtml;
+    if (!s) {
+      stratHtml = '<p class="muted">No strategy yet. It is drafted from the audit findings and the tool evidence; you review, edit and approve it.</p>';
+    } else {
+      stratHtml = '<p style="margin:6px 0">' + escapeHtml(s.executiveSummary || '') + '</p>' +
+        '<ol style="margin:6px 0 6px 20px;padding:0;font-size:13px">' + (s.priorities || []).map(function(p){
+          return '<li><strong>' + escapeHtml(p.title) + '</strong> <span class="muted">(' + escapeHtml(p.area) + (p.when ? ', ' + escapeHtml(p.when) : '') + ')</span></li>';
+        }).join('') + '</ol>';
+    }
+    var statusTxt = st.strategyStatus === 'approved' ? 'approved' : (st.strategyStatus === 'draft' ? 'draft — needs your approval' : 'not written');
+    var src = st.strategySource === 'ai' ? 'AI draft' : (st.strategySource === 'rules' ? 'rules-based draft' : (st.strategySource || ''));
+    panel.innerHTML = '<div class="ev-wrap">' +
+      '<p class="muted" style="margin:4px 0">The customer sees ONE document: SEO Report + Strategy + Deliverables + Terms &amp; Conditions. Until you compile it they see “being prepared”.</p>' +
+      '<h4 style="margin:10px 0 4px">Checklist</h4>' + gates +
+      '<h4 style="margin:12px 0 4px">Strategy <span class="badge ' + (st.strategyStatus === 'approved' ? 'ok' : 'pending') + '">' + escapeHtml(statusTxt) + '</span> <span class="muted">' + escapeHtml(src) + '</span></h4>' +
+      (st.strategyNote ? '<p class="muted" style="margin:2px 0">' + escapeHtml(st.strategyNote) + '</p>' : '') +
+      stratHtml +
+      '<div class="row-actions" style="margin:8px 0">' +
+        '<button id="pkgGen-' + runId + '">' + (s ? 'Re-generate draft' : 'Generate strategy draft') + '</button>' +
+        (s ? '<button id="pkgEdit-' + runId + '">Edit strategy (JSON)</button>' : '') +
+        (s && st.strategyStatus !== 'approved' ? '<button class="primary" id="pkgApprove-' + runId + '">Approve strategy</button>' : '') +
+        (s && st.strategyStatus === 'approved' ? '<button id="pkgUnapprove-' + runId + '">Unapprove</button>' : '') +
+      '</div><div id="pkgEditBox-' + runId + '"></div>' +
+      '<div style="margin:10px 0"><label><input type="checkbox" id="pkgSign-' + runId + '"' + (st.signedOff ? ' checked' : '') + '> <strong>Admin sign-off</strong> — I have checked the audit, uploads and strategy</label></div>' +
+      '<div class="row-actions" style="margin:8px 0">' +
+        '<button class="primary" id="pkgCompile-' + runId + '"' + (st.canCompile ? '' : ' disabled') + '>' + (st.compiled ? 'Re-compile customer document' : 'Compile customer document') + '</button>' +
+        '<button id="pkgPreview-' + runId + '">' + (st.compiled ? 'View customer document' : 'Preview (not compiled)') + '</button>' +
+        '<span class="muted" id="pkgMsg-' + runId + '">' + (st.compiled ? 'Compiled ' + escapeHtml(fmtDate(st.compiledAt)) + ' — the customer sees this version.' : (st.canCompile ? 'Ready to compile.' : 'Finish the checklist to enable Compile.')) + '</span>' +
+      '</div></div>';
+    var on = function(id, fn){ var el = document.getElementById(id + '-' + runId); if (el) el.addEventListener('click', fn); };
+    on('pkgGen', function(){
+      if (s && !confirm('Re-generating replaces the current strategy (and un-approves it). Continue?')) return;
+      pkgAct(runId, '/strategy/generate', 'POST', {}, 'Writing the strategy… this can take up to a minute.');
+    });
+    on('pkgApprove', function(){ pkgAct(runId, '/strategy/approve', 'POST', {}, 'Approving…'); });
+    on('pkgUnapprove', function(){ pkgAct(runId, '/strategy/unapprove', 'POST', {}, 'Un-approving…'); });
+    on('pkgCompile', function(){ pkgAct(runId, '/compile', 'POST', {}, 'Compiling the customer document…'); });
+    on('pkgPreview', function(){
+      api(pkgBase(runId) + '/preview').then(function(data){
+        var html = (data && data.__html) || '<p>Empty.</p>';
+        window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
+      }).catch(function(err){ alert('Could not load the document: ' + err.message); });
+    });
+    on('pkgEdit', function(){
+      var box = document.getElementById('pkgEditBox-' + runId);
+      if (!box) return;
+      box.innerHTML = '<textarea id="pkgJson-' + runId + '" style="width:100%;min-height:260px;font:12px/1.4 monospace"></textarea>' +
+        '<div class="row-actions" style="margin:6px 0"><button class="primary" id="pkgSave-' + runId + '">Save changes</button><button id="pkgCancel-' + runId + '">Cancel</button>' +
+        '<span class="muted">Saving makes it a draft again — approve it afterwards.</span></div>';
+      document.getElementById('pkgJson-' + runId).value = JSON.stringify(s, null, 2);
+      document.getElementById('pkgCancel-' + runId).addEventListener('click', function(){ box.innerHTML = ''; });
+      document.getElementById('pkgSave-' + runId).addEventListener('click', function(){
+        pkgAct(runId, '/strategy', 'PUT', { strategyJson: document.getElementById('pkgJson-' + runId).value }, 'Saving…');
+      });
+    });
+    var sign = document.getElementById('pkgSign-' + runId);
+    if (sign) sign.addEventListener('change', function(){ pkgAct(runId, '/signoff', 'POST', { signedOff: sign.checked }, 'Saving sign-off…'); });
   }
 
   function viewReport(runId) {

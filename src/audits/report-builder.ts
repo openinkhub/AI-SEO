@@ -50,6 +50,28 @@ export function buildCustomerReportHtml(
   customerName: string,
   evidence: AuditEvidence[] = [],
 ): string {
+  const bodyHtml = customerReportBody(run, tasks, evidence);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Openink Hub — SEO Audit — ${escapeHtml(customerName)}</title>
+${styleBlock()}
+</head>
+<body>
+  <header class="brand-header">
+    <div class="brand-mark">Openink Hub</div>
+    <h1>SEO Audit</h1>
+    <p class="meta">${escapeHtml(customerName)} &middot; ${escapeHtml(run.website ?? '')} &middot; ${formatDate(run.completedAt ?? run.createdAt)}</p>
+  </header>
+  ${bodyHtml}
+  <footer class="brand-footer">Prepared by Openink Hub &middot; SEO Audit</footer>
+</body>
+</html>`;
+}
+
+// Inner sections of the customer report (stats, findings, approved tool evidence) - reused by the compiled package.
+export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: AuditEvidence[] = []): string {
   const real = tasks.filter((t) => t.isAutomated && t.finding);
   const seen = new Set<string>();
   const items = real.filter((t) => {
@@ -68,28 +90,12 @@ export function buildCustomerReportHtml(
   const body = items.length
     ? `<section class="layers"><h2>Findings and suggestions</h2><table><thead><tr><th>What we found</th><th>What we suggest</th></tr></thead><tbody>${rows}</tbody></table></section>`
     : `<section class="layers"><h2>Findings and suggestions</h2><p class="empty">${escapeHtml(run.failureReason ?? 'No findings were produced for this audit.')}</p></section>`;
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>Openink Hub — SEO Audit — ${escapeHtml(customerName)}</title>
-${styleBlock()}
-</head>
-<body>
-  <header class="brand-header">
-    <div class="brand-mark">Openink Hub</div>
-    <h1>SEO Audit</h1>
-    <p class="meta">${escapeHtml(customerName)} &middot; ${escapeHtml(run.website ?? '')} &middot; ${formatDate(run.completedAt ?? run.createdAt)}</p>
-  </header>
-  <section class="summary">
+  return `<section class="summary">
     ${stat('Checks completed', real.length)}
     ${stat('Findings', items.length)}
   </section>
   ${body}
-  ${renderEvidenceHtml(evidence, 'customer')}
-  <footer class="brand-footer">Prepared by Openink Hub &middot; SEO Audit</footer>
-</body>
-</html>`;
+  ${renderEvidenceHtml(evidence, 'customer')}`;
 }
 
 function groupByLayer(tasks: AuditTask[]): Map<number, AuditTask[]> {
@@ -156,7 +162,7 @@ function appendixBlock(tasks: AuditTask[]): string {
   </section>`;
 }
 
-function styleBlock(): string {
+export function styleBlock(): string {
   return `<style>
     :root { --ink:#1a1a2e; --muted:#5b5b6e; --accent:#2563eb; --surface:#ffffff; --line:#e2e2ea; }
     body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin:0; background:#f6f6f9; color:var(--ink); }
@@ -180,7 +186,7 @@ function styleBlock(): string {
   </style>`;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }
 
@@ -188,6 +194,6 @@ function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
-function formatDate(d: Date): string {
+export function formatDate(d: Date): string {
   return new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 }

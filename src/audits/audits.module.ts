@@ -15,15 +15,20 @@ import { EvidenceController } from './evidence/evidence.controller';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { CustomerApisModule } from '../customer-apis/customer-apis.module';
 import { WpAuditsController } from './wp-audits.controller';
+import { Project } from '../projects/project.entity';
+import { AuditPackage } from './package/audit-package.entity';
+import { PackageService } from './package/package.service';
+import { PackageController } from './package/package.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence]),
+    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage]),
     CustomersModule,
+    CustomerApisModule,
     PageImagesModule,
     MulterModule.register({}),
   ],
-  providers: [AuditsService, EvidenceService, WpApiKeyGuard],
-  controllers: [AuditsController, EvidenceController, WpAuditsController],
+  providers: [AuditsService, EvidenceService, PackageService, WpApiKeyGuard],
+  controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController],
 })
 export class AuditsModule {}

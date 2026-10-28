@@ -32,6 +32,13 @@ export class AuditRun {
   @Column({ type: 'enum', enum: AuditRunStatus, default: AuditRunStatus.PENDING })
   status: AuditRunStatus;
 
+  // Month cycle this audit belongs to (the audit runs once per cycle). Null on runs made before the rule.
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  projectId: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  monthCode: string | null;
+
   @Column({ default: 0 })
   totalSkills: number;
 

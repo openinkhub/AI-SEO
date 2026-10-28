@@ -23,6 +23,7 @@ export interface ApiProvider {
   testable: boolean; // a live test call is implemented
   wired: boolean; // the Engine SEO Audit already uses it today
   anyOf?: boolean; // configured when at least one field is filled (no single required field)
+  required?: boolean; // must be configured before the customer SEO package can be compiled
 }
 
 const key = (label = 'API key'): ApiField => ({ name: 'apiKey', label, secret: true });
@@ -44,7 +45,7 @@ export const API_PROVIDERS: ApiProvider[] = [
     key: 'serpapi', label: 'SerpApi', group: 'Research & SERP data',
     description: 'Google AI Mode / PAA / SERP evidence.',
     fields: [key(), { name: 'monthlyLimit', label: 'Monthly search limit', secret: false, number: true, optional: true }],
-    usedBy: 'Layers 4-10 research, Layer 7 PAA, Layer 11 Google volume / SERP evidence.', testable: true, wired: false,
+    usedBy: 'Layers 4-10 research, Layer 7 PAA, Layer 11 Google volume / SERP evidence.', testable: true, wired: false, required: true,
   },
   {
     key: 'scrapedo', label: 'Scrape.do', group: 'Research & SERP data',
@@ -69,7 +70,7 @@ export const API_PROVIDERS: ApiProvider[] = [
       { name: 'locationId', label: 'KWFinder location ID', secret: false, number: true, optional: true },
       { name: 'languageId', label: 'KWFinder language ID', secret: false, number: true, optional: true },
     ],
-    usedBy: 'Layer 11 seed-keyword validation, Layer 12 market validation, backlink and AI-mention skills.', testable: false, wired: false,
+    usedBy: 'Layer 11 seed-keyword validation, Layer 12 market validation, backlink and AI-mention skills.', testable: false, wired: false, required: true,
   },
   {
     key: 'geekflare', label: 'Geekflare', group: 'Site analysis',
@@ -90,7 +91,7 @@ export const API_PROVIDERS: ApiProvider[] = [
   {
     key: 'pagespeed', label: 'Google PageSpeed Insights', group: 'Site analysis',
     description: 'Lighthouse scores and Core Web Vitals for the customer’s site.',
-    fields: [key()], usedBy: 'Added automatically to every SEO Audit run.', testable: true, wired: true,
+    fields: [key()], usedBy: 'Added automatically to every SEO Audit run.', testable: true, wired: true, required: true,
   },
   {
     key: 'google_ids', label: 'Google properties (common account)', group: 'Google',

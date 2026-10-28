@@ -20,6 +20,12 @@ export class AuditsController {
     return this.service.findAllForCustomer(customerId);
   }
 
+  // Once-per-cycle rule: is the audit unlocked (Day 3+) and has this cycle's audit been run?
+  @Get('rule')
+  rule(@Param('customerId') customerId: string) {
+    return this.service.ruleStatus(customerId);
+  }
+
   @Get(':runId')
   findOne(@Param('customerId') customerId: string, @Param('runId') runId: string) {
     return this.service.findOne(customerId, runId);

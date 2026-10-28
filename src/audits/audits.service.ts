@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditRun, AuditRunStatus } from './audit-run.entity';
@@ -13,7 +13,39 @@ import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { runPageSpeed } from '../customer-apis/pagespeed';
+import { Project } from '../projects/project.entity';
+import { todayInTz } from '../projects/month-cycle';
+import { AuditPackage } from './package/audit-package.entity';
+import { pendingCustomerPageHtml } from './package/package-builder';
 import { createHash } from 'crypto';
+
+// YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
+const ymd = (v: unknown): string | null => {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v));
+  return m ? m[1] : null;
+};
+const addDays = (d: string, n: number): string => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+const dateInTz = (d: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' }).format(new Date(d));
+
+// The SEO Audit runs once per month cycle, from Day 3 of the cycle (Day 1 = monthStartDate).
+// A run that failed or could not scan the site does not use up the cycle, so it can be retried.
+export interface AuditRuleStatus {
+  enforced: boolean;
+  today: string;
+  projectId: string | null;
+  monthCode: string | null;
+  monthIndex: number | null;
+  monthStart: string | null;
+  monthEnd: string | null;
+  unlockDate: string | null;
+  unlocked: boolean;
+  runExists: boolean;
+  existingRunId: string | null;
+  canRun: boolean;
+  reason: string;
+}
 
 @Injectable()
 export class AuditsService {
@@ -22,6 +54,8 @@ export class AuditsService {
     @InjectRepository(AuditTask) private readonly taskRepo: Repository<AuditTask>,
     @InjectRepository(LayerPush) private readonly pushRepo: Repository<LayerPush>,
     @InjectRepository(AuditEvidence) private readonly evidenceRepo: Repository<AuditEvidence>,
+    @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
+    @InjectRepository(AuditPackage) private readonly packageRepo: Repository<AuditPackage>,
     private readonly customersService: CustomersService,
     private readonly apis: CustomerApisService,
   ) {}
@@ -35,11 +69,15 @@ export class AuditsService {
   async createRun(customerId: string, dto: CreateAuditRunDto): Promise<AuditRun> {
     const customer = await this.customersService.findOne(customerId);
     const website = dto.website ?? customer.website ?? '';
+    const rule = await this.ruleStatus(customerId);
+    if (!rule.canRun) throw new ForbiddenException(rule.reason);
 
     const skills = getAllAuditSkills();
     let run = this.runRepo.create({
       customerId,
       website,
+      projectId: rule.projectId,
+      monthCode: rule.monthCode,
       status: AuditRunStatus.RUNNING,
       totalSkills: skills.length,
       startedAt: new Date(),
@@ -137,6 +175,71 @@ export class AuditsService {
     return this.runRepo.save(run);
   }
 
+  async ruleStatus(customerId: string): Promise<AuditRuleStatus> {
+    await this.customersService.findOne(customerId);
+    const enforced = process.env.AUDIT_ENFORCE_CYCLE_RULE !== 'off';
+    const today = todayInTz();
+    const projects = await this.projectRepo.find({ where: { customerId } });
+    const cur = projects.find((p) => {
+      const a = ymd(p.monthStartDate);
+      const b = ymd(p.monthEndDate);
+      return !!a && !!b && a <= today && today <= b;
+    });
+    const base = { enforced, today, projectId: null, monthCode: null, monthIndex: null, monthStart: null, monthEnd: null, unlockDate: null, unlocked: false, runExists: false, existingRunId: null as string | null };
+    if (!cur) {
+      return {
+        ...base,
+        canRun: !enforced,
+        reason: projects.length
+          ? 'Today is not inside any of this customer’s month cycles, so the SEO Audit cannot run.'
+          : 'This customer has no month cycles yet. Create the month cycles first; the SEO Audit runs once per cycle.',
+      };
+    }
+    const monthStart = ymd(cur.monthStartDate) as string;
+    const monthEnd = ymd(cur.monthEndDate) as string;
+    const unlockDate = addDays(monthStart, 2);
+    const unlocked = today >= unlockDate;
+    const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' } });
+    const used = runs.find((r) => {
+      if (r.status === AuditRunStatus.FAILED || r.failureReason) return false;
+      if (r.projectId) return r.projectId === cur.id;
+      const d = dateInTz(r.createdAt);
+      return d >= monthStart && d <= monthEnd;
+    });
+    let reason = `${cur.monthCode}: the SEO Audit can run now (once per cycle).`;
+    if (used) reason = `The SEO Audit for ${cur.monthCode} has already been run. It runs once per month cycle; the next one unlocks on Day 3 of the next cycle.`;
+    else if (!unlocked) reason = `The SEO Audit for ${cur.monthCode} unlocks on ${unlockDate} (Day 3 of the cycle).`;
+    return {
+      enforced,
+      today,
+      projectId: cur.id,
+      monthCode: cur.monthCode,
+      monthIndex: cur.monthIndex,
+      monthStart,
+      monthEnd,
+      unlockDate,
+      unlocked,
+      runExists: !!used,
+      existingRunId: used?.id ?? null,
+      canRun: !enforced || (unlocked && !used),
+      reason: enforced ? reason : `${reason} (cycle rule is switched off on the server)`,
+    };
+  }
+
+  // Which month cycle a run belongs to (runs made before the rule are matched by date).
+  async cycleForRun(run: AuditRun): Promise<{ monthCode: string | null; monthIndex: number | null }> {
+    const projects = await this.projectRepo.find({ where: { customerId: run.customerId } });
+    const d = dateInTz(run.createdAt);
+    const p =
+      projects.find((x) => run.projectId && x.id === run.projectId) ??
+      projects.find((x) => {
+        const a = ymd(x.monthStartDate);
+        const b = ymd(x.monthEndDate);
+        return !!a && !!b && a <= d && d <= b;
+      });
+    return { monthCode: p?.monthCode ?? run.monthCode ?? null, monthIndex: p ? p.monthIndex : null };
+  }
+
   // Uses the customer's own API settings (Layer 2 > API settings in the admin panel). Today only
   // PageSpeed is wired; the result is stored as pre-approved evidence so it flows through the same
   // report rendering as uploaded tool data. A failure is recorded, never thrown - the audit still runs.
@@ -195,14 +298,14 @@ export class AuditsService {
     return run.reportHtml;
   }
 
-  // Customer-facing report. Runs made before this format existed get it built (and saved) on first view.
+  // Customer-facing report = the compiled package (SEO Report + Strategy + Deliverables + T&C).
+  // Until the admin compiles it the customer only sees a "being prepared" page.
   async getCustomerReportHtml(customerId: string, runId: string): Promise<string> {
-    const run = await this.findOne(customerId, runId);
-    if (run.customerReportHtml) return run.customerReportHtml;
-    if (!run.reportHtml) throw new NotFoundException('Report not generated yet for this run');
-    await this.rebuildReports(customerId, runId);
-    const fresh = await this.findOne(customerId, runId);
-    return fresh.customerReportHtml ?? '';
+    await this.findOne(customerId, runId);
+    const pkg = await this.packageRepo.findOne({ where: { auditRunId: runId } });
+    if (pkg?.html) return pkg.html;
+    const customer = await this.customersService.findOne(customerId);
+    return pendingCustomerPageHtml(customer.companyName);
   }
 
   // Rebuilds both reports (admin + customer) from the run's tasks and its current tool evidence.
