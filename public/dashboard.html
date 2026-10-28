@@ -585,7 +585,7 @@
       if (document.getElementById('l4Box') !== box || l4.mid !== cm.id) return;
       l4.data = d;
       drawLayer4(cust, cm, box);
-      if (d.volume.status === 'running' || d.platforms.some(function(p){ return p.status === 'running'; })) {
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
         l4.timer = setTimeout(function(){ loadLayer4(cust, cm, box); }, 4000);
       }
     }).catch(function(err){
