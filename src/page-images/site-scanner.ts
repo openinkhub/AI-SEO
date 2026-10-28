@@ -28,6 +28,21 @@ const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml'];
 // listed as website pages.
 const NOT_A_PAGE = /\.(xml|xml\.gz|txt|json|rss|atom|jpe?g|png|gif|webp|svg|avif|pdf|zip|css|js)(\?.*)?$/i;
 
+// WordPress attachment (media) pages must never be listed as website pages: their sitemap
+// (sitemap-attachment.xml / media / images) and their slugs, which WP builds from the file
+// name (…/bg-faq-services-png/, …/header-jpeg/).
+const MEDIA_SITEMAP = /(attachment|media|images?)/i;
+const MEDIA_SLUG = /-(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
+export function isMediaPageUrl(u: string): boolean {
+  try {
+    const path = new URL(u).pathname.replace(/\/+$/, '');
+    const last = path.split('/').pop() ?? '';
+    return MEDIA_SLUG.test(last) || /\/attachment\//i.test(path);
+  } catch {
+    return false;
+  }
+}
+
 async function getText(url: string): Promise<string | null> {
   try {
     const { data } = await axios.get<string>(url, {
@@ -53,10 +68,12 @@ function locsOf(xml: string): string[] {
 // A sitemap can be an index (<sitemapindex>) whose <loc> entries are other
 // sitemap files, not pages. Expand those and only return real page URLs.
 async function trySitemap(base: string, host: string): Promise<string[]> {
-  const candidates: string[] = SITEMAP_PATHS.map((p) => `${base}${p}`);
+  const defaults: string[] = SITEMAP_PATHS.map((p) => `${base}${p}`);
+  // Sitemaps declared in robots.txt, in file order (sites often split them: pages, posts, …).
+  const declared: string[] = [];
   const robots = await getText(`${base}/robots.txt`);
   if (robots) {
-    for (const m of robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)) candidates.unshift(m[1]);
+    for (const m of robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)) declared.push(m[1]);
   }
 
   const pages: string[] = [];
@@ -66,6 +83,8 @@ async function trySitemap(base: string, host: string): Promise<string[]> {
   const visit = async (url: string, depth: number): Promise<void> => {
     if (seen.has(url) || depth > 2 || pages.length >= MAX_SITEMAP_URLS) return;
     seen.add(url);
+    // media/attachment sitemaps list files, never pages — at any level (robots.txt can name one directly)
+    if (MEDIA_SITEMAP.test((url.split('?')[0].split('/').pop() ?? ''))) return;
     const xml = await getText(url);
     if (!xml) return;
     const locs = locsOf(xml).filter((u) => sameDomain(u, host));
@@ -80,13 +99,16 @@ async function trySitemap(base: string, host: string): Promise<string[]> {
       return;
     }
     for (const u of locs) {
-      if (!NOT_A_PAGE.test(u)) pages.push(u);
+      if (!NOT_A_PAGE.test(u) && !isMediaPageUrl(u)) pages.push(u);
     }
   };
 
-  for (const c of Array.from(new Set(candidates))) {
-    await visit(c, 0);
-    if (pages.length > 0) break;
+  for (const c of Array.from(new Set(declared))) await visit(c, 0);
+  if (pages.length === 0) {
+    for (const c of defaults) {
+      await visit(c, 0);
+      if (pages.length > 0) break;
+    }
   }
   return dedupe(pages).slice(0, MAX_SITEMAP_URLS);
 }
@@ -109,7 +131,7 @@ async function tryHomepageLinks(base: string, host: string): Promise<string[]> {
           return null;
         }
       })
-      .filter((u): u is string => !!u && sameDomain(u, host) && !NOT_A_PAGE.test(u));
+      .filter((u): u is string => !!u && sameDomain(u, host) && !NOT_A_PAGE.test(u) && !isMediaPageUrl(u));
     return dedupe([base, ...resolved]).slice(0, MAX_HOMEPAGE_LINKS);
   } catch {
     return [base];

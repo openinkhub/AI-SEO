@@ -11,7 +11,7 @@ import { CustomersService } from '../customers/customers.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 import { normalizeUrl, guessPageName, aliasFromUrl } from './url-utils';
-import { liveSiteScan, fetchH1Many } from './site-scanner';
+import { liveSiteScan, fetchH1Many, isMediaPageUrl } from './site-scanner';
 import { StorageService } from './storage.service';
 
 const MAX_DISTINCT_IMAGES = 30;
@@ -84,8 +84,12 @@ export class PageImagesService {
     const discovered = await liveSiteScan(customer.website);
     // Earlier versions saved sitemap files (…/sitemap-posts.xml) as pages.
     // Remove those rows and re-baseline the "originally fetched" count.
-    const stale = (await this.pages.find({ where: { customerId } })).filter((p) =>
-      /\.(xml|xml\.gz)$/i.test(p.normalizedUrl),
+    // Also removes attachment (media) pages saved earlier — …/bg-faq-services-png/ — unless an image was
+    // already assigned to the row.
+    const stale = (await this.pages.find({ where: { customerId } })).filter(
+      (p) =>
+        /\.(xml|xml\.gz)$/i.test(p.normalizedUrl) ||
+        (!p.libraryImageId && isMediaPageUrl(p.pageUrl)),
     );
     if (stale.length > 0) await this.pages.remove(stale);
     await this.syncFetchedPages(customerId, discovered);
