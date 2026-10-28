@@ -26,7 +26,7 @@ export async function extractFromImage(buffer: Buffer, mime: string, tool?: stri
     },
     body: JSON.stringify({
       model,
-      max_tokens: mime === 'application/pdf' ? 8000 : 3000,
+      max_tokens: mime === 'application/pdf' ? 16000 : 3000,
       messages: [
         {
           role: 'user',

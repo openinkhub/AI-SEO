@@ -133,6 +133,14 @@ export const EVIDENCE_RULES: EvidenceRule[] = [
     fields:
       '{"engine":str,"question":str,"cited":bool,"domain":str,"note":str}  (cited = false when the card says the engine "didn\'t cite" the domain; note = the small grey sentence under it, if any)',
   },
+  {
+    type: 'seomator_geo_audit',
+    tool: 'seomator',
+    label: 'SEOmator GEO Audit',
+    recognise: 'PDF titled "SEOmator - GEO Audit Report" with a GEO Readiness Score /100, Executive Summary, GEO Score Breakdown, AI Platform Readiness, Key Metrics, E-E-A-T Analysis, AI Crawler Access, Key Findings, Technical Findings, Brand Recommendations.',
+    fields:
+      '{"score":int,"grade":str,"businessType":str,"pagesAnalyzed":int,"date":str,"summary":str,"priorityActions":[str],"categories":[{"name":str,"weight":str,"score":int,"grade":str}],"platforms":[{"name":str,"score":int,"readiness":str}],"metrics":[{"label":str,"value":str}],"eeat":[{"pillar":str,"score":int,"max":int,"evidence":str}],"crawlers":{"checked":int,"allowed":int,"blocked":int,"notMentioned":int,"blockedNames":[str]},"findings":[{"severity":"critical|high|medium|low","title":str,"description":str,"effort":str}],"technicalIssues":[{"severity":str,"issue":str,"page":str}],"brandRecommendations":[str],"schemaTypes":[str]}  (summary = executive summary text without markdown asterisks, max ~600 chars; priorityActions = the numbered list; findings = every row of Key Findings; technicalIssues = rows of Technical Findings, max 30; copy numbers exactly)',
+  },
 ];
 
 export function buildExtractionPrompt(tool?: string | null): string {
@@ -162,6 +170,7 @@ export const TOOL_SECTIONS: Array<{ key: string; label: string; accepts: string;
   { key: 'seoanalyzer', label: 'SEO Analyzer (extension)', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots of the Summary / Headers / Images / Links / Social / Tools tabs' },
   { key: 'seoquake', label: 'SEOquake', accepts: '.pdf,application/pdf', hint: 'On-Page SEO Audit PDF' },
   { key: 'mangools', label: 'Mangools SiteProfiler', accepts: '.pdf,application/pdf,image/png,image/jpeg,image/webp', hint: 'Backlinks / authority PDF or screenshots' },
+  { key: 'seomator', label: 'SEOmator - GEO Audit', accepts: '.pdf,application/pdf', hint: 'GEO Audit Report PDF' },
   { key: 'frase', label: 'Frase - AI visibility', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshot of the AI citation result' },
   { key: 'other', label: 'Other tool', accepts: 'image/png,image/jpeg,image/webp,.pdf,application/pdf,.txt,.csv', hint: 'Anything else - read as a generic label/value list' },
 ];

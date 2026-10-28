@@ -236,6 +236,33 @@ function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
 
+function renderSeomator(d: Record<string, any>, admin: boolean): string {
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('GEO readiness', d.score)}</div>`;
+  h += kvTable([['Grade', d.grade], ['Business type', d.businessType], ['Pages analysed', d.pagesAnalyzed], ['Date', d.date]]);
+  if (d.summary) h += `<p>${esc(d.summary)}</p>`;
+  const pa = (d.priorityActions ?? []) as string[];
+  if (pa.length) h += '<h4>Priority actions</h4><ul class="ev-list">' + pa.map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>';
+  const cats = (d.categories ?? []) as Array<Record<string, any>>;
+  if (cats.length) h += '<h4>Score breakdown</h4>' + grid(['Area', 'Weight', 'Score', 'Grade'], cats.map((c) => [c.name, c.weight, c.score != null ? `${c.score}/100` : '', c.grade]));
+  const pl = (d.platforms ?? []) as Array<Record<string, any>>;
+  if (pl.length) h += '<h4>AI platform readiness</h4>' + grid(['Platform', 'Score', 'Readiness'], pl.map((c) => [c.name, c.score != null ? `${c.score}/100` : '', c.readiness]));
+  const fi = (d.findings ?? []) as Array<Record<string, any>>;
+  if (fi.length) h += '<h4>Key findings</h4>' + grid(['Severity', 'Finding', 'Details', 'Effort'], fi.map((f) => [f.severity, f.title, f.description, f.effort]));
+  const cr = d.crawlers ?? {};
+  if (cr.checked != null) h += `<h4>AI crawler access</h4><p>${esc(cr.allowed)} of ${esc(cr.checked)} AI crawlers allowed${cr.blocked ? `; blocked: ${esc((cr.blockedNames ?? []).join(', ') || cr.blocked)}` : ''}.</p>`;
+  const ee = (d.eeat ?? []) as Array<Record<string, any>>;
+  if (ee.length) h += '<h4>E-E-A-T</h4>' + grid(['Pillar', 'Score', 'Evidence'], ee.map((x) => [x.pillar, `${x.score}/${x.max}`, x.evidence]));
+  const br = (d.brandRecommendations ?? []) as string[];
+  if (br.length) h += '<h4>Brand recommendations</h4><ul class="ev-list">' + br.map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>';
+  if (admin) {
+    const ti = (d.technicalIssues ?? []) as Array<Record<string, any>>;
+    if (ti.length) h += '<h4>Technical findings (admin)</h4>' + grid(['Severity', 'Issue', 'Page'], ti.map((x) => [x.severity, x.issue, x.page]));
+    const m = (d.metrics ?? []) as Array<Record<string, any>>;
+    if (m.length) h += '<h4>Key metrics (admin)</h4>' + grid(['Metric', 'Value'], m.map((x) => [x.label, x.value]));
+  }
+  return h;
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
@@ -243,7 +270,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'mangools' ? 'Mangools' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'mangools' ? 'Mangools' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -258,6 +285,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         e.evidenceType === 'digispot_report' ? renderDigispot(d, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_report' ? renderPpcReport(d as PpcReport, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_summary' ? renderPpcSummary(d)
+        : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
