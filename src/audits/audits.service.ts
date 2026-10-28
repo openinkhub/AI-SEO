@@ -30,6 +30,7 @@ import { fetchGscExport } from './sources/gsc';
 import { collectMetrics, metricsSummary } from './evidence/metrics';
 import { WebsitePage } from '../page-images/website-page.entity';
 import { PageImagesService } from '../page-images/page-images.service';
+import { LibraryImage } from '../page-images/library-image.entity';
 import { EmailService } from '../email/email.service';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
@@ -109,6 +110,7 @@ export class AuditsService implements OnModuleInit {
     private readonly storage: StorageService,
     private readonly wp: WpClientService,
     @InjectRepository(WebsitePage) private readonly pageRepo: Repository<WebsitePage>,
+    @InjectRepository(LibraryImage) private readonly imageRepo: Repository<LibraryImage>,
     private readonly pageImages: PageImagesService,
     private readonly email: EmailService,
   ) {}
@@ -116,7 +118,11 @@ export class AuditsService implements OnModuleInit {
   // The customer's website pages for the report's "Website pages" list (page, URL, H1 keyword, meta tags).
   private async reportPages(customerId: string) {
     const rows = await this.pageRepo.find({ where: { customerId }, order: { pageUrl: 'ASC' } });
-    return rows.map((p) => ({ pageName: p.pageName, pageUrl: p.pageUrl, h1Keyword: p.h1Keyword, metaTitle: p.metaTitle, metaDescription: p.metaDescription }));
+    const images = new Map((await this.imageRepo.find({ where: { customerId } })).map((i) => [i.id, i]));
+    return rows.map((p) => {
+      const img = p.libraryImageId ? images.get(p.libraryImageId) : undefined;
+      return { pageName: p.pageName, pageUrl: p.pageUrl, h1Keyword: p.h1Keyword, metaTitle: p.metaTitle, metaDescription: p.metaDescription, aliasName: p.aliasName, imageUrl: img?.url ?? null, imageName: img?.filename ?? null };
+    });
   }
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":

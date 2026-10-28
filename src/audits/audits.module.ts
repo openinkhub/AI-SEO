@@ -22,10 +22,11 @@ import { PackageService } from './package/package.service';
 import { PackageController } from './package/package.controller';
 import { WebsitePage } from '../page-images/website-page.entity';
 import { EmailModule } from '../email/email.module';
+import { LibraryImage } from '../page-images/library-image.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage, WebsitePage]),
+    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage, WebsitePage, LibraryImage]),
     CustomersModule,
     EmailModule,
     CustomerApisModule,

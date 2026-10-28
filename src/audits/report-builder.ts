@@ -82,6 +82,24 @@ export interface ReportPage {
   h1Keyword: string | null;
   metaTitle: string | null;
   metaDescription: string | null;
+  aliasName?: string | null;
+  imageUrl?: string | null;
+  imageName?: string | null;
+}
+
+// "Page mapping": alias name, H1 keyword and the branded image mapped to each page.
+function pageMappingBlock(pages: ReportPage[]): string {
+  if (!pages.length) return '';
+  const cell = (v: string | null | undefined) => (v ? escapeHtml(v) : '—');
+  const img = (p: ReportPage) =>
+    p.imageUrl
+      ? `<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.imageName ?? '')}" style="max-width:96px;max-height:64px;border-radius:4px;vertical-align:middle" /> <span class="empty">${escapeHtml(p.imageName ?? '')}</span>`
+      : '<span class="empty">No image mapped</span>';
+  const rows = pages
+    .map((p) => `<tr><td>${cell(p.pageName)}<br><a href="${escapeHtml(p.pageUrl)}">${escapeHtml(p.pageUrl)}</a></td><td>${cell(p.aliasName)}</td><td>${cell(p.h1Keyword)}</td><td>${img(p)}</td></tr>`)
+    .join('');
+  const mapped = pages.filter((p) => p.imageUrl).length;
+  return `<section class="layers"><h2>Page mapping (${mapped} of ${pages.length} pages have an image)</h2><p class="empty">The alias name, H1 keyword and branded image used for each page.</p><table><thead><tr><th>Page</th><th>Alias name</th><th>H1 keyword</th><th>Image</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 // "Website pages" list view: one row per page of the customer's site.
@@ -128,6 +146,7 @@ export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: 
     ${stat('Not completed yet', inProgress)}
   </section>
   ${pagesBlock(pages)}
+  ${pageMappingBlock(pages)}
   ${body}`;
 }
 
