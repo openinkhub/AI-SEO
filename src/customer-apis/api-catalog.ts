@@ -79,6 +79,16 @@ export const API_PROVIDERS: ApiProvider[] = [
     usedBy: 'SEO Audit (automatic, each function separately): SiteProfiler overview / backlinks / competitors / top content, LinkMiner, AI Search Watcher. Layer 11-12 keyword validation.', testable: true, wired: true, required: true,
   },
   {
+    key: 'ahrefs', label: 'Ahrefs (free Domain Rating)', group: 'Research & SERP data',
+    description: 'Free Domain Rating API (Ahrefs API v3 key from Account settings > API keys). Shows the site’s Domain Rating next to its competitors. Credit: Domain Rating by Ahrefs.',
+    fields: [
+      key('API v3 key'),
+      { name: 'ahDomainRating', label: 'Domain Rating card (0 = off, blank = on)', secret: false, number: true, optional: true },
+      { name: 'ahDrCompetitors', label: 'Competitors to compare: max (0 = none, blank = 5)', secret: false, number: true, optional: true },
+    ],
+    usedBy: 'SEO Audit (automatic): Domain Rating of the site and its named competitors; feeds the authority and competitor tasks.', testable: true, wired: true,
+  },
+  {
     key: 'geekflare', label: 'Geekflare', group: 'Site analysis',
     description: 'Competitor-page extraction, Lighthouse and technical checks.',
     fields: [key()], usedBy: 'Layer 12 competitor extraction, Layer 13 content-gap evidence, technical / Core Web Vitals checks.', testable: false, wired: false,

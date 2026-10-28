@@ -14,6 +14,7 @@ import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { enrichRun } from './sources/enrich';
 import { SOURCE_LABEL, TASK_SOURCE } from './sources/task-map';
+import { ahrefsDomainRating } from '../customer-apis/ahrefs';
 import { runMangools } from '../customer-apis/mangools/run';
 import { runPageSpeed } from '../customer-apis/pagespeed';
 import { Project } from '../projects/project.entity';
@@ -360,6 +361,31 @@ export class AuditsService {
         else row.error = (r.error ?? 'failed').slice(0, 250);
         out.push(await this.evidenceRepo.save(row));
       }
+    }
+    if (keys.ahrefs?.apiKey && (keys.ahrefs.ahDomainRating ?? '').trim() !== '0') {
+      const row = this.evidenceRepo.create({
+        customerId,
+        auditRunId: runId,
+        kind: 'text',
+        section: 'auto',
+        tool: 'ahrefs',
+        evidenceType: 'ahrefs_domain_rating',
+        fileName: 'Ahrefs Domain Rating (automatic)',
+        sha256: createHash('sha256').update(`ahrefs:dr:${runId}`).digest('hex'),
+        includeInReport: true,
+        status: 'approved',
+      });
+      try {
+        const customer = await this.customersService.findOne(customerId);
+        const rawMax = (keys.ahrefs.ahDrCompetitors ?? '').trim();
+        const max = rawMax === '' ? 5 : Math.min(Math.max(parseInt(rawMax, 10) || 0, 0), 20);
+        const comps = Array.isArray(customer.competitors) ? customer.competitors.slice(0, max) : [];
+        row.extracted = (await ahrefsDomainRating(keys.ahrefs.apiKey, website, comps)) as unknown as Record<string, any>;
+      } catch (err) {
+        row.status = 'failed';
+        row.error = `Ahrefs: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);
+      }
+      out.push(await this.evidenceRepo.save(row));
     }
     return out;
   }

@@ -9,8 +9,8 @@ import { writeTasks } from './task-writer';
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
 const FEEDS: Partial<Record<SourceKey, string[]>> = {
   keywords: ['research_keywords'],
-  competitors: ['research_competitors', 'mangools_sp_competitors'],
-  backlinks: ['mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer'],
+  competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating'],
+  backlinks: ['ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer'],
   visibility: ['mangools_ai_watcher'],
   local: ['research_local'],
 };

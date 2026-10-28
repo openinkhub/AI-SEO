@@ -317,6 +317,15 @@ function renderResearch(type: string, d: Record<string, any>): string {
   return '';
 }
 
+function renderAhrefsDr(d: Record<string, any>): string {
+  const site = d.site ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Your Domain Rating', site.domainRating)}</div>`;
+  const c = (d.competitors ?? []) as Array<Record<string, any>>;
+  if (c.length) h += '<h4>Competitors</h4>' + grid(['Domain', 'Domain Rating', 'Compared with you'], c.map((x) => [x.domain, x.domainRating ?? 'n/a', x.domainRating != null && site.domainRating != null ? (site.domainRating >= x.domainRating ? 'You are ahead or level' : `${Math.round((x.domainRating - site.domainRating) * 10) / 10} points ahead of you`) : '']));
+  h += `<p class="ev-src">${esc(d.credit ?? 'Domain Rating by Ahrefs (https://ahrefs.com/)')}</p>`;
+  return h;
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -374,6 +383,7 @@ function renderDigispotDashboard(d: Record<string, any>): string {
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
+  if (type === 'ahrefs_domain_rating') return 'Domain Rating (Ahrefs)';
   if (type === 'research_keywords') return 'Keyword research';
   if (type === 'research_competitors') return 'Competitor research';
   if (type === 'research_local') return 'Local search research';
@@ -388,7 +398,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -407,6 +417,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'pagespeed_report' ? renderPageSpeed(d)
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
+        : e.evidenceType === 'ahrefs_domain_rating' ? renderAhrefsDr(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
         : e.evidenceType.startsWith('mangools_') ? renderMangoolsFn(e.evidenceType, d)
