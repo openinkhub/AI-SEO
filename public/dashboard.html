@@ -1359,12 +1359,15 @@
       if (tasksBtn) tasksBtn.addEventListener('click', function(){ togglePanel(r.id, 'tasks'); });
       var pushesBtn = document.getElementById('pushes-' + r.id);
       if (pushesBtn) pushesBtn.addEventListener('click', function(){ togglePanel(r.id, 'pushes'); });
+      var evBtn = document.getElementById('evidence-' + r.id);
+      if (evBtn) evBtn.addEventListener('click', function(){ togglePanel(r.id, 'evidence'); });
       var refreshBtn = document.getElementById('refresh-' + r.id);
       if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
     });
     state.runs.forEach(function(r){
       if (state.expanded[r.id] === 'tasks') loadTasks(r.id);
       if (state.expanded[r.id] === 'pushes') loadPushes(r.id);
+      if (state.expanded[r.id] === 'evidence') loadEvidence(r.id);
     });
   }
 
@@ -1380,6 +1383,7 @@
     html += '<button id="report-' + r.id + '"' + (r.status !== 'completed' ? ' disabled' : '') + '>View report</button>';
     html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
+    html += '<button id="evidence-' + r.id + '">' + (panel === 'evidence' ? 'Hide evidence' : 'Evidence') + '</button>';
     html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;
   }
@@ -1429,6 +1433,155 @@
       var p = document.getElementById('panel-' + runId);
       if (p) p.innerHTML = '<p class="muted">Failed to load pushes: ' + escapeHtml(err.message) + '</p>';
     });
+  }
+
+  // ---- Evidence: screenshots / exports from other SEO tools -------------
+  var EV_LABELS = {
+    digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab',
+    aitdk_meta: 'Meta', aitdk_technical: 'Technical', aitdk_traffic: 'Traffic', aitdk_backlinks: 'Backlinks',
+    aitdk_geo_section: 'GEO section', aitdk_serp: 'SERP / indexed', aitdk_density: 'Keyword density',
+    aitdk_social: 'Social tags', aitdk_structured_data: 'Structured data', unknown: 'Unknown'
+  };
+
+  function evBase(runId) { return '/customers/' + state.cid + '/audits/' + runId; }
+
+  function evStatusBadge(st) {
+    var cls = st === 'approved' ? 'ok' : (st === 'failed' ? 'fail' : 'pending');
+    var label = st === 'extracted' ? 'needs approval' : st;
+    return '<span class="badge ' + cls + '">' + escapeHtml(label) + '</span>';
+  }
+
+  function loadEvidence(runId) {
+    var panel = document.getElementById('panel-' + runId);
+    if (!panel) return;
+    if (!panel.getAttribute('data-ev')) {
+      panel.setAttribute('data-ev', '1');
+      panel.innerHTML = '<div class="ev-wrap"><p class="muted" id="evNote-' + runId + '">Loading…</p>' +
+        '<div class="row-actions" style="margin:8px 0">' +
+        '<input type="file" id="evFiles-' + runId + '" multiple accept="image/png,image/jpeg,image/webp,.txt,.csv,text/plain,text/csv">' +
+        '<button class="primary" id="evUpload-' + runId + '">Upload</button>' +
+        '<button id="evRebuild-' + runId + '">Rebuild report</button></div>' +
+        '<p class="muted" style="margin:0 0 8px">Screenshots (AITDK, PPCBlogPro…) are read by AI and need your approval before the customer sees them. Digispot .txt and PPCBlogPro .csv exports are read by fixed rules and are approved automatically.</p>' +
+        '<div id="evList-' + runId + '"></div></div>';
+      document.getElementById('evUpload-' + runId).addEventListener('click', function(){ uploadEvidence(runId); });
+      document.getElementById('evRebuild-' + runId).addEventListener('click', function(){
+        var b = this; b.disabled = true;
+        api(evBase(runId) + '/rebuild-report', { method: 'POST', body: {} })
+          .then(function(){ evNote(runId, 'Reports rebuilt.'); })
+          .catch(function(e){ alert('Could not rebuild: ' + e.message); })
+          .finally(function(){ b.disabled = false; });
+      });
+      api(evBase(runId) + '/evidence-status').then(function(st){
+        var msg = (st && st.readerConfigured ? 'Screenshot reader: ready.' : 'Screenshot reader: NOT configured (set ANTHROPIC_API_KEY on the server) — screenshots are stored but not read.') +
+          ' Storage: ' + escapeHtml(st && st.storage ? st.storage : 'unknown') + '.';
+        evNote(runId, msg);
+      }).catch(function(){ evNote(runId, ''); });
+    }
+    refreshEvidence(runId);
+  }
+
+  function evNote(runId, msg) {
+    var n = document.getElementById('evNote-' + runId);
+    if (n) n.innerHTML = msg;
+  }
+
+  function refreshEvidence(runId) {
+    var cid = state.cid;
+    return api(evBase(runId) + '/evidence').then(function(items){
+      if (cid !== state.cid) return;
+      var box = document.getElementById('evList-' + runId);
+      if (!box) return;
+      items = Array.isArray(items) ? items : [];
+      if (!items.length) { box.innerHTML = '<p class="muted">Nothing uploaded yet.</p>'; return; }
+      box.innerHTML = items.map(function(e){ return evidenceRowHtml(runId, e); }).join('');
+      items.forEach(function(e){ wireEvidenceRow(runId, e); });
+    }).catch(function(err){
+      var box = document.getElementById('evList-' + runId);
+      if (box) box.innerHTML = '<p class="muted">Failed to load evidence: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function evidenceRowHtml(runId, e) {
+    var h = '<div class="run-row" style="display:flex;gap:12px;align-items:flex-start">';
+    if (e.kind === 'image' && e.url) h += '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(e.url) + '" alt="" style="width:90px;height:64px;object-fit:cover;border:1px solid var(--border-soft);border-radius:6px"></a>';
+    h += '<div style="flex:1;min-width:0"><div>' + evStatusBadge(e.status) + ' <strong>' + escapeHtml(EV_LABELS[e.evidenceType] || e.evidenceType) + '</strong> ' +
+      '<span class="muted">' + escapeHtml(e.fileName) + '</span></div>';
+    if (e.error) h += '<div class="muted" style="color:#b42318;margin-top:4px">' + escapeHtml(e.error) + '</div>';
+    h += '<div class="row-actions" style="margin-top:8px">';
+    if (e.extracted) h += '<button id="evEdit-' + e.id + '">View / edit data</button>';
+    if (e.extracted && e.status === 'extracted') h += '<button class="primary" id="evApprove-' + e.id + '">Approve</button>';
+    if (e.extracted && e.status === 'approved') h += '<button id="evUnapprove-' + e.id + '">Unapprove</button>';
+    if (e.kind === 'image') h += '<button id="evRe-' + e.id + '">Re-read</button>';
+    h += '<label class="muted"><input type="checkbox" id="evInc-' + e.id + '"' + (e.includeInReport ? ' checked' : '') + '> in report</label>';
+    h += '<button id="evDel-' + e.id + '">Delete</button></div>';
+    h += '<div id="evData-' + e.id + '"></div></div></div>';
+    return h;
+  }
+
+  function evPatch(runId, id, body) {
+    return api(evBase(runId) + '/evidence/' + id, { method: 'PATCH', body: body })
+      .then(function(){ return refreshEvidence(runId); })
+      .catch(function(err){ alert('Could not update: ' + err.message); });
+  }
+
+  function wireEvidenceRow(runId, e) {
+    var on = function(id, fn){ var el = document.getElementById(id + e.id); if (el) el.addEventListener('click', fn); };
+    on('evApprove-', function(){ evPatch(runId, e.id, { status: 'approved' }); });
+    on('evUnapprove-', function(){ evPatch(runId, e.id, { status: 'extracted' }); });
+    var inc = document.getElementById('evInc-' + e.id);
+    if (inc) inc.addEventListener('change', function(){ evPatch(runId, e.id, { includeInReport: inc.checked }); });
+    on('evRe-', function(){
+      this.disabled = true; this.textContent = 'Reading…';
+      api(evBase(runId) + '/evidence/' + e.id + '/extract', { method: 'POST', body: {} })
+        .then(function(){ return refreshEvidence(runId); })
+        .catch(function(err){ alert('Could not read: ' + err.message); refreshEvidence(runId); });
+    });
+    on('evDel-', function(){
+      if (!window.confirm('Delete "' + e.fileName + '" from this audit?')) return;
+      api(evBase(runId) + '/evidence/' + e.id, { method: 'DELETE' })
+        .then(function(){ return refreshEvidence(runId); })
+        .catch(function(err){ alert('Could not delete: ' + err.message); });
+    });
+    on('evEdit-', function(){
+      var box = document.getElementById('evData-' + e.id);
+      if (box.innerHTML) { box.innerHTML = ''; return; }
+      box.innerHTML = '<p class="muted">Loading…</p>';
+      api(evBase(runId) + '/evidence/' + e.id + '/data').then(function(d){
+        box.innerHTML = '<textarea id="evJson-' + e.id + '" style="width:100%;min-height:200px;font:12px/1.4 monospace;margin-top:8px"></textarea>' +
+          '<div class="row-actions" style="margin-top:6px"><button class="primary" id="evSave-' + e.id + '">Save changes</button><span class="muted" id="evMsg-' + e.id + '"></span></div>';
+        var ta = document.getElementById('evJson-' + e.id);
+        ta.value = JSON.stringify(d.extracted, null, 2);
+        document.getElementById('evSave-' + e.id).addEventListener('click', function(){
+          try { JSON.parse(ta.value); } catch (x) { document.getElementById('evMsg-' + e.id).textContent = 'Not valid JSON: ' + x.message; return; }
+          evPatch(runId, e.id, { extractedJson: ta.value });
+        });
+      }).catch(function(err){ box.innerHTML = '<p class="muted">Failed: ' + escapeHtml(err.message) + '</p>'; });
+    });
+  }
+
+  function uploadEvidence(runId) {
+    var input = document.getElementById('evFiles-' + runId);
+    var btn = document.getElementById('evUpload-' + runId);
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) { alert('Choose one or more files first.'); return; }
+    btn.disabled = true;
+    var errors = [], i = 0;
+    function next() {
+      if (i >= files.length) {
+        btn.disabled = false; btn.textContent = 'Upload'; input.value = '';
+        if (errors.length) alert(errors.join('\n'));
+        return refreshEvidence(runId);
+      }
+      btn.textContent = 'Uploading ' + (i + 1) + '/' + files.length + '…';
+      var fd = new FormData();
+      fd.append('file', files[i]);
+      var name = files[i].name;
+      i++;
+      return api(evBase(runId) + '/evidence', { method: 'POST', body: fd })
+        .catch(function(err){ errors.push(name + ': ' + err.message); })
+        .then(next);
+    }
+    next();
   }
 
   function viewReport(runId) {

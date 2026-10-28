@@ -10,6 +10,7 @@ import { analyzeWebsite, TechnicalAnalysis } from './technical-analyzer';
 import { buildAutomatedFinding } from './findings-builder';
 import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builder';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
+import { AuditEvidence } from './evidence/audit-evidence.entity';
 
 @Injectable()
 export class AuditsService {
@@ -17,6 +18,7 @@ export class AuditsService {
     @InjectRepository(AuditRun) private readonly runRepo: Repository<AuditRun>,
     @InjectRepository(AuditTask) private readonly taskRepo: Repository<AuditTask>,
     @InjectRepository(LayerPush) private readonly pushRepo: Repository<LayerPush>,
+    @InjectRepository(AuditEvidence) private readonly evidenceRepo: Repository<AuditEvidence>,
     private readonly customersService: CustomersService,
   ) {}
 
@@ -156,11 +158,20 @@ export class AuditsService {
     const run = await this.findOne(customerId, runId);
     if (run.customerReportHtml) return run.customerReportHtml;
     if (!run.reportHtml) throw new NotFoundException('Report not generated yet for this run');
+    await this.rebuildReports(customerId, runId);
+    const fresh = await this.findOne(customerId, runId);
+    return fresh.customerReportHtml ?? '';
+  }
+
+  // Rebuilds both reports (admin + customer) from the run's tasks and its current tool evidence.
+  async rebuildReports(customerId: string, runId: string): Promise<void> {
+    const run = await this.findOne(customerId, runId);
     const customer = await this.customersService.findOne(customerId);
     const tasks = await this.taskRepo.find({ where: { auditRunId: runId } });
-    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName);
+    const evidence = await this.evidenceRepo.find({ where: { auditRunId: runId }, order: { createdAt: 'ASC' } });
+    run.reportHtml = buildBrandedReportHtml(run, tasks, customer.companyName, evidence);
+    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence);
     await this.runRepo.save(run);
-    return run.customerReportHtml;
   }
 
   async listPushes(customerId: string, runId: string): Promise<LayerPush[]> {
