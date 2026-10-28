@@ -31,7 +31,10 @@ export function strategyAiConfigured(): boolean {
 
 const AREAS = SCOPE_SECTIONS.map((s) => s.title);
 
-const str = (v: unknown, max = 600): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// Scope wording fixes applied to every strategy text (old drafts said "1000 profile submissions").
+const fixScope = (t: string): string =>
+  t.replace(/\b1,?000\s+profile\s+submissions?/gi, '300 backlink submissions').replace(/\bprofile\s+submissions?/gi, 'backlink submissions');
+const str = (v: unknown, max = 600): string => (typeof v === 'string' ? fixScope(v.trim()).slice(0, max) : '');
 const strList = (v: unknown, maxItems = 12, max = 400): string[] =>
   Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, maxItems) : [];
 
