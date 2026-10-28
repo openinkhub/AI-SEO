@@ -48,6 +48,11 @@ export class PageImagesController {
     return this.service.extractH1ForCustomer(customerId, force === 'true');
   }
 
+  @Post('pages/extract-meta')
+  extractMeta(@Param('customerId') customerId: string, @Query('force') force?: string) {
+    return this.service.extractMetaForCustomer(customerId, force === 'true');
+  }
+
   @Post('pages/:pageId/extract-h1')
   extractPageH1(@Param('customerId') customerId: string, @Param('pageId') pageId: string) {
     return this.service.extractH1ForPage(customerId, pageId);

@@ -26,6 +26,12 @@ export class AuditsController {
     return this.service.ruleStatus(customerId);
   }
 
+  // Push the Layer 3 page data (alias, H1, meta tags, image) into this customer's SEO reports.
+  @Post('refresh-pages')
+  refreshPages(@Param('customerId') customerId: string) {
+    return this.service.refreshReportPages(customerId);
+  }
+
   // Re-run the research enrichment for an existing run (keyword / competitor / local sources + task write-ups).
   @Post(':runId/enrich')
   // ?mode=blocked collects only the sources that still have unfinished (blocked / waiting) tasks.

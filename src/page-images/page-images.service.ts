@@ -54,6 +54,14 @@ export class PageImagesService {
     return this.listPages(customerId);
   }
 
+  // Fetches the meta title + description (and H1) of the pages that have no meta yet (all pages with force).
+  async extractMetaForCustomer(customerId: string, force = false): Promise<WebsitePage[]> {
+    await this.customers.findOne(customerId);
+    const rows = await this.pages.find({ where: { customerId } });
+    await this.applyH1(rows.filter((p) => force || p.metaTitle == null), H1_BUDGET_MS);
+    return this.listPages(customerId);
+  }
+
   async extractH1ForPage(customerId: string, pageId: string): Promise<WebsitePage> {
     const page = await this.findPage(customerId, pageId);
     await this.applyH1([page], 10000);

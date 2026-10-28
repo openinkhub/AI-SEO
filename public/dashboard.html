@@ -1064,6 +1064,7 @@
     h += '<h3 class="sub-h" style="margin-top:6px">1. Website page URLs</h3>' + pageCountHtml() +
       '<div class="actions" style="margin:6px 0"><button type="button" data-act="fetch"' + (cust.website ? '' : ' disabled title="Customer has no website set"') + '>Fetch live pages from website</button>' +
       '<button type="button" data-act="extract"' + (lib.pages.length ? '' : ' disabled') + '>Extract missing H1 keywords</button>' +
+      '<button type="button" data-act="meta"' + (lib.pages.length ? '' : ' disabled') + ' title="Reads each page\'s meta title and description, then updates the SEO report">Fetch meta title &amp; description</button>' +
       '<span class="muted" style="font-size:12px;">' + (cust.website ? escapeHtml(cust.website) : 'No website set for this customer.') + '</span></div>' +
       '<div class="actions" style="margin:6px 0"><input id="newPageUrl" placeholder="https://example.com/page" style="max-width:340px">' +
       '<input id="newPageName" placeholder="Page name (optional)" style="max-width:200px">' +
@@ -1088,7 +1089,7 @@
     h += '<h3 class="sub-h">3. Page mapping — alias name, H1 keyword &amp; image</h3>';
     if (!lib.pages.length) h += '<p class="muted">No pages yet. Fetch the live pages or add one above.</p>';
     else {
-      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>Alias name</th><th>URL</th><th>H1 keyword</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
+      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>Alias name</th><th>URL</th><th>H1 keyword</th><th>Meta title</th><th>Meta description</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
         lib.pages.map(function(pg){
           var img = pg.libraryImageId ? findImage(pg.libraryImageId) : null;
           var opts = '<option value="">— none —</option>' + lib.images.map(function(i){
@@ -1099,6 +1100,8 @@
             '<td><input data-act="alias" data-id="' + pid + '" value="' + escapeHtml(pg.aliasName || '') + '" style="min-width:130px"></td>' +
             '<td style="word-break:break-all;"><a href="' + escapeHtml(/^https?:/i.test(pg.pageUrl) ? pg.pageUrl : 'https://' + pg.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(pg.pageUrl) + '</a></td>' +
             '<td><input data-act="h1" data-id="' + pid + '" value="' + escapeHtml(pg.h1Keyword || '') + '" placeholder="not found" style="min-width:200px"></td>' +
+            '<td style="min-width:180px;font-size:12px;">' + (pg.metaTitle == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaTitle) || '<span class="muted">none</span>') + '</td>' +
+            '<td style="min-width:240px;font-size:12px;">' + (pg.metaDescription == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaDescription) || '<span class="muted">none</span>') + '</td>' +
             '<td style="min-width:240px;">' + (img ? '<img class="thumb" src="' + escapeHtml(img.url) + '" alt="">' : '') +
             '<select data-act="map" data-id="' + pid + '" style="width:auto;max-width:200px;">' + opts + '</select></td>' +
             '<td><button type="button" style="padding:3px 10px;font-size:12px;" data-act="del-page" data-id="' + pid + '">Remove</button></td></tr>';
@@ -1115,6 +1118,7 @@
       if (act === 'fetch') libFetchPages(t);
       else if (act === 'add') libAddPage(t);
       else if (act === 'extract') libExtractH1(t);
+      else if (act === 'meta') libFetchMeta(t);
       else if (act === 'upload') libUploadImage(t);
       else if (act === 'del-img') libDeleteImage(id);
       else if (act === 'del-page') libDeletePage(id);
@@ -1269,6 +1273,23 @@
       lib.msg = { text: missing ? 'Done — ' + missing + ' page(s) still have no H1 (none found, or time ran out; click again to retry).' : 'Done — every page has an H1 keyword.', err: false };
       drawLibrary();
     }).catch(function(err){ btn.disabled = false; setLibMsg('Could not extract H1: ' + err.message, true); });
+  }
+
+  // Fetches meta title + description for the pages that have none yet, then pushes the page data into the SEO report(s).
+  function libFetchMeta(btn) {
+    var cid = state.cid;
+    btn.disabled = true;
+    setLibMsg('Fetching meta titles and descriptions…', false);
+    api(libBase() + '/pages/extract-meta', { method: 'POST', body: {} }).then(function(pages){
+      if (cid !== state.cid) return;
+      lib.pages = Array.isArray(pages) ? pages : lib.pages;
+      var left = lib.pages.filter(function(p){ return p.metaTitle == null; }).length;
+      return api('/customers/' + cid + '/audits/refresh-pages', { method: 'POST', body: {} }).then(function(r){
+        if (cid !== state.cid) return;
+        lib.msg = { text: (left ? left + ' page(s) not reached yet (click again). ' : 'Every page has its meta data. ') + 'SEO report updated (' + ((r && r.updated) || 0) + ' report' + (((r && r.updated) || 0) === 1 ? '' : 's') + ').', err: false };
+        drawLibrary();
+      });
+    }).catch(function(err){ btn.disabled = false; setLibMsg('Could not fetch meta data: ' + err.message, true); });
   }
 
   // Inline edit of alias / H1: saved on change, no redraw (keeps keyboard focus).

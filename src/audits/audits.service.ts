@@ -29,7 +29,6 @@ import { WpClientService } from '../wp-integration/wp-client.service';
 import { fetchGscExport } from './sources/gsc';
 import { collectMetrics, metricsSummary } from './evidence/metrics';
 import { WebsitePage } from '../page-images/website-page.entity';
-import { PageImagesService } from '../page-images/page-images.service';
 import { LibraryImage } from '../page-images/library-image.entity';
 import { EmailService } from '../email/email.service';
 
@@ -111,7 +110,6 @@ export class AuditsService implements OnModuleInit {
     private readonly wp: WpClientService,
     @InjectRepository(WebsitePage) private readonly pageRepo: Repository<WebsitePage>,
     @InjectRepository(LibraryImage) private readonly imageRepo: Repository<LibraryImage>,
-    private readonly pageImages: PageImagesService,
     private readonly email: EmailService,
   ) {}
 
@@ -335,12 +333,7 @@ export class AuditsService implements OnModuleInit {
       run.enrichStatus = status;
       run.enrichNote = note;
       await this.runRepo.save(run);
-      // Read each page's H1 / meta title / meta description (time-boxed) so the report's pages list is filled.
-      try {
-        await this.pageImages.extractH1ForCustomer(customerId, false);
-      } catch {
-        // the pages list simply shows what is already known
-      }
+      // The pages list in the report shows what Layer 3 (Page mapping) already holds; the research run never fetches pages.
       await this.rebuildReports(customerId, runId);
       if (status === 'done') await this.notifyReportReady(customerId, runId);
     } catch {
@@ -616,6 +609,13 @@ export class AuditsService implements OnModuleInit {
     run.reportHtml = buildBrandedReportHtml(run, tasks, customer.companyName, evidence);
     run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence, await this.reportPages(customerId));
     await this.runRepo.save(run);
+  }
+
+  // Pushes the current Layer 3 page data (alias, H1, meta tags, image) into the customer's existing SEO reports.
+  async refreshReportPages(customerId: string): Promise<{ updated: number }> {
+    const runs = await this.runRepo.find({ where: { customerId, status: AuditRunStatus.COMPLETED } });
+    for (const r of runs) await this.rebuildReports(customerId, r.id);
+    return { updated: runs.length };
   }
 
   // One notification mail per run once the report (including research) is generated. The customer's notification
