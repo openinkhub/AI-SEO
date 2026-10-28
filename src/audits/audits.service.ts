@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditRun, AuditRunStatus } from './audit-run.entity';
@@ -54,7 +54,27 @@ export interface AuditRuleStatus {
 }
 
 @Injectable()
-export class AuditsService {
+export class AuditsService implements OnModuleInit {
+  private readonly log = new Logger(AuditsService.name);
+
+  // Research runs inside this process (fire-and-forget). A deploy/restart kills it silently, which used to leave the
+  // run showing "collecting…" forever. On boot nothing can still be running, so any 'running' row is marked interrupted.
+  async onModuleInit(): Promise<void> {
+    try {
+      const stuck = await this.runRepo.find({ where: { enrichStatus: 'running' } });
+      for (const r of stuck) {
+        r.enrichStatus = 'interrupted';
+        r.enrichNote = 'The server restarted while research was running (last step: ' + (r.enrichNote || 'n/a') + '). Press Run research to continue.';
+      }
+      if (stuck.length) {
+        await this.runRepo.save(stuck);
+        this.log.warn(`Marked ${stuck.length} research run(s) as interrupted after restart`);
+      }
+    } catch (e) {
+      this.log.error(`Could not recover stuck research runs: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
   constructor(
     @InjectRepository(AuditRun) private readonly runRepo: Repository<AuditRun>,
     @InjectRepository(AuditTask) private readonly taskRepo: Repository<AuditTask>,
@@ -194,10 +214,16 @@ export class AuditsService {
   async startEnrich(customerId: string, runId: string): Promise<AuditRun> {
     const run = await this.findOne(customerId, runId);
     run.enrichStatus = 'running';
-    run.enrichNote = null;
+    run.enrichNote = this.stamp('starting');
     const saved = await this.runRepo.save(run);
     void this.enrich(customerId, runId);
     return saved;
+  }
+
+  // "14:05 · message" so the dashboard shows when the last step started.
+  private stamp(message: string): string {
+    const t = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' }).format(new Date());
+    return `${t} · ${message}`;
   }
 
   private async enrich(customerId: string, runId: string): Promise<void> {
@@ -229,6 +255,9 @@ export class AuditsService {
           serpApiKey: keys.serpapi?.apiKey,
         },
         site,
+        async (message) => {
+          await this.runRepo.update({ id: runId }, { enrichNote: this.stamp(message).slice(0, 300) });
+        },
       );
       note = notes.length ? notes.join(' | ').slice(0, 900) : null;
     } catch (err) {
@@ -425,8 +454,19 @@ export class AuditsService {
     return out;
   }
 
-  findAllForCustomer(customerId: string): Promise<AuditRun[]> {
-    return this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' } });
+  async findAllForCustomer(customerId: string): Promise<AuditRun[]> {
+    const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' } });
+    // A 'running' research that has not reported a step for 20 minutes is treated as stalled (every step has its own
+    // time limit, so a healthy run always moves on well before this).
+    const limit = Number(process.env.ENRICH_STALL_MINUTES) || 20;
+    for (const r of runs) {
+      if (r.enrichStatus === 'running' && Date.now() - new Date(r.updatedAt).getTime() > limit * 60000) {
+        r.enrichStatus = 'stalled';
+        r.enrichNote = `No progress for ${limit}+ minutes (last: ${r.enrichNote || 'n/a'}). Press Run research to start again.`;
+        await this.runRepo.save(r);
+      }
+    }
+    return runs;
   }
 
   async findOne(customerId: string, runId: string): Promise<AuditRun> {

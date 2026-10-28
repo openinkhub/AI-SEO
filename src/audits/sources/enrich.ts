@@ -35,8 +35,28 @@ async function saveResearch(deps: EnrichDeps, customerId: string, runId: string,
 
 // Collects the live research sources for this run, then writes each task's finding from its own source.
 // Returns a short note listing what could not be done.
-export async function enrichRun(deps: EnrichDeps, customerId: string, runId: string, input: ResearchInput, site: string): Promise<string[]> {
+// A hung upstream call (crawl, SerpApi, Mangools, the AI write-up) must never freeze the whole run: each step gets
+// a hard time limit and is reported as failed ("timed out") so the rest of the run can finish.
+const STEP_TIMEOUT_MS = Number(process.env.ENRICH_STEP_TIMEOUT_MS) || 4 * 60 * 1000;
+function withTimeout<T>(p: Promise<T>, label: string, ms = STEP_TIMEOUT_MS): Promise<T> {
+  let t: NodeJS.Timeout;
+  const timer = new Promise<never>((_, rej) => {
+    t = setTimeout(() => rej(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([p, timer]).finally(() => clearTimeout(t));
+}
+
+export type EnrichProgress = (message: string) => Promise<void> | void;
+
+export async function enrichRun(deps: EnrichDeps, customerId: string, runId: string, input: ResearchInput, site: string, onProgress?: EnrichProgress): Promise<string[]> {
   const notes: string[] = [];
+  const progress = async (m: string) => {
+    try {
+      await onProgress?.(m);
+    } catch {
+      // progress is best-effort only
+    }
+  };
   const runners: Array<[SourceKey, () => Promise<Research[]>]> = [
     ['site_ai', async () => [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: (await crawlSite(site)) as unknown as Record<string, any> }]],
     ['keywords', () => runKeywordResearch(input)],
@@ -44,9 +64,12 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     ['local', () => runLocalResearch(input)],
   ];
   const failed = new Map<SourceKey, string>();
+  let step = 0;
   for (const [key, run] of runners) {
+    step += 1;
+    await progress(`step ${step}/${runners.length + LIVE_SOURCES.length}: collecting ${SOURCE_LABEL[key]}`);
     try {
-      for (const r of await run()) await saveResearch(deps, customerId, runId, r);
+      for (const r of await withTimeout(run(), SOURCE_LABEL[key])) await saveResearch(deps, customerId, runId, r);
     } catch (e: any) {
       failed.set(key, String(e?.message ?? e).slice(0, 220));
       notes.push(`${SOURCE_LABEL[key]}: ${failed.get(key)}`);
@@ -56,7 +79,9 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
   const tasks = await deps.taskRepo.find({ where: { auditRunId: runId } });
   for (const src of LIVE_SOURCES) {
     const group = tasks.filter((t) => TASK_SOURCE[t.skillId] === src && !t.isAutomated);
+    step += 1;
     if (!group.length) continue;
+    await progress(`step ${step}/${runners.length + LIVE_SOURCES.length}: writing ${SOURCE_LABEL[src]} (${group.length} tasks)`);
     const isAi = src === 'ai';
     const rows = isAi
       ? evidence.filter((e) => e.status === 'approved' && e.extracted)
@@ -77,7 +102,11 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
         }
       : Object.fromEntries(rows.map((r) => [r.evidenceType, r.extracted]));
     try {
-      const written = await writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : {});
+      const written = await withTimeout(
+        writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : {}),
+        `${SOURCE_LABEL[src]} write-up`,
+        15 * 60 * 1000,
+      );
       for (const t of group) {
         const w = written.get(t.id);
         if (w) {
