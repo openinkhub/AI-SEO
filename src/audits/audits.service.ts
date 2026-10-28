@@ -8,7 +8,7 @@ import { CustomersService } from '../customers/customers.service';
 import { getAllAuditSkills, AUTOMATED_SKILL_IDS } from './audit-skills.catalog';
 import { analyzeWebsite, TechnicalAnalysis } from './technical-analyzer';
 import { buildAutomatedFinding } from './findings-builder';
-import { buildBrandedReportHtml } from './report-builder';
+import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builder';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 
 @Injectable()
@@ -125,6 +125,7 @@ export class AuditsService {
     run.failureReason = failureReason;
     run.completedAt = new Date();
     run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName);
+    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName);
     run.reportGeneratedAt = run.completedAt;
     return this.runRepo.save(run);
   }
@@ -148,6 +149,18 @@ export class AuditsService {
     const run = await this.findOne(customerId, runId);
     if (!run.reportHtml) throw new NotFoundException('Report not generated yet for this run');
     return run.reportHtml;
+  }
+
+  // Customer-facing report. Runs made before this format existed get it built (and saved) on first view.
+  async getCustomerReportHtml(customerId: string, runId: string): Promise<string> {
+    const run = await this.findOne(customerId, runId);
+    if (run.customerReportHtml) return run.customerReportHtml;
+    if (!run.reportHtml) throw new NotFoundException('Report not generated yet for this run');
+    const customer = await this.customersService.findOne(customerId);
+    const tasks = await this.taskRepo.find({ where: { auditRunId: runId } });
+    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName);
+    await this.runRepo.save(run);
+    return run.customerReportHtml;
   }
 
   async listPushes(customerId: string, runId: string): Promise<LayerPush[]> {

@@ -47,6 +47,10 @@ export class AuditRun {
   @Column({ type: 'text', nullable: true })
   reportHtml: string | null;
 
+  // Customer-facing (short) report; reportHtml above is the full admin report.
+  @Column({ type: 'text', nullable: true })
+  customerReportHtml: string | null;
+
   @Column({ type: 'timestamp', nullable: true })
   reportGeneratedAt: Date | null;
 

@@ -37,6 +37,55 @@ ${styleBlock()}
 </html>`;
 }
 
+// Customer-facing report (shown in Layer 3 of the customer panel). The full report above - the
+// 140-skill task list, per-layer findings and "pending data source" rows - is admin-only.
+// This one lists only the checks that actually ran against the customer's site, each finding once.
+export function buildCustomerReportHtml(
+  run: AuditRun,
+  tasks: AuditTask[],
+  customerName: string,
+): string {
+  const real = tasks.filter((t) => t.isAutomated && t.finding);
+  const seen = new Set<string>();
+  const items = real.filter((t) => {
+    const key = `${t.finding}|${t.suggestion ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const stat = (label: string, value: string | number) =>
+    `<div class="stat"><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div>`;
+  const rows = items
+    .map(
+      (t) => `<tr><td>${escapeHtml(t.finding ?? '')}</td><td>${escapeHtml(t.suggestion ?? '—')}</td></tr>`,
+    )
+    .join('');
+  const body = items.length
+    ? `<section class="layers"><h2>Findings and suggestions</h2><table><thead><tr><th>What we found</th><th>What we suggest</th></tr></thead><tbody>${rows}</tbody></table></section>`
+    : `<section class="layers"><h2>Findings and suggestions</h2><p class="empty">${escapeHtml(run.failureReason ?? 'No findings were produced for this audit.')}</p></section>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Openink Hub — SEO Audit — ${escapeHtml(customerName)}</title>
+${styleBlock()}
+</head>
+<body>
+  <header class="brand-header">
+    <div class="brand-mark">Openink Hub</div>
+    <h1>SEO Audit</h1>
+    <p class="meta">${escapeHtml(customerName)} &middot; ${escapeHtml(run.website ?? '')} &middot; ${formatDate(run.completedAt ?? run.createdAt)}</p>
+  </header>
+  <section class="summary">
+    ${stat('Checks completed', real.length)}
+    ${stat('Findings', items.length)}
+  </section>
+  ${body}
+  <footer class="brand-footer">Prepared by Openink Hub &middot; SEO Audit</footer>
+</body>
+</html>`;
+}
+
 function groupByLayer(tasks: AuditTask[]): Map<number, AuditTask[]> {
   const map = new Map<number, AuditTask[]>();
   for (const task of tasks) {

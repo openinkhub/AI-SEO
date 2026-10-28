@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -79,8 +80,15 @@ export class WpAuditsController {
 
   @Get(':runId/report')
   @Header('Content-Type', 'text/html')
-  async report(@Param('wpUserId') wpUserId: string, @Param('runId') runId: string) {
+  async report(
+    @Param('wpUserId') wpUserId: string,
+    @Param('runId') runId: string,
+    @Query('format') format?: string,
+  ) {
     const customerId = await this.customerId(wpUserId);
-    return this.service.getReportHtml(customerId, runId);
+    // 'admin' = the full report (140-skill detail); anything else = the short customer report.
+    return format === 'admin'
+      ? this.service.getReportHtml(customerId, runId)
+      : this.service.getCustomerReportHtml(customerId, runId);
   }
 }
