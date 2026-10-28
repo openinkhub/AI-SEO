@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AuditRun, AuditRunStatus } from './audit-run.entity';
 import { AuditTask, AuditTaskStatus } from './audit-task.entity';
 import { LayerPush, LayerPushStatus } from './layer-push.entity';
@@ -240,6 +240,20 @@ export class AuditsService implements OnModuleInit {
       }
       const site = run.website || customer.website || '';
       const domain = site.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '');
+      // Moz DA / Ahrefs DR / PageSpeed / Mangools are only collected when a tool has none yet for this run — so keys
+      // added after the audit was created are picked up here, without repeating paid calls that already succeeded.
+      const skipped: string[] = [];
+      try {
+        const apiTools = ['pagespeed', 'mangools', 'moz', 'ahrefs'];
+        const existing = await this.evidenceRepo.find({ where: { auditRunId: runId, section: 'auto', tool: In(apiTools) } });
+        const have = new Set(existing.filter((e) => e.status === 'approved').map((e) => e.tool));
+        const failedRows = existing.filter((e) => !have.has(e.tool));
+        if (failedRows.length) await this.evidenceRepo.remove(failedRows);
+        await this.runRepo.update({ id: runId }, { enrichNote: this.stamp('collecting Moz DA / Ahrefs DR / PageSpeed / Mangools').slice(0, 300) });
+        await this.runCustomerApis(customerId, runId, site, skipped, have);
+      } catch (e) {
+        skipped.push(`API refresh failed: ${e instanceof Error ? e.message : 'error'}`.slice(0, 200));
+      }
       const notes = await enrichRun(
         { taskRepo: this.taskRepo, evidenceRepo: this.evidenceRepo },
         customerId,
@@ -259,7 +273,8 @@ export class AuditsService implements OnModuleInit {
           await this.runRepo.update({ id: runId }, { enrichNote: this.stamp(message).slice(0, 300) });
         },
       );
-      note = notes.length ? notes.join(' | ').slice(0, 900) : null;
+      const all = [...skipped, ...notes];
+      note = all.length ? all.join(' | ').slice(0, 900) : null;
     } catch (err) {
       status = 'failed';
       note = (err instanceof Error ? err.message : 'Enrichment failed').slice(0, 400);
@@ -343,7 +358,9 @@ export class AuditsService implements OnModuleInit {
   // Uses the customer's own API settings (Layer 2 > API settings in the admin panel). Today only
   // PageSpeed is wired; the result is stored as pre-approved evidence so it flows through the same
   // report rendering as uploaded tool data. A failure is recorded, never thrown - the audit still runs.
-  private async runCustomerApis(customerId: string, runId: string, website: string): Promise<AuditEvidence[]> {
+  // `have` = tools that already produced approved evidence for this run (skipped, so paid calls are not repeated);
+  // `skipped` collects the reason a tool produced nothing (key not set, switched off) so it can be shown to the admin.
+  private async runCustomerApis(customerId: string, runId: string, website: string, skipped: string[] = [], have: Set<string> = new Set()): Promise<AuditEvidence[]> {
     const out: AuditEvidence[] = [];
     if (!website) return out;
     let keys: Record<string, Record<string, string>> = {};
@@ -352,7 +369,8 @@ export class AuditsService implements OnModuleInit {
     } catch {
       keys = {};
     }
-    if (keys.pagespeed) {
+    if (!keys.pagespeed && !have.has('pagespeed')) skipped.push('PageSpeed: no API key set for this customer');
+    if (keys.pagespeed && !have.has('pagespeed')) {
       const url = /^https?:\/\//i.test(website) ? website : `https://${website}`;
       const row = this.evidenceRepo.create({
         customerId,
@@ -374,7 +392,8 @@ export class AuditsService implements OnModuleInit {
       }
       out.push(await this.evidenceRepo.save(row));
     }
-    if (keys.mangools?.apiKey) {
+    if (!keys.mangools?.apiKey && !have.has('mangools')) skipped.push('Mangools: no API key set for this customer');
+    if (keys.mangools?.apiKey && !have.has('mangools')) {
       // Each Mangools function is its own evidence card with its own limit (customer API settings).
       for (const r of await runMangools(keys.mangools, website)) {
         const row = this.evidenceRepo.create({
@@ -401,7 +420,11 @@ export class AuditsService implements OnModuleInit {
       globalKeys = {};
     }
     const moz = globalKeys.moz;
-    if (moz && (moz.apiToken || (moz.accessId && moz.secretKey)) && (moz.mzAuthority ?? '').trim() !== '0') {
+    if (!have.has('moz')) {
+      if (!moz || !(moz.apiToken || (moz.accessId && moz.secretKey))) skipped.push('Moz DA: no Moz key in the global API settings');
+      else if ((moz.mzAuthority ?? '').trim() === '0') skipped.push('Moz DA: switched off in the global API settings');
+    }
+    if (!have.has('moz') && moz && (moz.apiToken || (moz.accessId && moz.secretKey)) && (moz.mzAuthority ?? '').trim() !== '0') {
       const row = this.evidenceRepo.create({
         customerId,
         auditRunId: runId,
@@ -426,7 +449,11 @@ export class AuditsService implements OnModuleInit {
       }
       out.push(await this.evidenceRepo.save(row));
     }
-    if (keys.ahrefs?.apiKey && (keys.ahrefs.ahDomainRating ?? '').trim() !== '0') {
+    if (!have.has('ahrefs')) {
+      if (!keys.ahrefs?.apiKey) skipped.push('Ahrefs DR: no Ahrefs key set for this customer');
+      else if ((keys.ahrefs.ahDomainRating ?? '').trim() === '0') skipped.push('Ahrefs DR: switched off in this customer\'s API settings');
+    }
+    if (!have.has('ahrefs') && keys.ahrefs?.apiKey && (keys.ahrefs.ahDomainRating ?? '').trim() !== '0') {
       const row = this.evidenceRepo.create({
         customerId,
         auditRunId: runId,
