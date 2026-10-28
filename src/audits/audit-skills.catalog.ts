@@ -275,6 +275,20 @@ export interface AuditSkillDef {
   layerNumbers: number[];
 }
 
+// Not audit checks - planning / onboarding / coaching skills with nothing to measure on a customer's site. They are
+// left out of the task list (and so out of the Layer mapping list); the audit has 132 tasks. The rows above stay as
+// data so this is reversible: delete an id here to bring a task back.
+export const REMOVED_SKILL_IDS: ReadonlySet<string> = new Set([
+  'seo-aeo-geo-ultimate:seo',
+  'seo-aeo-geo-ultimate:seo-plan',
+  'seo-skills:seo-plan',
+  'seo-skills:client-onboarding-proposal',
+  'ubersuggest:project-setup',
+  'harborrank:seo-coach',
+  'harborrank:seo-project-setup',
+  'content-intelligence:brand-marketing-mode',
+]);
+
 let cachedFlat: AuditSkillDef[] | null = null;
 
 // Flattens the 10 grouped arrays above into the 140 skill definitions the
@@ -287,6 +301,7 @@ export function getAllAuditSkills(): AuditSkillDef[] {
   for (const g of AUDIT_SKILL_GROUPS) {
     for (const t of g.skills) {
       const [plugin, skill, finds, actionOutput, resultNature, implementationType, layerMappingRaw] = t;
+      if (REMOVED_SKILL_IDS.has(`${plugin}:${skill}`)) continue;
       out.push({
         id: `${plugin}:${skill}`,
         group: g.group,

@@ -133,7 +133,7 @@ function taskMatrixBlock(tasks: AuditTask[]): string {
       return `<div class="layer-card"><h3>${escapeHtml(SOURCE_SIDE[k as keyof typeof SOURCE_LABEL] === 'external' ? 'External' : SOURCE_SIDE[k as keyof typeof SOURCE_LABEL] === 'internal' ? 'Internal' : 'N/A')} audit · ${escapeHtml(SOURCE_LABEL[k as keyof typeof SOURCE_LABEL])} <span class="muted">(${done}/${list.length} done)</span></h3><table><thead><tr><th>Task</th><th>Status</th><th>Finding</th><th>Suggestion</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     })
     .join('');
-  return `<section class="layers"><h2>140-Task Matrix (by research source)</h2>${sections}</section>`;
+  return `<section class="layers"><h2>${tasks.length}-Task Matrix (by research source)</h2>${sections}</section>`;
 }
 
 function groupByLayer(tasks: AuditTask[]): Map<number, AuditTask[]> {
@@ -192,7 +192,7 @@ function appendixBlock(tasks: AuditTask[]): string {
     )
     .join('');
   return `<section class="appendix">
-    <h2>All 140 Skills — Task Detail</h2>
+    <h2>All ${tasks.length} Skills — Task Detail</h2>
     <table>
       <thead><tr><th>Group</th><th>Skill</th><th>Type</th><th>Action</th><th>Layer(s)</th><th>Status</th><th>Finding</th></tr></thead>
       <tbody>${rows}</tbody>

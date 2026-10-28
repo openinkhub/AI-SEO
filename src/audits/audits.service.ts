@@ -5,7 +5,7 @@ import { AuditRun, AuditRunStatus } from './audit-run.entity';
 import { AuditTask, AuditTaskStatus } from './audit-task.entity';
 import { LayerPush, LayerPushStatus } from './layer-push.entity';
 import { CustomersService } from '../customers/customers.service';
-import { getAllAuditSkills, AUTOMATED_SKILL_IDS } from './audit-skills.catalog';
+import { getAllAuditSkills, AUTOMATED_SKILL_IDS, REMOVED_SKILL_IDS } from './audit-skills.catalog';
 import { analyzeWebsite, TechnicalAnalysis } from './technical-analyzer';
 import { buildAutomatedFinding } from './findings-builder';
 import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builder';
@@ -63,6 +63,20 @@ export class AuditsService implements OnModuleInit {
   // Research runs inside this process (fire-and-forget). A deploy/restart kills it silently, which used to leave the
   // run showing "collecting…" forever. On boot nothing can still be running, so any 'running' row is marked interrupted.
   async onModuleInit(): Promise<void> {
+    // The 8 non-audit skills were dropped from the catalog: clear them from runs that already exist too.
+    try {
+      const gone = await this.taskRepo.find({ where: { skillId: In([...REMOVED_SKILL_IDS]) }, select: ['id', 'auditRunId'] });
+      if (gone.length) {
+        await this.taskRepo.delete(gone.map((g) => g.id));
+        for (const runId of new Set(gone.map((g) => g.auditRunId))) {
+          const n = await this.taskRepo.count({ where: { auditRunId: runId } });
+          await this.runRepo.update({ id: runId }, { totalSkills: n, completedSkills: n });
+        }
+        this.log.warn(`Removed ${gone.length} non-audit task row(s) from existing runs`);
+      }
+    } catch (e) {
+      this.log.error(`Could not clear removed tasks: ${e instanceof Error ? e.message : e}`);
+    }
     try {
       const stuck = await this.runRepo.find({ where: { enrichStatus: 'running' } });
       for (const r of stuck) {
