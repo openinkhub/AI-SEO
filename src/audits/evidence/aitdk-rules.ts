@@ -141,6 +141,14 @@ export const EVIDENCE_RULES: EvidenceRule[] = [
     fields:
       '{"score":int,"grade":str,"businessType":str,"pagesAnalyzed":int,"date":str,"summary":str,"priorityActions":[str],"categories":[{"name":str,"weight":str,"score":int,"grade":str}],"platforms":[{"name":str,"score":int,"readiness":str}],"metrics":[{"label":str,"value":str}],"eeat":[{"pillar":str,"score":int,"max":int,"evidence":str}],"crawlers":{"checked":int,"allowed":int,"blocked":int,"notMentioned":int,"blockedNames":[str]},"findings":[{"severity":"critical|high|medium|low","title":str,"description":str,"effort":str}],"technicalIssues":[{"severity":str,"issue":str,"page":str}],"brandRecommendations":[str],"schemaTypes":[str]}  (summary = executive summary text without markdown asterisks, max ~600 chars; priorityActions = the numbered list; findings = every row of Key Findings; technicalIssues = rows of Technical Findings, max 30; copy numbers exactly)',
   },
+  {
+    type: 'digispot_dashboard',
+    tool: 'digispot',
+    label: 'Digispot AI - audit dashboard scores',
+    recognise: 'Screenshot of app.digispot.ai audit results: gauges (Site Architecture Score, Page Score, Robots.txt / Sitemap / Security score), "Impact Levels" tiles (Low / Medium / High / Critical counts), and "Page Audit Insights" cards each with a score /100, a label (EXCELLENT / GOOD / FAIR / POOR) and a Min / Avg / Max bar.',
+    fields:
+      '{"impact":{"low":int,"medium":int,"high":int,"critical":int}|null,"scores":[{"group":str,"name":str,"score":int|null,"label":str|null,"min":int|null,"avg":int|null,"max":int|null,"top10":int|null}]}  (one scores row per card/gauge visible; group = the section heading above it, e.g. "Site Architecture", "Crawlability", "Content and Markup Quality", "Performance Optimization", "Links", "Visual and Media Optimization", "Branding and Engagement", "Personalization and Market Reach"; top10 = the "Top-10%: 90" number when shown; "Coming Soon"/"N/A" cards: score null and label as shown; impact = null when the tiles are not in the screenshot)',
+  },
 ];
 
 export function buildExtractionPrompt(tool?: string | null): string {
@@ -166,7 +174,7 @@ export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['di
 export const TOOL_SECTIONS: Array<{ key: string; label: string; accepts: string; hint: string }> = [
   { key: 'auto', label: 'Automatic (customer APIs)', accepts: '', hint: 'Filled by the audit run from the customer\'s API settings (Layer 2). Nothing to upload.' },
   { key: 'aitdk', label: 'AITDK SEO Extension', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots (Meta, Technical, Traffic, Backlinks, GEO, SERP, Density, Social, Structured)' },
-  { key: 'digispot', label: 'Digispot AI - SEO Insights', accepts: '.txt,text/plain', hint: 'Comprehensive report .txt export' },
+  { key: 'digispot', label: 'Digispot AI - SEO Insights', accepts: '.txt,text/plain,image/png,image/jpeg,image/webp', hint: 'Comprehensive report .txt export and/or screenshots of the audit results dashboard' },
   { key: 'ppcblogpro', label: 'PPCBlogPro - SEO / AEO / GEO', accepts: '.csv,text/csv,image/png,image/jpeg,image/webp', hint: '.csv export and/or score screenshot' },
   { key: 'seoanalyzer', label: 'SEO Analyzer (extension)', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots of the Summary / Headers / Images / Links / Social / Tools tabs' },
   { key: 'seoquake', label: 'SEOquake', accepts: '.pdf,application/pdf', hint: 'On-Page SEO Audit PDF' },

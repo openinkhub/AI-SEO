@@ -138,7 +138,7 @@ export class EvidenceService {
     try {
       const out = await extractFromImage(buffer, mime, row.section && row.section !== 'other' ? row.section : null);
       row.evidenceType = out.type;
-      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : out.type.startsWith('seoquake_') ? 'seoquake' : out.type.startsWith('mangools_') ? 'mangools' : out.type.startsWith('frase_') ? 'frase' : out.type.startsWith('seomator_') ? 'seomator' : 'unknown';
+      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : out.type.startsWith('seoquake_') ? 'seoquake' : out.type.startsWith('mangools_') ? 'mangools' : out.type.startsWith('frase_') ? 'frase' : out.type.startsWith('seomator_') ? 'seomator' : out.type.startsWith('digispot_') ? 'digispot' : 'unknown';
       row.extracted = out.data;
       row.status = 'extracted';
       row.error = null;

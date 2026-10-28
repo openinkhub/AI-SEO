@@ -273,6 +273,19 @@ function renderPageSpeed(d: Record<string, any>): string {
   return h;
 }
 
+function renderDigispotDashboard(d: Record<string, any>): string {
+  let h = '';
+  const im = d.impact;
+  if (im && typeof im === 'object') h += `<p><span class="ev-tag critical">${esc(im.critical ?? '-')} critical</span> <span class="ev-tag warn">${esc(im.high ?? '-')} high</span> <span class="ev-tag minor">${esc(im.medium ?? '-')} medium</span> <span class="ev-tag pass">${esc(im.low ?? '-')} low</span> <span class="ev-src">issues by impact</span></p>`;
+  const rows = (d.scores ?? []) as Array<Record<string, any>>;
+  const groups: string[] = [];
+  rows.forEach((r) => { const g = String(r.group ?? 'Scores'); if (!groups.includes(g)) groups.push(g); });
+  for (const g of groups) {
+    h += `<h4>${esc(g)}</h4>` + grid(['Score', 'Result', 'Rating', 'Range on site (min / avg / max)', 'Top 10%'], rows.filter((r) => String(r.group ?? 'Scores') === g).map((r) => [r.name, r.score != null ? `${r.score}/100` : 'N/A', r.label ?? '', r.min != null || r.avg != null || r.max != null ? [r.min ?? '-', r.avg ?? '-', r.max ?? '-'].join(' / ') : '', r.top10 ?? '']));
+  }
+  return h || '<p class="empty">Nothing could be read from this image.</p>';
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
@@ -296,6 +309,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         e.evidenceType === 'digispot_report' ? renderDigispot(d, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_report' ? renderPpcReport(d as PpcReport, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_summary' ? renderPpcSummary(d)
+        : e.evidenceType === 'digispot_dashboard' ? renderDigispotDashboard(d)
         : e.evidenceType === 'pagespeed_report' ? renderPageSpeed(d)
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
