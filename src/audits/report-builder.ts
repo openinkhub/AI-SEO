@@ -74,14 +74,11 @@ ${styleBlock()}
 
 // Inner sections of the customer report (stats, findings, approved tool evidence) - reused by the compiled package.
 export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: AuditEvidence[] = []): string {
-  const real = tasks.filter((t) => t.isAutomated && t.finding);
-  const seen = new Set<string>();
-  const items = real.filter((t) => {
-    const key = `${t.finding}|${t.suggestion ?? ''}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // Every completed task gets its own row (each names its task and research source), no hiding of look-alike findings.
+  const items = tasks.filter((t) => t.isAutomated && t.finding);
+  const real = items;
+  const notApplicable = tasks.filter((t) => TASK_SOURCE[`${t.plugin}:${t.skill}`] === 'na').length;
+  const inProgress = Math.max(tasks.length - real.length - notApplicable, 0);
   const stat = (label: string, value: string | number) =>
     `<div class="stat"><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div>`;
   const rows = items
@@ -94,8 +91,9 @@ export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: 
     : `<section class="layers"><h2>SEO task results</h2><p class="empty">${escapeHtml(run.failureReason ?? 'No findings were produced for this audit.')}</p></section>`;
   const research = renderEvidenceHtml(evidence, 'customer');
   return `<section class="summary">
-    ${stat('Tasks completed', real.length)}
-    ${stat('Findings', items.length)}
+    ${stat('Tasks completed', `${real.length} of ${tasks.length}`)}
+    ${stat('Not applicable to an SEO audit', notApplicable)}
+    ${stat('Not completed yet', inProgress)}
   </section>
   ${research ? research.replace('<h2>Tool findings</h2>', '<h2>Research sources</h2>') : ''}
   ${body}`;
