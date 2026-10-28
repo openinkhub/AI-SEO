@@ -238,7 +238,7 @@ export class PackageService {
     return this.state(customerId, runId);
   }
 
-  private async render(customerId: string, runId: string, strategy: Strategy, preview: boolean): Promise<string> {
+  private async render(customerId: string, runId: string, strategy: Strategy, preview: boolean, signedAt: Date = new Date()): Promise<string> {
     const run = await this.audits.findOne(customerId, runId);
     const customer = await this.customers.findOne(customerId);
     const cycle = await this.audits.cycleForRun(run);
@@ -254,6 +254,7 @@ export class PackageService {
       evidence,
       strategy,
       preview,
+      signedAt,
     });
   }
 
@@ -262,8 +263,9 @@ export class PackageService {
     const gates = await this.gates(customerId, runId, row);
     const bad = gates.filter((g) => !g.ok);
     if (bad.length) throw new BadRequestException(`Cannot compile yet: ${bad.map((g) => `${g.label} (${g.detail})`).join(' | ')}`.slice(0, 900));
-    row.html = await this.render(customerId, runId, normalizeStrategy(row.strategy), false);
-    row.compiledAt = new Date();
+    const now = new Date();
+    row.html = await this.render(customerId, runId, normalizeStrategy(row.strategy), false, now);
+    row.compiledAt = now;
     await this.repo.save(row);
     return this.state(customerId, runId);
   }

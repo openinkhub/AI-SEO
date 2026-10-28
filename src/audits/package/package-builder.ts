@@ -3,6 +3,7 @@ import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
 import { customerReportBody, escapeHtml, formatDate, styleBlock } from '../report-builder';
 import { Strategy } from './strategy-generator';
+import { STAMP_DATA_URI } from './stamp';
 import {
   COMPANY_FOOTER,
   SCOPE_EXTRA_SERVICES,
@@ -11,7 +12,6 @@ import {
   SCOPE_TARGETS,
   TERMS,
   TERMS_INTRO,
-  TERMS_SIGNED_DATE,
   monthDeliverableNote,
 } from './service-scope';
 
@@ -25,6 +25,8 @@ export interface PackageInput {
   evidence: AuditEvidence[];
   strategy: Strategy;
   preview?: boolean;
+  // Date & time shown in the signature block (default: now, i.e. when the document is compiled).
+  signedAt?: Date;
 }
 
 const e = escapeHtml;
@@ -52,7 +54,7 @@ function packageStyle(): string {
     .pkg-note { font-size:13px; color:#5b5b6e; font-style:italic; margin:6px 0 0; }
     .pkg-preview { background:#fff7e0; border-bottom:1px solid #e8d48a; color:#6b5200; padding:10px 24px; font-size:14px; text-align:center; font-weight:600; }
     .pkg-terms h3 { margin:16px 0 4px; font-size:15px; } .pkg-terms p { font-size:13.5px; line-height:1.55; margin:4px 0; }
-    .pkg-sign { margin-top:28px; font-size:14px; } .pkg-sign .line { border-top:1px solid #1a1a2e; width:260px; margin-top:34px; padding-top:4px; }
+    .pkg-sign { margin-top:28px; font-size:14px; } .pkg-sign .pkg-stamp { width:150px; height:auto; display:block; margin:8px 0 2px; } .pkg-sign .line { border-top:1px solid #1a1a2e; width:260px; margin-top:6px; padding-top:4px; }
     .pkg-part p { font-size:14px; line-height:1.55; }
     @media print { .pkg-toc { display:none; } body { background:#fff; } }
   </style>`;
@@ -105,14 +107,22 @@ function deliverablesPart(monthIndex: number | null): string {
   </section></div>`;
 }
 
-function termsPart(): string {
+// e.g. "28 Oct 2026, 16:12 IST" in the business timezone (APP_TIMEZONE, default Asia/Kolkata).
+function stampDateTime(d: Date): string {
+  const tz = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+  const text = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  const abbr = tz === 'Asia/Kolkata' ? 'IST' : tz;
+  return `${text} ${abbr}`;
+}
+
+function termsPart(signedAt: Date): string {
   const blocks = TERMS.map(
     (t) => `<h3>${e(t.heading)}</h3>${t.intro ? `<p>${e(t.intro)}</p>` : ''}${t.bullets ? ul(t.bullets) : ''}${t.note ? `<p class="pkg-note">${e(t.note)}</p>` : ''}`,
   ).join('');
   return `<div class="pkg-part pkg-terms" id="terms"><section>
     <h2 class="part">4. Terms &amp; Conditions for SEO Services</h2>
     <p>${e(TERMS_INTRO)}</p>${blocks}
-    <div class="pkg-sign">For Openink Hub<div class="line">Date: ${e(TERMS_SIGNED_DATE)}</div></div>
+    <div class="pkg-sign">For Openink Hub<br><img class="pkg-stamp" src="${STAMP_DATA_URI}" alt="Openink Hub stamp"><div class="line">Date &amp; time: ${e(stampDateTime(signedAt))}</div></div>
   </section></div>`;
 }
 
@@ -139,7 +149,7 @@ ${packageStyle()}
   ${reportPart(input)}
   ${strategyPart(input.strategy)}
   ${deliverablesPart(input.monthIndex)}
-  ${termsPart()}
+  ${termsPart(input.signedAt ?? new Date())}
   <footer class="brand-footer">${e(COMPANY_FOOTER)}</footer>
 </body>
 </html>`;
