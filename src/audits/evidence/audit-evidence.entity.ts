@@ -34,6 +34,10 @@ export class AuditEvidence {
   @Column({ type: 'varchar', length: 16 })
   kind: EvidenceKind;
 
+  // Upload section chosen by the admin (aitdk, digispot, ...). Groups items in the panel.
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  section: string | null;
+
   @Column({ type: 'varchar', length: 40, default: 'unknown' })
   tool: string;
 

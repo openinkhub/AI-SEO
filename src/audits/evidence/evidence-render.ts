@@ -232,6 +232,10 @@ function renderMangools(d: Record<string, any>): string {
   return h;
 }
 
+function renderFrase(d: Record<string, any>): string {
+  return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
@@ -239,7 +243,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'mangools' ? 'Mangools' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'mangools' ? 'Mangools' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -254,6 +258,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         e.evidenceType === 'digispot_report' ? renderDigispot(d, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_report' ? renderPpcReport(d as PpcReport, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_summary' ? renderPpcSummary(d)
+        : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
         : e.evidenceType.startsWith('seoanalyzer_') ? renderSeoAnalyzer(e.evidenceType, d)

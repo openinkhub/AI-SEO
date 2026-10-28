@@ -1437,7 +1437,7 @@
 
   // ---- Evidence: screenshots / exports from other SEO tools -------------
   var EV_LABELS = {
-    digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab', seoquake_audit: 'SEOquake audit', mangools_siteprofiler: 'Mangools SiteProfiler',
+    digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab', seoquake_audit: 'SEOquake audit', frase_ai_visibility: 'Frase AI visibility', mangools_siteprofiler: 'Mangools SiteProfiler',
     aitdk_meta: 'Meta', aitdk_technical: 'Technical', aitdk_traffic: 'Traffic', aitdk_backlinks: 'Backlinks',
     aitdk_geo_section: 'GEO section', aitdk_serp: 'SERP / indexed', aitdk_density: 'Keyword density',
     aitdk_social: 'Social tags', aitdk_structured_data: 'Structured data', unknown: 'Unknown'
@@ -1447,37 +1447,26 @@
 
   function evStatusBadge(st) {
     var cls = st === 'approved' ? 'ok' : (st === 'failed' ? 'fail' : 'pending');
-    var label = st === 'extracted' ? 'needs approval' : st;
+    var label = st === 'extracted' ? 'needs approval' : (st === 'uploaded' ? 'waiting for Complete' : st);
     return '<span class="badge ' + cls + '">' + escapeHtml(label) + '</span>';
   }
 
   function loadEvidence(runId) {
     var panel = document.getElementById('panel-' + runId);
     if (!panel) return;
-    if (!panel.getAttribute('data-ev')) {
-      panel.setAttribute('data-ev', '1');
-      panel.innerHTML = '<div class="ev-wrap"><p class="muted" id="evNote-' + runId + '">Loading…</p>' +
-        '<div class="row-actions" style="margin:8px 0">' +
-        '<input type="file" id="evFiles-' + runId + '" multiple accept="image/png,image/jpeg,image/webp,.pdf,application/pdf,.txt,.csv,text/plain,text/csv">' +
-        '<button class="primary" id="evUpload-' + runId + '">Upload</button>' +
-        '<button id="evRebuild-' + runId + '">Rebuild report</button></div>' +
-        '<p class="muted" style="margin:0 0 8px">Screenshots (AITDK, PPCBlogPro…) are read by AI and need your approval before the customer sees them. Digispot .txt and PPCBlogPro .csv exports are read by fixed rules and are approved automatically.</p>' +
-        '<div id="evList-' + runId + '"></div></div>';
-      document.getElementById('evUpload-' + runId).addEventListener('click', function(){ uploadEvidence(runId); });
-      document.getElementById('evRebuild-' + runId).addEventListener('click', function(){
-        var b = this; b.disabled = true;
-        api(evBase(runId) + '/rebuild-report', { method: 'POST', body: {} })
-          .then(function(){ evNote(runId, 'Reports rebuilt.'); })
-          .catch(function(e){ alert('Could not rebuild: ' + e.message); })
-          .finally(function(){ b.disabled = false; });
-      });
-      api(evBase(runId) + '/evidence-status').then(function(st){
-        var msg = (st && st.readerConfigured ? 'Screenshot reader: ready.' : 'Screenshot reader: NOT configured (set ANTHROPIC_API_KEY on the server) — screenshots are stored but not read.') +
-          ' Storage: ' + escapeHtml(st && st.storage ? st.storage : 'unknown') + '.';
-        evNote(runId, msg);
-      }).catch(function(){ evNote(runId, ''); });
-    }
-    refreshEvidence(runId);
+    if (panel.getAttribute('data-ev')) { refreshEvidence(runId); return; }
+    panel.setAttribute('data-ev', '1');
+    panel.innerHTML = '<div class="ev-wrap"><p class="muted" id="evNote-' + runId + '">Loading…</p>' +
+      '<div class="row-actions" style="margin:8px 0"><button class="primary" id="evComplete-' + runId + '">Complete</button>' +
+      '<span class="muted" id="evProgress-' + runId + '">Upload files in the sections below. Nothing is read or added to the reports until you press Complete.</span></div>' +
+      '<div id="evSections-' + runId + '"></div></div>';
+    document.getElementById('evComplete-' + runId).addEventListener('click', function(){ completeEvidence(runId); });
+    api(evBase(runId) + '/evidence-status').then(function(st){
+      state.evSections = (st && st.sections) || [];
+      evNote(runId, (st && st.readerConfigured ? 'Reader: ready.' : 'Reader: NOT configured (set ANTHROPIC_API_KEY on the server) — screenshots/PDFs cannot be read yet.') +
+        ' Storage: ' + escapeHtml(st && st.storage ? st.storage : 'unknown') + '.');
+      refreshEvidence(runId);
+    }).catch(function(err){ evNote(runId, 'Could not load sections: ' + escapeHtml(err.message)); });
   }
 
   function evNote(runId, msg) {
@@ -1485,20 +1474,65 @@
     if (n) n.innerHTML = msg;
   }
 
+  function evProgress(runId, msg) {
+    var n = document.getElementById('evProgress-' + runId);
+    if (n) n.textContent = msg;
+  }
+
   function refreshEvidence(runId) {
     var cid = state.cid;
     return api(evBase(runId) + '/evidence').then(function(items){
       if (cid !== state.cid) return;
-      var box = document.getElementById('evList-' + runId);
+      var box = document.getElementById('evSections-' + runId);
       if (!box) return;
       items = Array.isArray(items) ? items : [];
-      if (!items.length) { box.innerHTML = '<p class="muted">Nothing uploaded yet.</p>'; return; }
-      box.innerHTML = items.map(function(e){ return evidenceRowHtml(runId, e); }).join('');
+      var secs = state.evSections || [];
+      var open = {};
+      Array.prototype.forEach.call(box.querySelectorAll('details[data-sec]'), function(d){ open[d.getAttribute('data-sec')] = d.open; });
+      var html = secs.map(function(sec){
+        var mine = items.filter(function(e){ return (e.section || 'other') === sec.key; });
+        var queued = mine.filter(function(e){ return e.status === 'uploaded'; }).length;
+        var isOpen = open[sec.key] != null ? open[sec.key] : mine.length > 0;
+        return '<details data-sec="' + sec.key + '" class="run-row"' + (isOpen ? ' open' : '') + '><summary style="cursor:pointer"><strong>' + escapeHtml(sec.label) + '</strong> ' +
+          '<span class="muted">' + mine.length + ' file' + (mine.length === 1 ? '' : 's') + (queued ? ' · ' + queued + ' waiting' : '') + '</span></summary>' +
+          '<p class="muted" style="margin:6px 0">' + escapeHtml(sec.hint) + '</p>' +
+          '<div class="row-actions" style="margin:6px 0"><input type="file" multiple id="evFiles-' + runId + '-' + sec.key + '" accept="' + escapeHtml(sec.accepts) + '">' +
+          '<button id="evUp-' + runId + '-' + sec.key + '">Upload</button></div>' +
+          mine.map(function(e){ return evidenceRowHtml(runId, e); }).join('') + '</details>';
+      }).join('');
+      box.innerHTML = html;
+      secs.forEach(function(sec){
+        var b = document.getElementById('evUp-' + runId + '-' + sec.key);
+        if (b) b.addEventListener('click', function(){ uploadEvidence(runId, sec.key); });
+      });
       items.forEach(function(e){ wireEvidenceRow(runId, e); });
     }).catch(function(err){
-      var box = document.getElementById('evList-' + runId);
+      var box = document.getElementById('evSections-' + runId);
       if (box) box.innerHTML = '<p class="muted">Failed to load evidence: ' + escapeHtml(err.message) + '</p>';
     });
+  }
+
+  function completeEvidence(runId) {
+    var btn = document.getElementById('evComplete-' + runId);
+    btn.disabled = true;
+    var total = 0, failed = 0;
+    function step() {
+      return api(evBase(runId) + '/evidence/process-next', { method: 'POST', body: {} }).then(function(r){
+        total += r.processed; failed += r.failed;
+        evProgress(runId, 'Reading files… ' + total + ' done' + (r.remaining ? ', ' + r.remaining + ' to go' : ''));
+        return refreshEvidence(runId).then(function(){ return r.remaining > 0 && r.processed > 0 ? step() : r; });
+      });
+    }
+    evProgress(runId, 'Reading files…');
+    step().then(function(){
+      evProgress(runId, 'Building reports…');
+      return api(evBase(runId) + '/rebuild-report', { method: 'POST', body: {} });
+    }).then(function(){
+      evProgress(runId, 'Complete — ' + total + ' file' + (total === 1 ? '' : 's') + ' read' + (failed ? ', ' + failed + ' failed (see below)' : '') + '. Screenshots/PDFs still need your Approve before customers see them.');
+      return refreshEvidence(runId);
+    }).catch(function(err){
+      evProgress(runId, 'Stopped: ' + err.message);
+    }).finally(function(){ btn.disabled = false; });
   }
 
   function evidenceRowHtml(runId, e) {
@@ -1560,21 +1594,22 @@
     });
   }
 
-  function uploadEvidence(runId) {
-    var input = document.getElementById('evFiles-' + runId);
-    var btn = document.getElementById('evUpload-' + runId);
+  function uploadEvidence(runId, section) {
+    var input = document.getElementById('evFiles-' + runId + '-' + section);
+    var btn = document.getElementById('evUp-' + runId + '-' + section);
     var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
     if (!files.length) { alert('Choose one or more files first.'); return; }
     btn.disabled = true;
     var errors = [], i = 0;
     function next() {
       if (i >= files.length) {
-        btn.disabled = false; btn.textContent = 'Upload'; input.value = '';
         if (errors.length) alert(errors.join('\n'));
+        evProgress(runId, files.length - errors.length + ' file(s) saved. Press Complete when all uploads are done.');
         return refreshEvidence(runId);
       }
       btn.textContent = 'Uploading ' + (i + 1) + '/' + files.length + '…';
       var fd = new FormData();
+      fd.append('section', section);
       fd.append('file', files[i]);
       var name = files[i].name;
       i++;

@@ -13,7 +13,7 @@ export function extractorConfigured(): boolean {
 }
 
 // One vision call per screenshot. Returns {type, data}; throws with a readable message on failure.
-export async function extractFromImage(buffer: Buffer, mime: string): Promise<ImageExtraction> {
+export async function extractFromImage(buffer: Buffer, mime: string, tool?: string | null): Promise<ImageExtraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server, so screenshots cannot be read yet.');
   const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
@@ -34,7 +34,7 @@ export async function extractFromImage(buffer: Buffer, mime: string): Promise<Im
             mime === 'application/pdf'
               ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
               : { type: 'image', source: { type: 'base64', media_type: mime, data: buffer.toString('base64') } },
-            { type: 'text', text: buildExtractionPrompt() },
+            { type: 'text', text: buildExtractionPrompt(tool) },
           ],
         },
       ],

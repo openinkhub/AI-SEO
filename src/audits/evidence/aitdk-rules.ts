@@ -125,10 +125,19 @@ export const EVIDENCE_RULES: EvidenceRule[] = [
     fields:
       '{"domain":str,"authority":{"domainAuthority":int,"pageAuthority":int,"citationFlow":int,"trustFlow":int},"referringIps":int|null,"backlinks":{"active":int,"lost":int,"total":int,"totalChangePercent":str|null,"dofollowRatio":str|null,"activeRatio":str|null},"referring":{"domains":int,"ips":int,"subnets":int},"anchorTypeDistribution":str|null,"topReferringDomains":[{"domain":str,"cf":int,"tf":int,"links":int,"wpr":int}],"anchors":[{"text":str,"type":str,"rd":int,"total":int,"share":str}],"topContent":[{"url":str,"fb":str,"rd":int}],"competitors":[{"url":str,"wpr":str,"ri":str,"fb":str,"sk":str}]}  (N/A stays "N/A"; domain names cut off in the printout are copied as shown)',
   },
+  {
+    type: 'frase_ai_visibility',
+    tool: 'frase',
+    label: 'Frase - AI visibility check',
+    recognise: 'Frase "Are AI engines citing your domain?" free AI visibility tool result: a card saying whether an AI engine (e.g. ChatGPT) cited the domain for a test question.',
+    fields:
+      '{"engine":str,"question":str,"cited":bool,"domain":str,"note":str}  (cited = false when the card says the engine "didn\'t cite" the domain; note = the small grey sentence under it, if any)',
+  },
 ];
 
-export function buildExtractionPrompt(): string {
-  const catalog = EVIDENCE_RULES.map(
+export function buildExtractionPrompt(tool?: string | null): string {
+  const pool = tool && EVIDENCE_RULES.some((r) => r.tool === tool) ? EVIDENCE_RULES.filter((r) => r.tool === tool) : EVIDENCE_RULES;
+  const catalog = pool.map(
     (r) => `- type "${r.type}" (${r.label}): ${r.recognise}\n  data shape: ${r.fields}`,
   ).join('\n');
   return [
@@ -144,3 +153,15 @@ export function buildExtractionPrompt(): string {
 }
 
 export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['digispot_report', 'ppcblogpro_report', 'unknown']));
+
+// Upload sections shown in the admin panel (one box per tool). Add a line here when a new tool arrives.
+export const TOOL_SECTIONS: Array<{ key: string; label: string; accepts: string; hint: string }> = [
+  { key: 'aitdk', label: 'AITDK SEO Extension', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots (Meta, Technical, Traffic, Backlinks, GEO, SERP, Density, Social, Structured)' },
+  { key: 'digispot', label: 'Digispot AI - SEO Insights', accepts: '.txt,text/plain', hint: 'Comprehensive report .txt export' },
+  { key: 'ppcblogpro', label: 'PPCBlogPro - SEO / AEO / GEO', accepts: '.csv,text/csv,image/png,image/jpeg,image/webp', hint: '.csv export and/or score screenshot' },
+  { key: 'seoanalyzer', label: 'SEO Analyzer (extension)', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots of the Summary / Headers / Images / Links / Social / Tools tabs' },
+  { key: 'seoquake', label: 'SEOquake', accepts: '.pdf,application/pdf', hint: 'On-Page SEO Audit PDF' },
+  { key: 'mangools', label: 'Mangools SiteProfiler', accepts: '.pdf,application/pdf,image/png,image/jpeg,image/webp', hint: 'Backlinks / authority PDF or screenshots' },
+  { key: 'frase', label: 'Frase - AI visibility', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshot of the AI citation result' },
+  { key: 'other', label: 'Other tool', accepts: 'image/png,image/jpeg,image/webp,.pdf,application/pdf,.txt,.csv', hint: 'Anything else - read as a generic label/value list' },
+];

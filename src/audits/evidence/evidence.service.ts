@@ -8,7 +8,7 @@ import { StorageService } from '../../page-images/storage.service';
 import { looksLikeDigispot, parseDigispotReport } from './digispot-parser';
 import { looksLikePpcBlogPro, parsePpcBlogProCsv } from './ppcblogpro-parser';
 import { extractFromImage, extractorConfigured } from './evidence-extractor';
-import { KNOWN_TYPES } from './aitdk-rules';
+import { KNOWN_TYPES, TOOL_SECTIONS } from './aitdk-rules';
 import { UpdateEvidenceDto } from './evidence.dto';
 
 const IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
@@ -29,7 +29,7 @@ export class EvidenceService {
   ) {}
 
   status() {
-    return { readerConfigured: extractorConfigured(), storage: this.storage.backend() };
+    return { readerConfigured: extractorConfigured(), storage: this.storage.backend(), sections: TOOL_SECTIONS };
   }
 
   async list(customerId: string, runId: string) {
@@ -38,7 +38,9 @@ export class EvidenceService {
     return rows.map(publicView);
   }
 
-  async upload(customerId: string, runId: string, file: Express.Multer.File) {
+  // Staging only: the file is stored and queued. Nothing is read and no report is rebuilt until
+  // the admin presses Complete (processNext + rebuild-report).
+  async upload(customerId: string, runId: string, file: Express.Multer.File, section?: string) {
     await this.audits.findOne(customerId, runId);
     const isText = /^text\//.test(file.mimetype) || /\.(txt|csv)$/i.test(file.originalname);
     const isImage = IMAGE_MIME.includes(file.mimetype);
@@ -53,6 +55,7 @@ export class EvidenceService {
       kind: isText ? 'text' : 'image',
       fileName: file.originalname.slice(0, 250),
       sha256,
+      section: TOOL_SECTIONS.some((t) => t.key === section) ? (section as string) : 'other',
       tool: 'unknown',
       evidenceType: 'unknown',
       status: 'uploaded',
@@ -61,16 +64,46 @@ export class EvidenceService {
 
     if (isText) {
       row.textContent = file.buffer.toString('utf8');
-      this.applyText(row);
     } else {
       const stored = await this.storage.put(customerId, file.originalname, file.buffer, file.mimetype, FOLDER);
       row.url = stored.url;
       row.storageKey = stored.storageKey;
-      await this.applyImage(row, file.buffer, file.mimetype);
     }
     const saved = await this.repo.save(row);
-    await this.audits.rebuildReports(customerId, runId);
     return publicView(saved);
+  }
+
+  // Complete, step 1: read the next few queued files. The panel calls this until remaining is 0
+  // (keeps each request short for the host's proxy), then calls rebuild-report.
+  async processNext(customerId: string, runId: string, batch = 2) {
+    await this.audits.findOne(customerId, runId);
+    const queued = await this.repo.find({ where: { customerId, auditRunId: runId, status: 'uploaded' }, order: { createdAt: 'ASC' }, take: batch });
+    let ok = 0, failed = 0;
+    for (const row of queued) {
+      try {
+        await this.readRow(row);
+      } catch (err) {
+        row.status = 'failed';
+        row.error = err instanceof Error ? err.message : 'Could not read this file.';
+      }
+      if (row.status === 'failed') failed++; else ok++;
+      await this.repo.save(row);
+    }
+    const remaining = await this.repo.count({ where: { customerId, auditRunId: runId, status: 'uploaded' } });
+    return { processed: queued.length, ok, failed, remaining };
+  }
+
+  private async readRow(row: AuditEvidence): Promise<void> {
+    if (row.kind === 'text') {
+      this.applyText(row);
+      return;
+    }
+    if (!row.url || !/^https?:\/\//i.test(row.url)) throw new BadRequestException('The stored file is not reachable. Upload it again.');
+    const res = await fetch(row.url);
+    if (!res.ok) throw new BadRequestException(`Could not fetch the stored file (HTTP ${res.status}).`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const mime = res.headers.get('content-type')?.split(';')[0] || (/\.pdf$/i.test(row.fileName) ? 'application/pdf' : 'image/png');
+    await this.applyImage(row, buf, mime);
   }
 
   // Text exports are read by fixed rules, so they are trusted and approved straight away.
@@ -98,14 +131,14 @@ export class EvidenceService {
   // Screenshots are read by the vision model and wait for admin approval before customers see them.
   private async applyImage(row: AuditEvidence, buffer: Buffer, mime: string): Promise<void> {
     if (!extractorConfigured()) {
-      row.status = 'uploaded';
-      row.error = 'ANTHROPIC_API_KEY is not set on the server yet - the screenshot is stored but not read.';
+      row.status = 'failed';
+      row.error = 'ANTHROPIC_API_KEY is not set on the server yet - the file is stored but not read. Add the key, then use Re-read.';
       return;
     }
     try {
-      const out = await extractFromImage(buffer, mime);
+      const out = await extractFromImage(buffer, mime, row.section && row.section !== 'other' ? row.section : null);
       row.evidenceType = out.type;
-      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : out.type.startsWith('seoquake_') ? 'seoquake' : out.type.startsWith('mangools_') ? 'mangools' : 'unknown';
+      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : out.type.startsWith('seoquake_') ? 'seoquake' : out.type.startsWith('mangools_') ? 'mangools' : out.type.startsWith('frase_') ? 'frase' : 'unknown';
       row.extracted = out.data;
       row.status = 'extracted';
       row.error = null;
@@ -123,17 +156,7 @@ export class EvidenceService {
 
   async reextract(customerId: string, runId: string, id: string) {
     const row = await this.get(customerId, runId, id);
-    if (row.kind === 'text') {
-      this.applyText(row);
-    } else {
-      if (!row.url || !/^https?:\/\//i.test(row.url)) {
-        throw new BadRequestException('The stored screenshot is not reachable for re-reading. Upload it again.');
-      }
-      const res = await fetch(row.url);
-      if (!res.ok) throw new BadRequestException(`Could not fetch the stored screenshot (HTTP ${res.status}).`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      await this.applyImage(row, buf, res.headers.get('content-type')?.split(';')[0] || (/\.pdf$/i.test(row.fileName) ? 'application/pdf' : 'image/png'));
-    }
+    await this.readRow(row);
     const saved = await this.repo.save(row);
     await this.audits.rebuildReports(customerId, runId);
     return publicView(saved);

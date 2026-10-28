@@ -44,9 +44,15 @@ export class EvidenceController {
     @Param('customerId') customerId: string,
     @Param('runId') runId: string,
     @UploadedFile() file: Express.Multer.File,
+    @Body('section') section?: string,
   ) {
     if (!file) throw new BadRequestException('No file uploaded (expected multipart field "file").');
-    return this.service.upload(customerId, runId, file);
+    return this.service.upload(customerId, runId, file, section);
+  }
+
+  @Post('evidence/process-next')
+  processNext(@Param('customerId') customerId: string, @Param('runId') runId: string) {
+    return this.service.processNext(customerId, runId);
   }
 
   @Get('evidence/:id/data')
