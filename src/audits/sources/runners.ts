@@ -1,5 +1,6 @@
 import { mangoolsGet } from '../../customer-apis/mangools/client';
 import { serpSearch, SerpResult } from './serp';
+import { captureHomepage } from './screenshots';
 
 export interface Research {
   type: string; // evidence type
@@ -17,6 +18,9 @@ export interface ResearchInput {
   profile: Record<string, any>;
   mangools?: Record<string, string>;
   serpApiKey?: string;
+  customerId?: string;
+  screenshotKey?: string;
+  storeImage?: (name: string, buf: Buffer, contentType: string) => Promise<string | null>;
 }
 
 const num = (v: unknown): number | null => (v != null && v !== '' && isFinite(Number(v)) ? Number(v) : null);
@@ -110,6 +114,15 @@ export async function runCompetitorResearch(i: ResearchInput): Promise<Research[
   }
   if (!ownKeywords.length && !sharing.length && !compKeywords.length && !named.length) throw new Error(`No competitor data could be collected. ${notes.join(' | ')}`);
   return [{ type: 'research_competitors', tool: 'mangools', label: 'Competitor research', data: { namedCompetitors: named, ownKeywords, domainsSharingKeywords: sharing, competitorKeywords: compKeywords, notes } }];
+}
+
+// Page fetch / screenshot tools: real homepage screenshots (desktop + mobile) via ScreenshotOne. The crawl data these
+// tasks also use is collected by the site scan. Without a ScreenshotOne key this simply adds no screenshot row.
+export async function runFetchResearch(i: ResearchInput): Promise<Research[]> {
+  if (!i.screenshotKey) return [];
+  const shots = await captureHomepage(i.screenshotKey, i.domain, i.customerId ?? 'customer', i.storeImage);
+  if (!shots.some((s) => s.ok)) throw new Error(`ScreenshotOne: ${shots.map((s) => `${s.device} ${s.error}`).join('; ')}`);
+  return [{ type: 'screenshots', tool: 'screenshotone', label: 'Homepage screenshots', data: { site: i.domain, captured: shots } }];
 }
 
 export async function runLocalResearch(i: ResearchInput): Promise<Research[]> {

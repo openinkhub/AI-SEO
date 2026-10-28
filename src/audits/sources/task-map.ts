@@ -187,7 +187,7 @@ export function evidenceSide(tool: string | null | undefined, type: string | nul
 
 // Sources the Engine can run today, in run order ('ai' last: it reads everything the others collected).
 // Everything else stays an honest "pending" row.
-export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'ai'];
+export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'pagespeed', 'fetch', 'ai'];
 
 // Which API / tool feeds each source, whether the Engine can run it today, and which key it needs.
 export const SOURCE_API: Record<SourceKey, { api: string; key: string; wired: boolean }> = {
@@ -199,8 +199,8 @@ export const SOURCE_API: Record<SourceKey, { api: string; key: string; wired: bo
   backlinks: { api: 'Mangools SiteProfiler / LinkMiner + Moz DA + Ahrefs DR', key: 'Customer: Mangools, Ahrefs · Global: Moz', wired: true },
   visibility: { api: 'Mangools AI Search Watcher', key: 'Customer key: Mangools', wired: true },
   local: { api: 'SerpApi Google local results', key: 'Customer key: SerpApi', wired: true },
-  pagespeed: { api: 'Google PageSpeed Insights (evidence only, no write-up yet)', key: 'Customer key: PageSpeed', wired: false },
-  fetch: { api: 'Page fetch / screenshot tools - not built', key: '-', wired: false },
+  pagespeed: { api: 'Google PageSpeed Insights', key: 'Customer key: PageSpeed', wired: true },
+  fetch: { api: 'Engine page crawl + ScreenshotOne homepage screenshots', key: 'Customer key: ScreenshotOne', wired: true },
   gsc: { api: 'Google Search Console / GA4 - not built', key: 'Google OAuth on the Engine', wired: false },
   na: { api: 'Not an SEO audit task', key: '-', wired: false },
 };

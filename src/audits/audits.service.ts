@@ -24,6 +24,7 @@ import { todayInTz } from '../projects/month-cycle';
 import { AuditPackage } from './package/audit-package.entity';
 import { pendingCustomerPageHtml } from './package/package-builder';
 import { createHash } from 'crypto';
+import { StorageService } from '../page-images/storage.service';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
 const ymd = (v: unknown): string | null => {
@@ -85,6 +86,7 @@ export class AuditsService implements OnModuleInit {
     private readonly customersService: CustomersService,
     private readonly apis: CustomerApisService,
     private readonly globals: GlobalApisService,
+    private readonly storage: StorageService,
   ) {}
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":
@@ -267,12 +269,22 @@ export class AuditsService implements OnModuleInit {
           profile: (customer.profile ?? {}) as Record<string, any>,
           mangools: keys.mangools,
           serpApiKey: keys.serpapi?.apiKey,
+          customerId,
+          screenshotKey: keys.screenshotone?.apiKey,
+          storeImage: async (name, buf, contentType) => {
+            try {
+              return (await this.storage.put(customerId, name, buf, contentType, 'audit-screenshots')).url;
+            } catch {
+              return null; // storage not configured: the capture is still recorded, just without a hosted image
+            }
+          },
         },
         site,
         async (message) => {
           await this.runRepo.update({ id: runId }, { enrichNote: this.stamp(message).slice(0, 300) });
         },
       );
+      if (!keys.screenshotone?.apiKey) skipped.push('ScreenshotOne: no key set for this customer (no screenshots taken)');
       const all = [...skipped, ...notes];
       note = all.length ? all.join(' | ').slice(0, 900) : null;
     } catch (err) {

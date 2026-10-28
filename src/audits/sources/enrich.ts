@@ -4,7 +4,7 @@ import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
 import { LIVE_SOURCES, SOURCE_LABEL, SourceKey, TASK_SOURCE } from './task-map';
 import { crawlSite } from './site-crawl';
-import { Research, ResearchInput, runCompetitorResearch, runKeywordResearch, runLocalResearch } from './runners';
+import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
 
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
@@ -15,6 +15,8 @@ const FEEDS: Partial<Record<SourceKey, string[]>> = {
   backlinks: ['moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer'],
   visibility: ['mangools_ai_watcher'],
   local: ['research_local'],
+  pagespeed: ['pagespeed_report'],
+  fetch: ['site_crawl', 'screenshots'],
 };
 
 export interface EnrichDeps {
@@ -62,6 +64,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     ['keywords', () => runKeywordResearch(input)],
     ['competitors', () => runCompetitorResearch(input)],
     ['local', () => runLocalResearch(input)],
+    ['fetch', () => runFetchResearch(input)],
   ];
   const failed = new Map<SourceKey, string>();
   let step = 0;
