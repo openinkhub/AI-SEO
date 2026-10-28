@@ -217,21 +217,37 @@ function renderSeoquake(d: Record<string, any>, admin: boolean): string {
   return h;
 }
 
-function renderMangools(d: Record<string, any>): string {
-  const a = d.authority ?? {}, b = d.backlinks ?? {}, r = d.referring ?? {};
-  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Domain authority', a.domainAuthority)}${scoreTile('Page authority', a.pageAuthority)}${scoreTile('Citation flow', a.citationFlow)}${scoreTile('Trust flow', a.trustFlow)}</div>`;
-  h += kvTable([['Active backlinks', b.active], ['Lost backlinks', b.lost], ['Total backlinks', b.total != null ? b.total + (b.totalChangePercent ? ` (${b.totalChangePercent})` : '') : null], ['Dofollow ratio', b.dofollowRatio], ['Active links ratio', b.activeRatio], ['Referring domains', r.domains], ['Referring IPs', r.ips ?? d.referringIps], ['Referring subnets', r.subnets], ['Anchor type mix', d.anchorTypeDistribution]]);
-  const dom = (d.topReferringDomains ?? []) as Array<Record<string, any>>;
-  if (dom.length) h += '<h4>Top referring domains</h4>' + grid(['Domain', 'CF', 'TF', 'Links', 'WPR'], dom.map((x) => [x.domain, x.cf, x.tf, x.links, x.wpr]));
-  const an = (d.anchors ?? []) as Array<Record<string, any>>;
-  if (an.length) h += '<h4>Anchor texts</h4>' + grid(['Anchor', 'Type', 'Ref. domains', 'Total', 'Share'], an.map((x) => [x.text, x.type, x.rd, x.total, x.share]));
-  const tc = (d.topContent ?? []) as Array<Record<string, any>>;
-  if (tc.length) h += '<h4>Top content (by referring domains)</h4>' + grid(['Page', 'Facebook', 'Ref. domains'], tc.map((x) => [x.url, x.fb, x.rd]));
-  const cp = (d.competitors ?? []) as Array<Record<string, any>>;
-  if (cp.length) h += '<h4>Competitors</h4>' + grid(['Site', 'WPR', 'RI', 'FB', 'SK'], cp.map((x) => [x.url, x.wpr, x.ri, x.fb, x.sk]));
-  return h;
+function pct(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const t = String(v).trim();
+  return /%$/.test(t) || /^n\/?a$/i.test(t) ? t : `${t}%`;
 }
 
+function renderMangools(d: Record<string, any>): string {
+  const a = d.authority ?? {}, b = d.backlinks ?? {}, r = d.referring ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Domain authority', a.domainAuthority)}${scoreTile('Page authority', a.pageAuthority)}${scoreTile('Citation flow (link strength)', a.citationFlow)}${scoreTile('Trust flow (link quality)', a.trustFlow)}</div>`;
+  const change = b.totalChangePercent != null && b.totalChangePercent !== '' ? ` (${/^-/.test(String(b.totalChangePercent)) ? '' : '+'}${pct(b.totalChangePercent)} change)` : '';
+  h += kvTable([
+    ['Active backlinks (links still live)', b.active],
+    ['Lost backlinks (links removed)', b.lost],
+    ['Total backlinks', b.total != null ? `${b.total}${change}` : null],
+    ['Dofollow share (links that pass ranking value)', pct(b.dofollowRatio)],
+    ['Active links share (live links out of all links found)', pct(b.activeRatio)],
+    ['Referring domains (different websites linking to you)', r.domains],
+    ['Referring IPs (different servers linking to you)', r.ips ?? d.referringIps],
+    ['Referring subnets (different network blocks linking to you)', r.subnets],
+    ['Anchor text type distribution', pct(d.anchorTypeDistribution)],
+  ]);
+  const dom = (d.topReferringDomains ?? []) as Array<Record<string, any>>;
+  if (dom.length) h += '<h4>Top referring domains</h4>' + grid(['Domain', 'Citation flow', 'Trust flow', 'Links', 'Web page rank'], dom.map((x) => [x.domain, x.cf, x.tf, x.links, x.wpr]));
+  const an = (d.anchors ?? []) as Array<Record<string, any>>;
+  if (an.length) h += '<h4>Anchor texts (the clickable words of the links)</h4>' + grid(['Anchor', 'Type', 'Referring domains', 'Total links', 'Share'], an.map((x) => [x.text, x.type, x.rd, x.total, x.share]));
+  const tc = (d.topContent ?? []) as Array<Record<string, any>>;
+  if (tc.length) h += '<h4>Top content (by referring domains)</h4>' + grid(['Page', 'Facebook shares', 'Referring domains'], tc.map((x) => [x.url, x.fb, x.rd]));
+  const cp = (d.competitors ?? []) as Array<Record<string, any>>;
+  if (cp.length) h += '<h4>Competitors</h4>' + grid(['Site', 'Web page rank', 'Referring IPs', 'Facebook shares', 'Keyword overlap'], cp.map((x) => [x.url, x.wpr, x.ri, x.fb, x.sk]));
+  return h;
+}
 
 function mgFlow(v: any): string {
   return v == null ? '' : String(v);
@@ -287,7 +303,7 @@ function renderResearch(type: string, d: Record<string, any>): string {
   if (type === 'research_keywords') {
     let h = kvTable([['Seed keywords', (d.seeds ?? []).join(', ')]]);
     const k = (d.keywords ?? []) as Array<Record<string, any>>;
-    if (k.length) h += '<h4>Keyword opportunities (Mangools KWFinder)</h4>' + grid(['Keyword', 'Searches / month', 'Difficulty', 'CPC', 'From seed'], k.map((x) => [x.keyword, f(x.volume), f(x.difficulty), f(x.cpc), x.seed]));
+    if (k.length) h += '<h4>Keyword opportunities (Mangools KWFinder)</h4>' + grid(['Keyword', 'Searches per month', 'Difficulty (0-100)', 'Cost per click (CPC)', 'From seed'], k.map((x) => [x.keyword, f(x.volume), f(x.difficulty), f(x.cpc), x.seed]));
     const r = (d.rankChecks ?? []) as Array<Record<string, any>>;
     if (r.length) h += '<h4>Where the site ranks on Google today</h4>' + grid(['Search', 'Your position', 'Top results', 'AI Overview shown'], r.map((x) => [x.query, x.ownPosition ? '#' + x.ownPosition : 'Not in top 20', (x.top ?? []).map((t: any) => t.domain).join(', '), x.aiOverview ? 'Yes' : 'No']));
     if ((d.questions ?? []).length) h += '<h4>Questions people ask</h4><ul class="ev-list">' + d.questions.map((q: string) => `<li>${esc(q)}</li>`).join('') + '</ul>';
@@ -298,7 +314,7 @@ function renderResearch(type: string, d: Record<string, any>): string {
     let h = '';
     if ((d.namedCompetitors ?? []).length) h += kvTable([['Competitors named in your profile', d.namedCompetitors.join(', ')]]);
     const o = (d.ownKeywords ?? []) as Array<Record<string, any>>;
-    if (o.length) h += '<h4>Keywords your site already ranks for</h4>' + grid(['Keyword', 'Searches / month', 'Position', 'Est. visits'], o.map((x) => [x.keyword, f(x.volume), f(x.position), f(x.visits)]));
+    if (o.length) h += '<h4>Keywords your site already ranks for</h4>' + grid(['Keyword', 'Searches per month', 'Google position', 'Estimated visits'], o.map((x) => [x.keyword, f(x.volume), f(x.position), f(x.visits)]));
     const s = (d.domainsSharingKeywords ?? []) as Array<Record<string, any>>;
     if (s.length) h += '<h4>Sites competing for the same keywords</h4>' + grid(['Domain', 'Shared keywords'], s.map((x) => [x.domain, f(x.sharedKeywords)]));
     for (const c of (d.competitorKeywords ?? []) as Array<Record<string, any>>) {
