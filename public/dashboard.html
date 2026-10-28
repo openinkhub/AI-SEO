@@ -1089,22 +1089,22 @@
     h += '<h3 class="sub-h">3. Page mapping — alias name, H1 keyword &amp; image</h3>';
     if (!lib.pages.length) h += '<p class="muted">No pages yet. Fetch the live pages or add one above.</p>';
     else {
-      h += '<div style="overflow:auto"><table><thead><tr><th>Page</th><th>Alias name</th><th>URL</th><th>H1 keyword</th><th>Meta title</th><th>Meta description</th><th>Mapped image</th><th></th></tr></thead><tbody>' +
+      h += '<div style="overflow:auto"><table style="table-layout:fixed;width:100%;min-width:900px"><colgroup><col style="width:12%"><col style="width:11%"><col style="width:19%"><col style="width:14%"><col style="width:13%"><col style="width:17%"><col style="width:14%"></colgroup><thead><tr><th>Page</th><th>Alias name</th><th>URL</th><th>H1 keyword</th><th>Meta title</th><th>Meta description</th><th>Mapped image</th></tr></thead><tbody>' +
         lib.pages.map(function(pg){
           var img = pg.libraryImageId ? findImage(pg.libraryImageId) : null;
           var opts = '<option value="">— none —</option>' + lib.images.map(function(i){
             return '<option value="' + escapeHtml(i.id) + '"' + (img && img.id === i.id ? ' selected' : '') + '>' + escapeHtml(imageLabel(i)) + '</option>';
           }).join('');
           var pid = escapeHtml(pg.id);
-          return '<tr><td>' + escapeHtml(pg.pageName || '—') + '</td>' +
-            '<td><input data-act="alias" data-id="' + pid + '" value="' + escapeHtml(pg.aliasName || '') + '" style="min-width:130px"></td>' +
-            '<td style="word-break:break-all;"><a href="' + escapeHtml(/^https?:/i.test(pg.pageUrl) ? pg.pageUrl : 'https://' + pg.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(pg.pageUrl) + '</a></td>' +
-            '<td><input data-act="h1" data-id="' + pid + '" value="' + escapeHtml(pg.h1Keyword || '') + '" placeholder="not found" style="min-width:200px"></td>' +
-            '<td style="min-width:180px;font-size:12px;">' + (pg.metaTitle == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaTitle) || '<span class="muted">none</span>') + '</td>' +
-            '<td style="min-width:240px;font-size:12px;">' + (pg.metaDescription == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaDescription) || '<span class="muted">none</span>') + '</td>' +
-            '<td style="min-width:240px;">' + (img ? '<img class="thumb" src="' + escapeHtml(img.url) + '" alt="">' : '') +
-            '<select data-act="map" data-id="' + pid + '" style="width:auto;max-width:200px;">' + opts + '</select></td>' +
-            '<td><button type="button" style="padding:3px 10px;font-size:12px;" data-act="del-page" data-id="' + pid + '">Remove</button></td></tr>';
+          return '<tr><td style="word-break:break-word;font-size:13px;">' + escapeHtml(pg.pageName || '—') +
+            '<div style="margin-top:6px"><button type="button" style="padding:2px 8px;font-size:11px;" data-act="del-page" data-id="' + pid + '">Remove</button></div></td>' +
+            '<td><input data-act="alias" data-id="' + pid + '" value="' + escapeHtml(pg.aliasName || '') + '" style="width:100%;box-sizing:border-box;font-size:12px"></td>' +
+            '<td style="word-break:break-all;font-size:12px;"><a href="' + escapeHtml(/^https?:/i.test(pg.pageUrl) ? pg.pageUrl : 'https://' + pg.pageUrl) + '" target="_blank" rel="noopener">' + escapeHtml(pg.pageUrl) + '</a></td>' +
+            '<td><textarea data-act="h1" data-id="' + pid + '" rows="4" placeholder="not found" title="Click to edit" style="width:100%;box-sizing:border-box;border:0;background:transparent;padding:0;resize:none;font:inherit;font-size:12px;line-height:1.4;overflow:hidden;box-shadow:none">' + escapeHtml(pg.h1Keyword || '') + '</textarea></td>' +
+            '<td style="font-size:12px;word-break:break-word;">' + (pg.metaTitle == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaTitle) || '<span class="muted">none</span>') + '</td>' +
+            '<td style="font-size:12px;word-break:break-word;">' + (pg.metaDescription == null ? '<span class="muted">not fetched</span>' : escapeHtml(pg.metaDescription) || '<span class="muted">none</span>') + '</td>' +
+            '<td>' + (img ? '<img class="thumb" src="' + escapeHtml(img.url) + '" alt="">' : '') +
+            '<select data-act="map" data-id="' + pid + '" style="width:100%;box-sizing:border-box;font-size:12px;">' + opts + '</select></td></tr>';
         }).join('') + '</tbody></table></div>';
     }
     h += '</section>';
