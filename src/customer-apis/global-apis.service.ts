@@ -88,7 +88,7 @@ export class GlobalApisService {
     let msg = 'Saved. A live test is not available for this API yet.';
     if (p.key === 'moz') {
       try {
-        const r = await mozUrlMetrics(vals.accessId, vals.secretKey, ['moz.com']);
+        const r = await mozUrlMetrics({ apiToken: vals.apiToken, accessId: vals.accessId, secretKey: vals.secretKey }, ['moz.com']);
         msg = r[0]?.domainAuthority != null ? `Keys work - Moz responded (moz.com DA ${r[0].domainAuthority}).` : 'Moz responded but returned no Domain Authority.';
       } catch (err) {
         ok = false;

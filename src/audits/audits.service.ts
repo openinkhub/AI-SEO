@@ -372,7 +372,7 @@ export class AuditsService {
       globalKeys = {};
     }
     const moz = globalKeys.moz;
-    if (moz?.accessId && moz?.secretKey && (moz.mzAuthority ?? '').trim() !== '0') {
+    if (moz && (moz.apiToken || (moz.accessId && moz.secretKey)) && (moz.mzAuthority ?? '').trim() !== '0') {
       const row = this.evidenceRepo.create({
         customerId,
         auditRunId: runId,
@@ -390,7 +390,7 @@ export class AuditsService {
         const rawMax = (moz.mzCompetitors ?? '').trim();
         const max = rawMax === '' ? 5 : Math.min(Math.max(parseInt(rawMax, 10) || 0, 0), 20);
         const comps = Array.isArray(customer.competitors) ? customer.competitors.slice(0, max) : [];
-        row.extracted = (await mozAuthority(moz.accessId, moz.secretKey, website, comps)) as unknown as Record<string, any>;
+        row.extracted = (await mozAuthority({ apiToken: moz.apiToken, accessId: moz.accessId, secretKey: moz.secretKey }, website, comps)) as unknown as Record<string, any>;
       } catch (err) {
         row.status = 'failed';
         row.error = `Moz: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);

@@ -23,6 +23,7 @@ export interface ApiProvider {
   testable: boolean; // a live test call is implemented
   wired: boolean; // the Engine SEO Audit already uses it today
   anyOf?: boolean; // configured when at least one field is filled (no single required field)
+  oneOfSets?: string[][]; // configured when every field of at least one set is filled (instead of per-field required)
   required?: boolean; // must be configured before the customer SEO package can be compiled
 }
 
@@ -148,6 +149,7 @@ export const findProvider = (k: string): ApiProvider | undefined => API_PROVIDER
 
 export function isComplete(p: ApiProvider, vals: Record<string, string> | null): boolean {
   if (!vals) return false;
+  if (p.oneOfSets) return p.oneOfSets.some((set) => set.every((n) => !!vals[n]));
   if (p.anyOf) return p.fields.some((f) => !!vals[f.name]);
   return p.fields.filter((f) => !f.optional).every((f) => !!vals[f.name]);
 }
@@ -156,14 +158,16 @@ export function isComplete(p: ApiProvider, vals: Record<string, string> | null):
 export const GLOBAL_API_PROVIDERS: ApiProvider[] = [
   {
     key: 'moz', label: 'Moz Links API', group: 'Authority metrics',
-    description: 'Moz Domain Authority, Page Authority and Spam Score (Moz Links API v2, Basic auth: Access ID + Secret Key from moz.com/products/api).',
+    description: 'Moz Domain Authority, Page Authority and Spam Score (Moz Links API v2: either an API token (x-moz-token header) or Access ID + Secret Key (Basic auth), from your Moz API account).',
     fields: [
-      { name: 'accessId', label: 'Access ID', secret: false },
-      { name: 'secretKey', label: 'Secret Key', secret: true },
+      { name: 'apiToken', label: 'API token (x-moz-token) - use this OR Access ID + Secret Key', secret: true, optional: true },
+      { name: 'accessId', label: 'Access ID', secret: false, optional: true },
+      { name: 'secretKey', label: 'Secret Key', secret: true, optional: true },
       { name: 'mzAuthority', label: 'Domain Authority card (0 = off, blank = on)', secret: false, number: true, optional: true },
       { name: 'mzCompetitors', label: 'Competitors to compare: max (0 = none, blank = 5)', secret: false, number: true, optional: true },
     ],
     usedBy: 'SEO Audit (automatic, every customer): Domain Authority of the site and its named competitors; feeds the authority and competitor tasks. Target: Domain Authority 60+.', testable: true, wired: true,
+    oneOfSets: [['apiToken'], ['accessId', 'secretKey']],
   },
 ];
 export const findGlobalProvider = (k: string): ApiProvider | undefined => GLOBAL_API_PROVIDERS.find((p) => p.key === k);
