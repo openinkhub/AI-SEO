@@ -26,7 +26,7 @@ const MAX_CHILD_SITEMAPS = 12;
 const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml'];
 // Sitemap files, images, feeds and other non-page files must never be
 // listed as website pages.
-const NOT_A_PAGE = /\.(xml|xml\.gz|txt|json|rss|atom|jpe?g|png|gif|webp|svg|avif|pdf|zip|css|js)(\?.*)?$/i;
+export const NOT_A_PAGE = /\.(xml|xml\.gz|txt|json|rss|atom|jpe?g|png|gif|webp|svg|avif|pdf|zip|css|js)(\?.*)?$/i;
 
 // WordPress attachment (media) pages must never be listed as website pages: their sitemap
 // (sitemap-attachment.xml / media / images) and their slugs, which WP builds from the file
@@ -41,6 +41,34 @@ export function isMediaPageUrl(u: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Every URL the site's attachment / media sitemaps list (WordPress attachment pages and the uploaded files). Used to
+// clear media rows saved by earlier versions: those slugs often look like normal pages
+// (…/my-post/seo-agency-in-patna/, …/workflow-automation-2/), so only the sitemap that lists them can identify them.
+export async function liveMediaUrls(website: string): Promise<Set<string>> {
+  const base = withProtocol(website);
+  const host = new URL(base).hostname;
+  const out = new Set<string>();
+  const roots = new Set<string>(SITEMAP_PATHS.map((p) => `${base}${p}`));
+  const robots = await getText(`${base}/robots.txt`);
+  if (robots) for (const m of robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)) roots.add(m[1]);
+  const seen = new Set<string>();
+  const visit = async (url: string, depth: number, media: boolean): Promise<void> => {
+    if (seen.has(url) || depth > 2 || seen.size > 40) return;
+    seen.add(url);
+    const isMedia = media || MEDIA_SITEMAP.test(url.split('?')[0].split('/').pop() ?? '');
+    const xml = await getText(url);
+    if (!xml) return;
+    const locs = locsOf(xml).filter((u) => sameDomain(u, host));
+    if (/<sitemapindex/i.test(xml)) {
+      for (const child of locs) await visit(child, depth + 1, isMedia);
+      return;
+    }
+    if (isMedia) locs.forEach((u) => out.add(u));
+  };
+  for (const r of roots) await visit(r, 0, false);
+  return out;
 }
 
 async function getText(url: string): Promise<string | null> {
