@@ -82,7 +82,19 @@ export class PageImagesService {
       );
     }
     const discovered = await liveSiteScan(customer.website);
+    // Earlier versions saved sitemap files (…/sitemap-posts.xml) as pages.
+    // Remove those rows and re-baseline the "originally fetched" count.
+    const stale = (await this.pages.find({ where: { customerId } })).filter((p) =>
+      /\.(xml|xml\.gz)$/i.test(p.normalizedUrl),
+    );
+    if (stale.length > 0) await this.pages.remove(stale);
     await this.syncFetchedPages(customerId, discovered);
+    if (stale.length > 0) {
+      await this.customers.setPagesFetchedCount(
+        customerId,
+        await this.pages.count({ where: { customerId } }),
+      );
+    }
     // Pull the H1 of every page that doesn't have one yet (within the time
     // budget; the rest can be finished with the "Extract H1" action).
     return this.extractH1ForCustomer(customerId, false);

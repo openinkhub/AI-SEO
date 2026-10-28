@@ -22,21 +22,73 @@ export async function liveSiteScan(website: string): Promise<string[]> {
   return tryHomepageLinks(base, host);
 }
 
-async function trySitemap(base: string, host: string): Promise<string[]> {
+const MAX_CHILD_SITEMAPS = 12;
+const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml', '/wp-sitemap.xml'];
+// Sitemap files, images, feeds and other non-page files must never be
+// listed as website pages.
+const NOT_A_PAGE = /\.(xml|xml\.gz|txt|json|rss|atom|jpe?g|png|gif|webp|svg|avif|pdf|zip|css|js)(\?.*)?$/i;
+
+async function getText(url: string): Promise<string | null> {
   try {
-    const { data } = await axios.get<string>(`${base}/sitemap.xml`, {
+    const { data } = await axios.get<string>(url, {
       timeout: FETCH_TIMEOUT_MS,
       responseType: 'text',
-      headers: { Accept: 'application/xml,text/xml' },
+      headers: {
+        Accept: 'application/xml,text/xml,text/plain',
+        'User-Agent': 'Mozilla/5.0 (compatible; OpenInkHubBot/1.0)',
+      },
     });
-    const locs = Array.from(data.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)).map(
-      (m) => m[1],
-    );
-    const urls = locs.filter((u) => sameDomain(u, host));
-    return dedupe(urls).slice(0, MAX_SITEMAP_URLS);
+    return typeof data === 'string' ? data : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+function locsOf(xml: string): string[] {
+  return Array.from(xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\s\]]+)\s*(?:\]\]>)?\s*<\/loc>/gi)).map(
+    (m) => m[1],
+  );
+}
+
+// A sitemap can be an index (<sitemapindex>) whose <loc> entries are other
+// sitemap files, not pages. Expand those and only return real page URLs.
+async function trySitemap(base: string, host: string): Promise<string[]> {
+  const candidates: string[] = SITEMAP_PATHS.map((p) => `${base}${p}`);
+  const robots = await getText(`${base}/robots.txt`);
+  if (robots) {
+    for (const m of robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)) candidates.unshift(m[1]);
+  }
+
+  const pages: string[] = [];
+  const seen = new Set<string>();
+  let childCount = 0;
+
+  const visit = async (url: string, depth: number): Promise<void> => {
+    if (seen.has(url) || depth > 2 || pages.length >= MAX_SITEMAP_URLS) return;
+    seen.add(url);
+    const xml = await getText(url);
+    if (!xml) return;
+    const locs = locsOf(xml).filter((u) => sameDomain(u, host));
+    if (/<sitemapindex/i.test(xml)) {
+      for (const child of locs) {
+        if (childCount >= MAX_CHILD_SITEMAPS || pages.length >= MAX_SITEMAP_URLS) break;
+        // attachment sitemaps only list media files
+        if (/attachment/i.test(child)) continue;
+        childCount++;
+        await visit(child, depth + 1);
+      }
+      return;
+    }
+    for (const u of locs) {
+      if (!NOT_A_PAGE.test(u)) pages.push(u);
+    }
+  };
+
+  for (const c of Array.from(new Set(candidates))) {
+    await visit(c, 0);
+    if (pages.length > 0) break;
+  }
+  return dedupe(pages).slice(0, MAX_SITEMAP_URLS);
 }
 
 async function tryHomepageLinks(base: string, host: string): Promise<string[]> {
@@ -57,7 +109,7 @@ async function tryHomepageLinks(base: string, host: string): Promise<string[]> {
           return null;
         }
       })
-      .filter((u): u is string => !!u && sameDomain(u, host));
+      .filter((u): u is string => !!u && sameDomain(u, host) && !NOT_A_PAGE.test(u));
     return dedupe([base, ...resolved]).slice(0, MAX_HOMEPAGE_LINKS);
   } catch {
     return [base];
