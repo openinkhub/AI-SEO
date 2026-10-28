@@ -233,6 +233,44 @@ export class Layer4Service {
     return this.view(customerId, month);
   }
 
+  // Bulk import of a whole month's table (all platforms at once). One row per line, tab or | separated:
+  // Platform, Rank, Keyword, Intent, Demand, Est Volume  ("—" or blank volume = none). A header line is ignored.
+  // Replaces only the platforms present in the text; the rest are kept.
+  async importTable(customerId: string, month: string, text: string) {
+    const alias: Record<string, string> = {
+      chatgpt: 'openai', openai: 'openai', gemini: 'gemini', perplexity: 'perplexity', claude: 'anthropic', anthropic: 'anthropic',
+      grok: 'xai', xai: 'xai', deepseek: 'deepseek', copilot: 'copilot', 'meta ai': 'meta', meta: 'meta', 'google ai': 'google_ai', google_ai: 'google_ai',
+    };
+    const groups = new Map<string, Array<{ rank: number; row: KeywordRow }>>();
+    const skipped: string[] = [];
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const parts = line.split(line.includes('\t') ? '\t' : '|').map((x) => x.trim());
+      const key = alias[(parts[0] || '').toLowerCase()];
+      if (!key) { if (!/^platform$/i.test(parts[0] || '')) skipped.push(line.slice(0, 60)); continue; }
+      const keyword = (parts[2] || '').slice(0, 255);
+      if (!keyword) { skipped.push(line.slice(0, 60)); continue; }
+      const row: KeywordRow = { keyword, intent: pick(parts[3] || '', L4_INTENTS) || 'Informational', demand: pick(parts[4] || '', L4_DEMANDS) || 'Medium', estVolume: vol(parts[5]) };
+      groups.set(key, [...(groups.get(key) || []), { rank: Number(parts[1]) || (groups.get(key)?.length || 0) + 1, row }]);
+    }
+    if (!groups.size) throw new BadRequestException('No rows recognised. Use: Platform, Rank, Keyword, Intent, Demand, Est Volume (tab or | separated).');
+    const project = await this.monthOf(customerId, month);
+    const summary: Record<string, number> = {};
+    for (const [key, list] of groups) {
+      const rows = list.sort((a, b) => a.rank - b.rank).map((x) => x.row).slice(0, L4_PER_PLATFORM);
+      await this.replaceRows(project, key, rows, 'import');
+      const st = await this.state(project, key);
+      st.status = rows.length >= L4_PER_PLATFORM ? 'complete' : 'partial';
+      st.message = rows.length + '/' + L4_PER_PLATFORM + ' keywords imported.';
+      st.lastRunAt = new Date();
+      await this.pf.save(st);
+      summary[key] = rows.length;
+    }
+    const complete = await this.syncLayerStatus(project);
+    return { imported: summary, skipped, complete, view: await this.view(customerId, month) };
+  }
+
   private async keysFor(platform: string): Promise<Record<string, string>> {
     const def = this.platform(platform);
     const kp = def.keyProvider || platform;

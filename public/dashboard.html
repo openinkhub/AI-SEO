@@ -601,7 +601,11 @@
       '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' keywords · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
       '. Each AI platform returns 10 keywords with Intent, Demand and an estimated monthly volume. Runs automatically on its set date (Day 4); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
-      '<button class="btn" id="l4RunAll">Run all API platforms now</button></div>';
+      '<button class="btn" id="l4RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Keyword, Intent, Demand, Est Volume (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l4ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l4Import">Import</button></div></details>';
     d.platforms.forEach(function(p){
       var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
       var label = p.status === 'running' ? 'Running…' : (p.count + '/' + p.expected);
@@ -635,6 +639,17 @@
     if (runAll) runAll.addEventListener('click', function(){
       if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing keywords of those platforms are replaced.')) return;
       act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l4Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l4ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l4Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 4 is complete (90/90).' : ''));
+        loadLayer4(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l4run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l4run') }, b); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l4save]'), function(b){ b.addEventListener('click', function(){

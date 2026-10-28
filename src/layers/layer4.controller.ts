@@ -31,6 +31,11 @@ export class Layer4Controller {
     return this.service.saveManual(customerId, body?.month, body?.platform, body?.text);
   }
 
+  @Post('import')
+  importTable(@Param('customerId') customerId: string, @Body() body: { month: string; text: string }) {
+    return this.service.importTable(customerId, body?.month, body?.text);
+  }
+
   @Put('mode')
   mode(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; mode: string }) {
     return this.service.setMode(customerId, body?.month, body?.platform, body?.mode);
