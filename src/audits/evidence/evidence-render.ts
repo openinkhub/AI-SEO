@@ -201,20 +201,19 @@ function renderPpcReport(d: PpcReport, admin: boolean): string {
 
 const STATUS_LABEL: Record<string, string> = { pass: 'Pass', warning: 'Warning', error: 'Error' };
 
-function renderSeoquake(d: Record<string, any>, admin: boolean): string {
+function renderSeoquake(d: Record<string, any>, _admin = false): string {
   const c = d.counts ?? {};
   const checks = (d.checks ?? []) as Array<Record<string, any>>;
   let h = `<p><span class="ev-tag pass">${esc(c.passed ?? 0)} passed</span> <span class="ev-tag critical">${esc(c.errors ?? 0)} errors</span> <span class="ev-tag warn">${esc(c.warnings ?? 0)} warnings</span></p>`;
   const issues = checks.filter((x) => x.status === 'error' || x.status === 'warning').sort((a, b) => (a.status === 'error' ? 0 : 1) - (b.status === 'error' ? 0 : 1));
   h += '<h4>Needs attention</h4>' + (issues.length ? grid(['Check', 'Status', 'Found', 'Detail'], issues.map((x) => [x.name, STATUS_LABEL[x.status] ?? x.status, x.value ?? '', x.detail ?? ''])) : '<p class="empty">Nothing needs attention.</p>');
-  if (admin) {
-    const ok = checks.filter((x) => x.status === 'pass');
-    if (ok.length) h += '<h4>Passed checks (admin)</h4>' + grid(['Check', 'Result'], ok.map((x) => [x.name, x.value ?? '']));
-    const im = d.images ?? {};
-    h += kvTable([['Images (total / with alt / missing alt / oversized)', im.total != null ? [im.total, im.withAlt, im.missingAlt, im.oversized].join(' / ') : null], ['Image formats', im.formats], ['Schema types', d.schemaTypes]]);
-    const hd = (d.headings ?? []) as Array<Record<string, any>>;
-    if (hd.length) h += '<h4>Heading outline</h4><ul class="ev-list">' + hd.map((x) => `<li style="margin-left:${Math.max(0, Number(x.level) - 1) * 14}px">H${esc(x.level)} ${esc(x.text)}</li>`).join('') + '</ul>';
-  }
+  // Shown to the customer as well as the admin (once the evidence is approved).
+  const ok = checks.filter((x) => x.status === 'pass');
+  if (ok.length) h += '<h4>Passed checks</h4>' + grid(['Check', 'Result'], ok.map((x) => [x.name, x.value ?? '']));
+  const im = d.images ?? {};
+  h += kvTable([['Images (total / with alt / missing alt / oversized)', im.total != null ? [im.total, im.withAlt, im.missingAlt, im.oversized].join(' / ') : null], ['Image formats', im.formats], ['Schema types', d.schemaTypes]]);
+  const hd = (d.headings ?? []) as Array<Record<string, any>>;
+  if (hd.length) h += '<h4>Heading outline</h4><ul class="ev-list">' + hd.map((x) => `<li style="margin-left:${Math.max(0, Number(x.level) - 1) * 14}px">H${esc(x.level)} ${esc(x.text)}</li>`).join('') + '</ul>';
   return h;
 }
 
