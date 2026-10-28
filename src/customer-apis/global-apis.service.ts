@@ -6,6 +6,7 @@ import { GLOBAL_API_PROVIDERS, ApiProvider, findGlobalProvider, isComplete } fro
 import { decryptJson, encryptJson } from './key-crypto';
 import { SaveApiSettingDto } from './customer-apis.dto';
 import { mozUrlMetrics } from './moz';
+import { askPlatform, GLOBAL_AI_KEYS } from '../layers/ai-platforms';
 
 type Values = Record<string, string>;
 
@@ -90,6 +91,16 @@ export class GlobalApisService {
       try {
         const r = await mozUrlMetrics({ apiToken: vals.apiToken, accessId: vals.accessId, secretKey: vals.secretKey }, ['moz.com']);
         msg = r[0]?.domainAuthority != null ? `Keys work - Moz responded (moz.com DA ${r[0].domainAuthority}).` : 'Moz responded but returned no Domain Authority.';
+      } catch (err) {
+        ok = false;
+        msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
+      }
+    }
+    if (GLOBAL_AI_KEYS.includes(p.key)) {
+      try {
+        const reply = await askPlatform(p.key, vals, 'Reply with the single word OK.');
+        msg = reply.trim() ? `Key works - ${p.label} replied.` : `${p.label} answered with an empty reply.`;
+        ok = !!reply.trim();
       } catch (err) {
         ok = false;
         msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);

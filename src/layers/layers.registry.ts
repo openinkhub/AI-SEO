@@ -21,7 +21,7 @@ export interface LayerDef {
 export const SECTION_LABELS: Record<string, string> = {"profile": "Profile", "on-page": "On Page SEO", "off-page": "Off Page SEO", "technical": "Technical SEO", "local": "Local SEO", "social": "Social Media", "international": "International SEO"};
 
 // Layers built in the Engine so far (built numerically: Layer 1, then 2, 3, ...).
-export const BUILT_LAYERS: number[] = [1, 2, 3];
+export const BUILT_LAYERS: number[] = [1, 2, 3, 4];
 
 const R = (layer: number, key: string, name: string, visibility: 'customer' | 'admin', expected: number, section: string, subsection: string, day: number | null, dayLabel: string, fromMonth: number, toMonth: number, note: string, internalStorage = false): LayerDef => ({ layer, key, name, visibility, expected, section, subsection, day, dayLabel, fromMonth, toMonth, note, internalStorage });
 
@@ -29,7 +29,7 @@ export const LAYER_REGISTRY: LayerDef[] = [
   R(1, "user_login_month_context", "User Login & Month Context", "customer", 1, "profile", "user-login-month-context", 1, "Day 1", 0, 12, ""),
   R(2, "onboarding_profile_ownership", "Onboarding & Profile Ownership", "customer", 1, "profile", "onboarding-profile-ownership", 2, "Day 2", 0, 12, ""),
   R(3, "business_profile_resolution", "Business/Profile Resolution", "customer", 11, "profile", "business-profile-resolution", 3, "Day 3", 0, 12, ""),
-  R(4, "ai_search_keyword", "AI Search Keyword", "admin", 80, "on-page", "keyword-planner", 4, "Day 4", 0, 12, ""),
+  R(4, "ai_search_keyword", "AI Search Keyword", "admin", 90, "on-page", "keyword-planner", 4, "Day 4", 0, 12, ""),
   R(5, "ai_search_prompt", "AI Search Prompt", "admin", 80, "on-page", "keyword-planner", 5, "Day 5", 0, 12, ""),
   R(6, "ai_long_tail", "AI Search Long Tail Keyword", "admin", 80, "on-page", "keyword-planner", 6, "Day 6", 0, 12, ""),
   R(7, "google_paa", "Google People Also Ask", "admin", 30, "on-page", "keyword-planner", 7, "Day 7", 0, 12, ""),

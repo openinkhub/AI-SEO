@@ -7,6 +7,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { Customer } from '../customers/customer.entity';
 import { MONTH_COUNT, cycleDates, statusForCycle, todayInTz } from './month-cycle';
 import { LayersService } from '../layers/layers.service';
+import { Layer4Service } from '../layers/layer4.service';
 
 @Injectable()
 export class ProjectsService {
@@ -16,6 +17,7 @@ export class ProjectsService {
     @InjectRepository(Customer)
     private readonly customerRepo: Repository<Customer>,
     private readonly layers: LayersService,
+    private readonly layer4: Layer4Service,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -62,6 +64,7 @@ export class ProjectsService {
   async removeByCustomer(customerId: string): Promise<void> {
     const projects = await this.findAllForCustomer(customerId);
     await this.layers.removeByCustomer(customerId);
+    await this.layer4.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }
 

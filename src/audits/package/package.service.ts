@@ -256,6 +256,7 @@ export class PackageService {
       tasks,
       evidence,
       pages: await this.audits.reportPages(customerId),
+      aiKeywords: await this.audits.reportAiKeywords(customerId),
       strategy,
       preview,
       signedAt,

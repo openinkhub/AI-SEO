@@ -169,5 +169,23 @@ export const GLOBAL_API_PROVIDERS: ApiProvider[] = [
     usedBy: 'SEO Audit (automatic, every customer): Domain Authority of the site and its named competitors; feeds the authority and competitor tasks. Target: Domain Authority 60+.', testable: true, wired: true,
     oneOfSets: [['apiToken'], ['accessId', 'secretKey']],
   },
+  ...(
+    [
+      ['openai', 'ChatGPT / OpenAI', 'gpt-4o'],
+      ['gemini', 'Gemini', 'gemini-2.5-flash'],
+      ['perplexity', 'Perplexity', 'sonar'],
+      ['anthropic', 'Claude / Anthropic', 'claude-sonnet-4-5'],
+      ['xai', 'Grok / xAI', 'grok-4'],
+      ['deepseek', 'DeepSeek', 'deepseek-chat'],
+      ['openrouter', 'OpenRouter (Meta AI fallback)', 'meta-llama/llama-3.3-70b-instruct'],
+    ] as Array<[string, string, string]>
+  ).map(
+    ([k, label, model]): ApiProvider => ({
+      key: k, label, group: 'AI platforms',
+      description: `${label} API key for the AI research Layers (one key for all customers). Leave the model blank to use ${model}.`,
+      fields: [key(), { name: 'model', label: `Model (blank = ${model})`, secret: false, optional: true }],
+      usedBy: 'Layer 4 AI Search Keyword (and the other AI research Layers as they are built).', testable: true, wired: true,
+    }),
+  ),
 ];
 export const findGlobalProvider = (k: string): ApiProvider | undefined => GLOBAL_API_PROVIDERS.find((p) => p.key === k);

@@ -1,0 +1,30 @@
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Layer4Service } from './layer4.service';
+
+// Layer 4 - AI Search Keyword (On Page SEO > Keyword Planner).
+@UseGuards(JwtAuthGuard)
+@Controller('api/v1/customers/:customerId/layer4')
+export class Layer4Controller {
+  constructor(private readonly service: Layer4Service) {}
+
+  @Get()
+  view(@Param('customerId') customerId: string, @Query('month') month: string) {
+    return this.service.view(customerId, month);
+  }
+
+  @Post('run')
+  run(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string }) {
+    return this.service.startRun(customerId, body?.month, body?.platform);
+  }
+
+  @Put('manual')
+  manual(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; text: string }) {
+    return this.service.saveManual(customerId, body?.month, body?.platform, body?.text);
+  }
+
+  @Put('mode')
+  mode(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; mode: string }) {
+    return this.service.setMode(customerId, body?.month, body?.platform, body?.mode);
+  }
+}

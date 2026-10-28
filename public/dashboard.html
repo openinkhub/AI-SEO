@@ -558,9 +558,83 @@
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
+    var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
+    if (hasL4) html += '<div id="l4Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
+    if (hasL4) mountLayer4(cust);
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
+  }
+
+  // ---- Layer 4 · AI Search Keyword: 9 AI platforms x 10 keywords ----
+  var l4 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer4(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l4Box');
+    if (!box || !cm) return;
+    l4.cid = cust.id; l4.mid = cm.id;
+    if (l4.timer) { clearTimeout(l4.timer); l4.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 4…</p></section>';
+    loadLayer4(cust, cm, box);
+  }
+
+  function l4Base(cust) { return '/customers/' + cust.id + '/layer4'; }
+
+  function loadLayer4(cust, cm, box) {
+    api(l4Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l4Box') !== box || l4.mid !== cm.id) return;
+      l4.data = d;
+      drawLayer4(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l4.timer = setTimeout(function(){ loadLayer4(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l4Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 4: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer4(cust, cm, box) {
+    var d = l4.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l4.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 4 · Day 4</span>AI Search Keyword</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' keywords · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
+      '. Each AI platform returns 10 keywords with Intent and Demand (no search volume).</p>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running…' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l4.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' · key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l4mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l4run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        '<span class="muted" data-l4msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.keyword + ' | ' + r.intent + ' | ' + r.demand; }).join('\n');
+        h += '<textarea data-l4text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: keyword | Intent | Demand">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l4save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' keywords</button> <span class="muted">Intent: Informational, Navigational, Commercial, Transactional, Local, Purchase, Evaluational, Compliance · Demand: High, Medium-High, Medium, Low</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.keyword) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.demand) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l4Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer4(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l4run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l4run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l4save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l4save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l4text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l4mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l4mode'), mode: s.value }, s); }); });
   }
 
   // ---- placeholder pages -------------------------------------------
