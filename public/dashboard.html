@@ -17,8 +17,9 @@
   KP21_Section_Mapping). Customers are no longer created here - they
   arrive from the WP signup sync (or "Sync WP Customer Profiles").
   Profile page = Layers 1-3. Other pages are placeholders showing which
-  Layers they will host, until those Layers are migrated. Layer 69 (Brand
-  Audit) keeps its existing audit UI under Technical SEO.
+  Layers they will host, until those Layers are migrated. 2026-10-28: each month
+  cycle runs Layer 1 on Day 1, Layer 2 on Day 2, Layer 3 on Day 3, and the
+  SEO Audit (formerly Brand Audit / Layer 69) lives inside Layer 3.
 -->
 <style>
   :root{
@@ -61,6 +62,9 @@
   .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
   .card h2{margin:0 0 4px; font-size:18px; color:var(--accent-dark);}
   .card .lead{margin:0 0 14px; font-size:13px; color:var(--muted);}
+  .day-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+  .day-cell{border:1px solid var(--line, #e5e7eb);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;background:#fff;}
+  .day-n{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-dark);}
   .layer-tag{display:inline-block; font-family:'Work Sans',sans-serif; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:var(--accent-soft); color:var(--accent-dark); padding:2px 8px; border-radius:999px; margin-right:8px; vertical-align:middle;}
   .muted{color:var(--muted);font-size:14px;}
   .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;font-weight:600;}
@@ -229,8 +233,8 @@
       layers: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 22, 193, 194] },
     { key: 'technical', label: 'Technical SEO', subs: [
         ['website-audit', 'Website Audit'], ['google-analytics', 'Google Analytics'],
-        ['ai-visibility', 'AI Visibility'], ['brand-audit', 'Brand Audit'] ],
-      layers: [26, 27, 29, 69] },
+        ['ai-visibility', 'AI Visibility'] ],
+      layers: [26, 27, 29] },
     { key: 'local', label: 'Local SEO', subs: [['gmb-audit', 'GMB Audit'], ['gmb-profile', 'GMB Profile']], layers: [70, 71, 72] },
     { key: 'international', label: 'International SEO', subs: [], layers: [] },
     { key: 'social', label: 'Social Media', subs: [['social-blog', 'Social Blog'], ['social-analytics', 'Social Analytics'], ['social-post', 'Social Post']],
@@ -256,7 +260,7 @@
 
   var state = {
     customers: [], cid: null, months: [], mid: null,
-    runs: [], expanded: {}, route: 'profile'
+    runs: [], runsCid: null, expanded: {}, route: 'profile'
   };
 
   function curCustomer() {
@@ -339,7 +343,7 @@
   document.getElementById('customerSelect').addEventListener('change', function(e){
     state.cid = e.target.value || null;
     lsSet('oh_admin_cid', state.cid || '');
-    state.months = []; state.mid = null; state.runs = []; state.expanded = {};
+    state.months = []; state.mid = null; state.runs = []; state.runsCid = null; state.expanded = {};
     renderMonthSelect();
     document.getElementById('page').innerHTML = '<p class="muted">Loading…</p>';
     if (state.cid) loadMonths(); else renderPage();
@@ -411,7 +415,6 @@
     if (r.sec.key === 'profile') return renderProfilePage(cust, r.sub);
     var cm = currentMonth();
     if (cm && cm.monthIndex === 0) return renderM0Empty(cust, r);
-    if (r.sec.key === 'technical' && r.sub && r.sub[0] === 'brand-audit') return renderBrandAuditPage(cust);
     return renderPlaceholderPage(cust, r.sec, r.sub);
   }
 
@@ -464,11 +467,68 @@
     return window.location.origin + '/onboarding.html?token=' + cust.onboardingToken;
   }
 
+  // ---- Month-cycle day schedule: Layer 1 = Day 1, Layer 2 = Day 2, Layer 3 = Day 3 ----
+  // Dates come from the selected month's start date; status is derived from the data the layer owns
+  // (account registered / profile submitted / SEO Audit completed).
+  function addDaysISO(iso, n) {
+    var p = String(iso || '').slice(0, 10).split('-');
+    if (p.length !== 3) return '';
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + n);
+    var pad = function(x){ return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function layerDone(cust, n) {
+    if (n === 1) return !!(cust.wpUserId && (cust.actDate || cust.registeredAt));
+    if (n === 2) return !!cust.onboardingCompletedAt;
+    return state.runsCid === cust.id && state.runs.some(function(r){ return r.status === 'completed'; });
+  }
+
+  function scheduleHtml(cust) {
+    var m = currentMonth();
+    var start = m && m.monthStartDate ? m.monthStartDate : '';
+    var cells = [1, 2, 3].map(function(n){
+      var date = start ? fmtDay(addDaysISO(start, n - 1)) : '—';
+      var done = layerDone(cust, n);
+      return '<div class="day-cell"><div class="day-n">Day ' + n + '</div>' +
+        '<div><strong>Layer ' + n + '</strong> · ' + escapeHtml(LAYER_TITLES[n]) + (n === 3 ? ' + SEO Audit' : '') + '</div>' +
+        '<div class="muted">' + escapeHtml(date) + '</div>' +
+        '<div>' + (done ? '<span class="badge ok">Done</span>' : '<span class="badge pending">Pending</span>') + '</div></div>';
+    }).join('');
+    return '<section class="card"><h2>' + escapeHtml(m ? (m.monthCode || 'Month') + ' schedule' : 'Month schedule') + '</h2>' +
+      '<div class="day-grid">' + cells + '</div></section>';
+  }
+
+  function refreshSchedule() {
+    var box = document.getElementById('daySchedule');
+    var cust = curCustomer();
+    if (box && cust) box.innerHTML = scheduleHtml(cust);
+  }
+
+  // Loads the customer's audit runs once so Layer 3's status is known on every Profile page.
+  function ensureRunsForSchedule(cust) {
+    if (state.runsCid === cust.id) return;
+    var cid = cust.id;
+    api('/customers/' + cid + '/audits').then(function(data){
+      if (cid !== state.cid) return;
+      state.runs = Array.isArray(data) ? data : (data.items || []);
+      state.runsCid = cid;
+      refreshSchedule();
+    }).catch(function(){});
+  }
+
   function renderProfilePage(cust, sub) {
     var key = sub ? sub[0] : 'account';
-    if (key === 'settings') return renderProfileSettings(cust);
-    if (key === 'billing') return renderProfileBilling(cust);
-    return renderProfileAccount(cust);
+    if (key === 'settings') renderProfileSettings(cust);
+    else if (key === 'billing') renderProfileBilling(cust);
+    else renderProfileAccount(cust);
+    var page = document.getElementById('page');
+    var strip = document.createElement('div');
+    strip.id = 'daySchedule';
+    strip.innerHTML = scheduleHtml(cust);
+    var head = page.querySelector('.page-head');
+    if (head && head.nextSibling) page.insertBefore(strip, head.nextSibling); else page.appendChild(strip);
+    ensureRunsForSchedule(cust);
   }
 
   // Profile > Account = Layer 1 + Layer 2
@@ -496,10 +556,11 @@
   // Profile > Settings = Layer 3 (resource mapping + website pages & images)
   function renderProfileSettings(cust) {
     var html = pageHead('Profile · Settings', 'Layer 3 · ' + contextLine(cust));
-    html += '<div id="layer3"></div><div id="layer3lib"></div>';
+    html += '<div id="layer3"></div><div id="layer3lib"></div><div id="layer3audit"></div>';
     document.getElementById('page').innerHTML = html;
     renderLayer3(cust);
     renderLayer3Library();
+    renderSeoAuditCard();
   }
 
   // Profile > Billing = Layer 3: the customer's billing details (filled on the
@@ -521,7 +582,7 @@
     if (!box) return;
     var profile = cust.profile || {};
     var ctx = { companyName: cust.companyName || '', getAddress: function(){ return ProfileFields.composeAddress(cust.profile || {}); } };
-    box.innerHTML = '<h2><span class="layer-tag">Layer 3</span>Billing details</h2>' +
+    box.innerHTML = '<h2><span class="layer-tag">Layer 3 · Day 3</span>Billing details</h2>' +
       '<p class="lead">Filled by the customer on the onboarding form. The admin can correct them here.</p>' +
       ProfileFields.billingFormHtml(profile, cust.companyName) +
       '<div class="group-save-row"><button type="button" class="primary" id="billSaveBtn">Save billing details</button> <span id="billMsg" class="muted" style="font-size:12px;"></span></div>';
@@ -565,7 +626,7 @@
       drawInvoices(false);
     }).catch(function(err){
       var box = document.getElementById('billInvoices');
-      if (box && cid === state.cid) box.innerHTML = '<h2><span class="layer-tag">Layer 3</span>Monthly bills</h2><p class="muted">Could not load bills: ' + escapeHtml(err.message) + '</p>';
+      if (box && cid === state.cid) box.innerHTML = '<h2><span class="layer-tag">Layer 3 · Day 3</span>Monthly bills</h2><p class="muted">Could not load bills: ' + escapeHtml(err.message) + '</p>';
     });
   }
 
@@ -585,7 +646,7 @@
     }).join('');
     var unpaid = bill.items.filter(function(i){ return i.status !== 'paid'; });
     var unpaidTotal = unpaid.reduce(function(a, i){ return a + Number(i.amount || 0); }, 0);
-    var h = '<h2><span class="layer-tag">Layer 3</span>Monthly bills</h2>' +
+    var h = '<h2><span class="layer-tag">Layer 3 · Day 3</span>Monthly bills</h2>' +
       '<p class="lead">Upload each month\'s bill with its cycle, date, invoice number and amount, and mark it paid or unpaid.' +
       (bill.items.length ? ' <strong>' + unpaid.length + ' unpaid</strong> · ' + money(unpaidTotal) + ' outstanding.' : '') + '</p>';
     h += '<div class="actions" style="margin:6px 0;flex-wrap:wrap;align-items:flex-end;gap:8px;">' +
@@ -698,7 +759,7 @@
     var filled = [cust.wpUserId, userName, accountEmail, effective, reg, ctx].filter(Boolean).length;
     var pct = Math.round(filled / 6 * 100);
     var needsSetup = !cust.wpUserId || !reg;
-    var h = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
+    var h = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 1 · Day 1</span>' + escapeHtml(LAYER_TITLES[1]) + '</h2>' +
       '<span class="progress-chip">' + (pct === 100 ? 'Complete · 100%' : 'In Progress · ' + pct + '%') + '</span></div>';
     h += '<div class="l1-grid">' +
       l1Field('User ID', cust.wpUserId || '', 'Permanent User Reference') +
@@ -779,7 +840,7 @@
   function renderLayer2(cust) {
     var profile = cust.profile || {};
     var link = onboardingLink(cust);
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 2</span>' + escapeHtml(LAYER_TITLES[2]) + '</h2>' +
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 2 · Day 2</span>' + escapeHtml(LAYER_TITLES[2]) + '</h2>' +
       '<p class="lead">The company profile. The customer fills it from the onboarding link; the admin can edit any section here. Each section saves on its own. No field is mandatory — use “Send again” to let the customer finish or update it; the form opens pre-filled with everything already saved.</p>';
     h += '<dl class="kv">' +
       '<dt>Onboarding</dt><dd>' + (cust.onboardingCompletedAt
@@ -934,7 +995,7 @@
         '<td>' + (ok ? '<span class="badge ok">Mapped</span>' : '<span class="badge fail">Not Mapped</span>') + '</td>' +
         '<td>' + (ok ? 'Customer resource/profile value is available.' : 'Resource has not been mapped yet.') + '</td></tr>';
     }).join('');
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Business Resolution Mapping</h2>' +
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 3 · Day 3</span>Business Resolution Mapping</h2>' +
       '<p class="lead">Google and YouTube customer-resource resolution, taken from the onboarding profile (Layer 2). ' +
       '<strong>' + mapped + ' of ' + RESOURCES.length + '</strong> mapped. This table updates when you save a section above.</p>' +
       '<div style="overflow:auto"><table><thead><tr><th>Resource</th><th>Mapped Customer Resource</th><th>Access / Identity</th><th>Status</th><th>Exact Reason</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
@@ -970,7 +1031,7 @@
     var box = document.getElementById('layer3lib');
     if (!box) return;
     var cid = state.cid;
-    box.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2><p class="muted">Loading…</p></section>';
+    box.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3 · Day 3</span>Website Pages &amp; Image Mapping</h2><p class="muted">Loading…</p></section>';
     lib.msg = null;
     Promise.all([api(libBase() + '/pages'), api(libBase() + '/images'), api(libBase() + '/storage').catch(function(){ return { backend: '' }; }), api(libBase() + '/pages/summary').catch(function(){ return null; })]).then(function(r){
       if (cid !== state.cid) return;
@@ -981,7 +1042,7 @@
       drawLibrary();
     }).catch(function(err){
       var b = document.getElementById('layer3lib');
-      if (b && cid === state.cid) b.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2>' +
+      if (b && cid === state.cid) b.innerHTML = '<section class="card"><h2><span class="layer-tag">Layer 3 · Day 3</span>Website Pages &amp; Image Mapping</h2>' +
         '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p></section>';
     });
   }
@@ -991,7 +1052,7 @@
     if (!box) return;
     var cust = curCustomer() || {};
     var mappedCount = lib.pages.filter(function(p){ return !!p.libraryImageId && findImage(p.libraryImageId); }).length;
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 3</span>Website Pages &amp; Image Mapping</h2>' +
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 3 · Day 3</span>Website Pages &amp; Image Mapping</h2>' +
       '<p class="lead">Each page keeps its URL, alias name, H1 keyword and mapped image - the same four values are used wherever a Layer needs a page. <strong>' + mappedCount + ' of ' + lib.pages.length + '</strong> pages have an image mapped.</p>' +
       '<div id="libMsg" class="muted" style="margin-bottom:6px;"></div>';
 
@@ -1246,13 +1307,15 @@
       });
   }
 
-  // ---- Technical SEO > Brand Audit (Layer 69) -----------------------
+  // ---- Layer 3 > SEO Audit (formerly Brand Audit / Layer 69) ---------
 
-  function renderBrandAuditPage(cust) {
-    var html = pageHead('Brand Audit', 'Technical SEO · Layer 69 · ' + contextLine(cust),
-      '<button class="primary" id="runAuditBtn">Run new audit (Layer 69)</button>');
-    html += '<div class="card"><div id="runsList"><p class="muted">Loading audits…</p></div></div>';
-    document.getElementById('page').innerHTML = html;
+  function renderSeoAuditCard() {
+    var box = document.getElementById('layer3audit');
+    if (!box) return;
+    box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Day 3</span>SEO Audit</h2>' +
+      '<button class="primary" id="runAuditBtn">Run SEO Audit</button></div>' +
+      '<p class="lead">Audits the customer’s website with the SEO skill matrix (each skill is a task). The branded report is what the customer sees in Layer 3 of their panel.</p>' +
+      '<div id="runsList"><p class="muted">Loading audits…</p></div></section>';
     document.getElementById('runAuditBtn').addEventListener('click', runAudit);
     loadRuns();
   }
@@ -1262,7 +1325,9 @@
     return api('/customers/' + cid + '/audits').then(function(data){
       if (cid !== state.cid) return;
       state.runs = Array.isArray(data) ? data : (data.items || []);
+      state.runsCid = cid;
       renderRuns();
+      refreshSchedule();
     }).catch(function(err){
       var box = document.getElementById('runsList');
       if (box) box.innerHTML = '<p class="muted">Failed to load audits: ' + escapeHtml(err.message) + '</p>';
@@ -1278,7 +1343,7 @@
       .catch(function(err){ alert('Could not start audit: ' + err.message); })
       .finally(function(){
         var b = document.getElementById('runAuditBtn');
-        if (b) { b.disabled = false; b.textContent = 'Run new audit (Layer 69)'; }
+        if (b) { b.disabled = false; b.textContent = 'Run SEO Audit'; }
       });
   }
 
