@@ -188,3 +188,30 @@ export function evidenceSide(tool: string | null | undefined, type: string | nul
 // Sources the Engine can run today, in run order ('ai' last: it reads everything the others collected).
 // Everything else stays an honest "pending" row.
 export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'ai'];
+
+// Which API / tool feeds each source, whether the Engine can run it today, and which key it needs.
+export const SOURCE_API: Record<SourceKey, { api: string; key: string; wired: boolean }> = {
+  site: { api: 'Engine site scan', key: 'none', wired: true },
+  site_ai: { api: 'Engine site crawl + Anthropic write-up', key: 'ANTHROPIC_API_KEY (server)', wired: true },
+  ai: { api: 'Anthropic review of all collected evidence', key: 'ANTHROPIC_API_KEY (server)', wired: true },
+  keywords: { api: 'Mangools KWFinder + SerpApi', key: 'Customer keys: Mangools, SerpApi', wired: true },
+  competitors: { api: 'Mangools KWFinder competitor keywords', key: 'Customer key: Mangools', wired: true },
+  backlinks: { api: 'Mangools SiteProfiler / LinkMiner + Moz DA + Ahrefs DR', key: 'Customer: Mangools, Ahrefs · Global: Moz', wired: true },
+  visibility: { api: 'Mangools AI Search Watcher', key: 'Customer key: Mangools', wired: true },
+  local: { api: 'SerpApi Google local results', key: 'Customer key: SerpApi', wired: true },
+  pagespeed: { api: 'Google PageSpeed Insights (evidence only, no write-up yet)', key: 'Customer key: PageSpeed', wired: false },
+  fetch: { api: 'Page fetch / screenshot tools - not built', key: '-', wired: false },
+  gsc: { api: 'Google Search Console / GA4 - not built', key: 'Google OAuth on the Engine', wired: false },
+  na: { api: 'Not an SEO audit task', key: '-', wired: false },
+};
+
+// Honest per-task state (the stored `status` is always "completed" because the row is saved at audit start).
+export type TaskState = 'done' | 'waiting' | 'blocked' | 'not_built' | 'not_applicable';
+export function taskState(t: { skillId: string; isAutomated: boolean; finding: string | null }): TaskState {
+  const src: SourceKey = TASK_SOURCE[t.skillId] ?? 'na';
+  if (src === 'na') return 'not_applicable';
+  if (t.isAutomated) return 'done';
+  if (/^Not run:|did not finish|write-up failed/i.test(t.finding ?? '')) return 'blocked';
+  if (!LIVE_SOURCES.includes(src)) return 'not_built';
+  return 'waiting';
+}

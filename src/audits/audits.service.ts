@@ -13,7 +13,7 @@ import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { enrichRun } from './sources/enrich';
-import { SOURCE_LABEL, TASK_SOURCE } from './sources/task-map';
+import { SOURCE_API, SOURCE_LABEL, TASK_SOURCE, taskState } from './sources/task-map';
 import { GlobalApisService } from '../customer-apis/global-apis.service';
 import { mozAuthority } from '../customer-apis/moz';
 import { ahrefsDomainRating } from '../customer-apis/ahrefs';
@@ -493,6 +493,23 @@ export class AuditsService implements OnModuleInit {
         await this.runRepo.save(r);
       }
     }
+    // Real progress per run (the stored completedSkills is always 140 because every row is saved at audit start).
+    if (runs.length) {
+      const tasks = await this.taskRepo.find({ where: { auditRunId: In(runs.map((r) => r.id)) }, select: ['id', 'auditRunId', 'skillId', 'isAutomated', 'finding'] });
+      for (const r of runs) {
+        const p = { done: 0, waiting: 0, blocked: 0, notBuilt: 0, notApplicable: 0, total: 0 };
+        for (const t of tasks.filter((x) => x.auditRunId === r.id)) {
+          p.total += 1;
+          const s = taskState(t);
+          if (s === 'done') p.done += 1;
+          else if (s === 'waiting') p.waiting += 1;
+          else if (s === 'blocked') p.blocked += 1;
+          else if (s === 'not_built') p.notBuilt += 1;
+          else p.notApplicable += 1;
+        }
+        (r as any).progress = p;
+      }
+    }
     return runs;
   }
 
@@ -502,9 +519,14 @@ export class AuditsService implements OnModuleInit {
     return run;
   }
 
-  async listTasks(customerId: string, runId: string): Promise<AuditTask[]> {
+  // Each task with its research source, the API/key behind it and an honest state (done / waiting / blocked / not built / n/a).
+  async listTasks(customerId: string, runId: string): Promise<any[]> {
     await this.findOne(customerId, runId);
-    return this.taskRepo.find({ where: { auditRunId: runId }, order: { group: 'ASC', skill: 'ASC' } });
+    const tasks = await this.taskRepo.find({ where: { auditRunId: runId }, order: { group: 'ASC', skill: 'ASC' } });
+    return tasks.map((t) => {
+      const src = TASK_SOURCE[t.skillId] ?? 'na';
+      return { ...t, source: src, sourceLabel: SOURCE_LABEL[src], api: SOURCE_API[src].api, apiKey: SOURCE_API[src].key, apiWired: SOURCE_API[src].wired, state: taskState(t) };
+    });
   }
 
   async getReportHtml(customerId: string, runId: string): Promise<string> {
