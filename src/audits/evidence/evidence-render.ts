@@ -516,7 +516,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
       const flag = audience === 'admin' && e.status !== 'approved' ? '<span class="ev-flag">Not approved yet - hidden from customer</span>' : '';
       const isPdf = /\.pdf$/i.test(e.fileName);
       const shot = audience === 'admin' && e.url && isPdf ? `<p class="ev-src"><a href="${esc(e.url)}" target="_blank" rel="noopener">Open original PDF</a></p>` : audience === 'admin' && e.url ? `<div><img class="ev-shot" src="${esc(e.url)}" alt="${esc(e.fileName)}" /></div>` : '';
-      return `<div class="ev-card"><h3>${esc(labelFor(e.evidenceType))}${flag}</h3><p class="ev-src">${esc(toolName(e.tool))}</p>${body}${shot}</div>`;
+      return `<div class="ev-card"><h3>${esc(labelFor(e.evidenceType))}${flag}</h3><p class="ev-src">${esc(toolName(e.tool))}${audience === 'admin' ? ` &middot; ${esc(e.fileName)}` : ''}</p>${body}${shot}</div>`;
     })
     .join('');
   return `<section class="layers"><h2>${esc(opts.heading ?? 'Tool findings')}</h2>${cards}</section>`;
