@@ -72,9 +72,9 @@ export const SCOPE_SECTIONS: ScopeSection[] = [
         title: 'Blogs: 30 AI Content Blogs / Articles Published',
         text: 'Production and publishing of high-quality, AI-assisted, human-edited blog posts mapped to your target keywords, with syndication of each blog published on the website to 30 premium sites (Blogger, Google Site, WordPress, Medium, Reddit, Substack, Quora, Notion, Weebly, Hashnode, Evernote, Beehiiv, Behance, Tumblr, Live Journal, Slideshare, Flipboard, Writeup Cafe, E27, All4webs, Just Paste It, Over Blog, Articleted, Pearl Trees, LinkedIn, Facebook, YouTube, Threads, Pinterest and Twitter).',
       },
-      { title: 'Profile Submission - 100', text: 'Business and brand profile listings submitted across 100 relevant platforms to build authority and referral visibility.' },
+      { title: 'Backlink Submission - 100', text: 'Business and brand backlinks submitted across 100 relevant platforms to build authority and referral visibility.' },
     ],
-    note: 'M0 (starting month): no blog is published; 1000 profile submissions are made instead.',
+    note: 'M0 (starting month): no blog is published; 300 backlink submissions are made instead.',
   },
   {
     key: 'social',
@@ -152,10 +152,10 @@ export const TERMS: TermsSection[] = [
 export const COMPANY_FOOTER = 'Openink Hub · 203, Liya Complex, PP Compound Main Road, Ranchi-834001 · +91 9204135136 · www.openinkhub.io';
 export const TERMS_SIGNED_DATE = '01/06/2026';
 
-// Month-aware wording: M0 is the starting month (no blog, 1000 profile submissions).
+// Month-aware wording: M0 is the starting month (no blog, 300 backlink submissions).
 export function monthDeliverableNote(monthIndex: number | null): string | null {
-  if (monthIndex === 0) return 'This is your starting month (M0): no blog is published this month; 1000 profile submissions are made instead.';
-  if (monthIndex != null) return 'This month: up to 30 AI blogs published and syndicated, and profile submissions as per the scope above.';
+  if (monthIndex === 0) return 'This is your starting month (M0): no blog is published this month; 300 backlink submissions are made instead.';
+  if (monthIndex != null) return 'This month: up to 30 AI blogs published and syndicated, and backlink submissions as per the scope above.';
   return null;
 }
 

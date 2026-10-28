@@ -85,7 +85,7 @@ Website: ${input.website}
 Industry: ${input.industry || 'not provided'}
 About: ${input.description || 'not provided'}
 Competitors: ${input.competitors || 'not provided'}
-Month cycle: ${input.monthCode || 'unknown'}${input.monthIndex === 0 ? ' (starting month: no blog published, 1000 profile submissions)' : ''}
+Month cycle: ${input.monthCode || 'unknown'}${input.monthIndex === 0 ? ' (starting month: no blog published, 300 backlink submissions)' : ''}
 
 AGREED SERVICE SCOPE (only plan work inside this scope)
 ${scopeAsPromptText(input.monthIndex ?? null)}
@@ -174,8 +174,8 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
     why: 'Authority and fresh, keyword-mapped content move Domain Authority and Traffic Growth the most.',
     actions:
       input.monthIndex === 0
-        ? ['Complete the 1000 profile submissions for the starting month.', 'Confirm the 30 target pages and keyword mapping.']
-        : ['Publish the month’s AI-assisted, human-edited blogs against the mapped keywords.', 'Syndicate each blog to the 30 premium sites.', 'Continue profile submissions.'],
+        ? ['Complete the 300 backlink submissions for the starting month.', 'Confirm the 30 target pages and keyword mapping.']
+        : ['Publish the month’s AI-assisted, human-edited blogs against the mapped keywords.', 'Syndicate each blog to the 30 premium sites.', 'Continue backlink submissions.'],
     when: 'Week 1-4',
   });
   return {
@@ -187,7 +187,7 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
       { period: 'Week 1', focus: 'Technical foundation and quick wins', actions: priorities.slice(0, 2).flatMap((p) => p.actions.slice(0, 2)) },
       { period: 'Week 2', focus: 'On-page optimization on the key pages', actions: ['Apply title, description and heading fixes across the mapped pages.'] },
       { period: 'Week 3', focus: 'Content and AI-search visibility', actions: ['Produce and publish blogs / FAQ content for the mapped keywords.'] },
-      { period: 'Week 4', focus: 'Authority building and review', actions: ['Complete syndication and profile submissions.', 'Review progress against the KPIs.'] },
+      { period: 'Week 4', focus: 'Authority building and review', actions: ['Complete syndication and backlink submissions.', 'Review progress against the KPIs.'] },
     ],
     risks: [
       'Search engine algorithm updates can change results regardless of the work done.',
