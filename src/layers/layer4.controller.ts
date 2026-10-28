@@ -26,12 +26,6 @@ export class Layer4Controller {
     return this.service.view(customerId, body?.month);
   }
 
-  // Updates the keywords' volume from Mangools (capped per press; press again for the rest).
-  @Post('volume')
-  volume(@Param('customerId') customerId: string, @Body() body: { month: string }) {
-    return this.service.startVolumeUpdate(customerId, body?.month);
-  }
-
   @Put('manual')
   manual(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; text: string }) {
     return this.service.saveManual(customerId, body?.month, body?.platform, body?.text);

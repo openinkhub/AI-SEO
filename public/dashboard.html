@@ -601,9 +601,7 @@
       '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' keywords · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
       '. Each AI platform returns 10 keywords with Intent, Demand and an estimated monthly volume. Runs automatically on its set date (Day 4); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
-      '<button class="btn" id="l4RunAll">Run all API platforms now</button>' +
-      '<button class="btn" id="l4Volume"' + (d.volume.status === 'running' ? ' disabled' : '') + '>Update volume (Mangools)</button>' +
-      '<span class="muted">' + (d.volume.status === 'running' ? 'Updating volumes…' : (d.volume.updated + ' of ' + d.volume.keywords + ' keywords have a tool volume. ' + escapeHtml(d.volume.message || ''))) + '</span></div>';
+      '<button class="btn" id="l4RunAll">Run all API platforms now</button></div>';
     d.platforms.forEach(function(p){
       var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
       var label = p.status === 'running' ? 'Running…' : (p.count + '/' + p.expected);
@@ -620,8 +618,8 @@
           '<div style="margin:6px 0"><button class="btn" data-l4save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' keywords</button> <span class="muted">Intent: Informational, Navigational, Commercial, Transactional, Local, Purchase, Evaluational, Compliance · Demand: High, Medium-High, Medium, Low</span></div>';
       } else if (p.records.length) {
         var nf = function(v){ return v == null ? '—' : Number(v).toLocaleString('en-US'); };
-        h += '<table><thead><tr><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th><th>Est. volume</th><th>Volume</th></tr></thead><tbody>' +
-          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.keyword) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.demand) + '</td><td>' + nf(r.estVolume) + '</td><td>' + (r.volumeSource === 'mangools' ? nf(r.volume) : '—') + '</td></tr>'; }).join('') + '</tbody></table>';
+        h += '<table><thead><tr><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th><th>Est. volume</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.keyword) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.demand) + '</td><td>' + nf(r.estVolume) + '</td></tr>'; }).join('') + '</tbody></table>';
       }
       h += '</details>';
     });
@@ -638,8 +636,6 @@
       if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing keywords of those platforms are replaced.')) return;
       act('/run-all', 'POST', {}, runAll);
     });
-    var volBtn = document.getElementById('l4Volume');
-    if (volBtn) volBtn.addEventListener('click', function(){ act('/volume', 'POST', {}, volBtn); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l4run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l4run') }, b); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l4save]'), function(b){ b.addEventListener('click', function(){
       var pf = b.getAttribute('data-l4save');

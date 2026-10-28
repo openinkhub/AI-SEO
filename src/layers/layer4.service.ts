@@ -5,7 +5,6 @@ import { Customer } from '../customers/customer.entity';
 import { Project } from '../projects/project.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { GlobalApisService } from '../customer-apis/global-apis.service';
-import { mangoolsGet } from '../customer-apis/mangools/client';
 import { todayInTz } from '../projects/month-cycle';
 import { AI_PLATFORMS, AI_PLATFORM_KEYS, askGoogleAi, askPlatform, googleAiOverview } from './ai-platforms';
 import { LayersService } from './layers.service';
@@ -15,7 +14,6 @@ export const L4_INTENTS = ['Informational', 'Navigational', 'Commercial', 'Trans
 export const L4_DEMANDS = ['High', 'Medium-High', 'Medium', 'Low'];
 export const L4_PER_PLATFORM = 10;
 const STALE_RUN_MS = 10 * 60 * 1000;
-const VOLUME_PSEUDO = '_volume'; // Layer4Platform row that tracks the volume update
 const dateInTz = (d: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' }).format(new Date(d));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,7 +50,7 @@ function businessInputs(c: Customer): string {
 const OUTPUT_RULES =
   `Allowed Intent values ONLY: ${L4_INTENTS.join(', ')}. Allowed Demand values ONLY: ${L4_DEMANDS.join(', ')}. ` +
   'Return ONLY a valid JSON array with EXACTLY these five keys per record: rank, keyword, intent, demand, est_volume. ' +
-  'est_volume = your best estimate of the keyword\'s average monthly searches as a whole number (0 if you cannot estimate); it will later be replaced by tool volume. ' +
+  'est_volume = your best estimate of the keyword\'s average monthly searches in the Target Location / Country as a whole number (never leave it out; use your best estimate, 0 only if the keyword is not searched). ' +
   'Do not return primary_intent, secondary_intent, keyword_role, reason or any other field.';
 
 // Layer 4 prompt (port of the plugin's, plus est_volume). Every platform gets this one.
@@ -176,9 +174,6 @@ export class Layer4Service {
       const keyReady = p.globalKey ? !!globalKeys[p.keyProvider || p.key] : false;
       return { platform: p.key, label: p.label, mode, status, message: st?.message || '', count: records.length, expected: L4_PER_PLATFORM, keyReady, records };
     });
-    const vs = states.find((s) => s.platform === VOLUME_PSEUDO);
-    const withVolume = new Set(rows.filter((r) => r.volume != null).map((r) => norm(r.keyword))).size;
-    const distinct = new Set(rows.map((r) => norm(r.keyword))).size;
     const complete = platforms.every((p) => p.count >= L4_PER_PLATFORM);
     return {
       month: project.monthCode,
@@ -186,7 +181,6 @@ export class Layer4Service {
       total: platforms.reduce((a, p) => a + p.count, 0),
       completePlatforms: platforms.filter((p) => p.count >= L4_PER_PLATFORM).length,
       complete,
-      volume: { status: vs?.status || 'idle', message: vs?.message || '', updated: withVolume, keywords: distinct },
       platforms,
     };
   }
@@ -194,7 +188,7 @@ export class Layer4Service {
   private async state(project: Project, platform: string): Promise<Layer4Platform> {
     const existing = await this.pf.findOne({ where: { projectId: project.id, platform } });
     if (existing) return existing;
-    const mode = platform === VOLUME_PSEUDO ? 'api' : this.platform(platform).defaultMode;
+    const mode = this.platform(platform).defaultMode;
     return this.pf.create({ customerId: project.customerId, projectId: project.id, platform, mode, status: 'idle', message: null, lastRunAt: null });
   }
 
@@ -301,50 +295,6 @@ export class Layer4Service {
     await this.syncLayerStatus(project);
   }
 
-  // Updates the volume of the month's keywords from Mangools (the customer's own key). One lookup per distinct
-  // keyword (Mangools counts each against the plan), so each run is capped; keywords already checked are skipped.
-  async startVolumeUpdate(customerId: string, month: string, cap = 30) {
-    const project = await this.monthOf(customerId, month);
-    const st = await this.state(project, VOLUME_PSEUDO);
-    if (st.status === 'running' && st.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() < STALE_RUN_MS) throw new BadRequestException('The volume update is already running.');
-    const mg = (await this.customerApis.getKeys(customerId)).mangools;
-    if (!mg?.apiKey) throw new BadRequestException('This customer has no Mangools key (Profile > API settings), so volumes cannot be updated.');
-    st.status = 'running';
-    st.message = 'Updating volumes from Mangools…';
-    st.lastRunAt = new Date();
-    await this.pf.save(st);
-    void this.runVolumeUpdate(project, st, mg, cap).catch((err) => this.log.error(`Layer 4 volume: ${err?.message || err}`));
-    return this.view(customerId, month);
-  }
-
-  async runVolumeUpdate(project: Project, st: Layer4Platform, mg: Record<string, string>, cap: number) {
-    const rows = await this.kw.find({ where: { projectId: project.id } });
-    const byKey = new Map<string, Layer4Keyword[]>();
-    rows.forEach((r) => { const k = norm(r.keyword); byKey.set(k, [...(byKey.get(k) || []), r]); });
-    const todo = [...byKey.entries()].filter(([, rs]) => rs.every((r) => r.volumeSource == null)).slice(0, cap);
-    const loc = Number(mg.locationId) || 0;
-    const lang = Number(mg.languageId) || 1000;
-    let found = 0, none = 0, stopped = '';
-    for (const [k, rs] of todo) {
-      try {
-        const r = await mangoolsGet(mg.apiKey, 'kwfinder/related-keywords', { kw: rs[0].keyword, location_id: loc, language_id: lang });
-        const hit = (Array.isArray(r?.keywords) ? r.keywords : []).find((x: any) => norm(String(x?.kw ?? '')) === k);
-        const sv = hit ? vol(hit.sv) : null;
-        for (const row of rs) { row.volume = sv; row.volumeSource = sv != null ? 'mangools' : 'nodata'; }
-        await this.kw.save(rs);
-        if (sv != null) found++; else none++;
-      } catch (e: any) {
-        stopped = String(e?.message ?? e).slice(0, 160);
-        if (e?.kind === 'CreditLimit' || e?.kind === 'Auth' || e?.kind === 'Limit') break;
-      }
-    }
-    const left = [...byKey.values()].filter((rs) => rs.every((r) => r.volumeSource == null)).length - found - none;
-    st.status = stopped && !found && !none ? 'failed' : 'complete';
-    st.message = `${found} volumes updated, ${none} not in Mangools${left > 0 ? `, ${left} still to check (press again)` : ''}${stopped ? ` · stopped: ${stopped}` : ''}.`;
-    st.lastRunAt = new Date();
-    await this.pf.save(st);
-  }
-
   // ---- Automation: the set date (Day 4 of the Month Cycle) ----------------------------------------
   // Platform-major, one call at a time: every due customer on ChatGPT, then every due customer on Gemini, ...
   // Skips Manual platforms, platforms already attempted today and platforms already holding 10 keywords.
@@ -379,16 +329,7 @@ export class Layer4Service {
         calls++;
       }
     }
-    // Volume update for the month's new keywords (customer's Mangools key), then settle the Layer row.
-    for (const { project } of targets) {
-      const mg = (await this.customerApis.getKeys(project.customerId)).mangools;
-      const vs = await this.state(project, VOLUME_PSEUDO);
-      if (mg?.apiKey && (force || !(vs.lastRunAt && dateInTz(vs.lastRunAt) === today))) {
-        vs.status = 'running'; vs.lastRunAt = new Date(); await this.pf.save(vs);
-        await this.runVolumeUpdate(project, vs, mg, 30).catch(() => undefined);
-      }
-      await this.syncLayerStatus(project);
-    }
+    for (const { project } of targets) await this.syncLayerStatus(project);
     return `${calls} platform call(s) for ${targets.length} customer month(s)`;
   }
 
@@ -412,12 +353,12 @@ export class Layer4Service {
     const shown = platforms.map((p) => ({
       platform: p.platform,
       label: p.label,
-      records: p.records.map((r) => ({ rank: r.rank, keyword: r.keyword, intent: r.intent, demand: r.demand, volume: r.volume ?? r.estVolume ?? null, volumeSource: r.volume != null ? 'tool' : r.estVolume != null ? 'estimate' : null })),
+      records: p.records.map((r) => ({ rank: r.rank, keyword: r.keyword, intent: r.intent, demand: r.demand, volume: r.estVolume ?? null })),
     }));
     const body = shown
-      .flatMap((p) => p.records.map((r) => `<tr><td>${esc(p.label)}</td><td>${r.rank}</td><td>${esc(r.keyword)}</td><td>${esc(r.intent)}</td><td>${esc(r.demand)}</td><td>${r.volume == null ? '—' : r.volume.toLocaleString('en-US') + (r.volumeSource === 'estimate' ? ' (est.)' : '')}</td></tr>`))
+      .flatMap((p) => p.records.map((r) => `<tr><td>${esc(p.label)}</td><td>${r.rank}</td><td>${esc(r.keyword)}</td><td>${esc(r.intent)}</td><td>${esc(r.demand)}</td><td>${r.volume == null ? '—' : r.volume.toLocaleString('en-US')}</td></tr>`))
       .join('');
-    const html = `<table class="kp21-l4"><thead><tr><th>AI platform</th><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th><th>Monthly searches</th></tr></thead><tbody>${body}</tbody></table>`;
+    const html = `<table class="kp21-l4"><thead><tr><th>AI platform</th><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th><th>Est. monthly searches</th></tr></thead><tbody>${body}</tbody></table>`;
     return { layer: 4, complete: true, month: project.monthCode, total: rows.length, expected, html, platforms: shown };
   }
 
