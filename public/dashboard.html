@@ -224,6 +224,7 @@
   function rng(a, b) { var o = []; for (var i = a; i <= b; i++) o.push(i); return o; }
   var NAV = [
     { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
+    { key: 'all-layers', label: 'All Layers', subs: [], layers: [] },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
@@ -417,9 +418,10 @@
     }
     var r = parseRoute();
     if (r.sec.key === 'profile') return renderProfilePage(cust, r.sub);
+    if (r.sec.key === 'all-layers') return renderAllLayers(cust, r);
     var cm = currentMonth();
     if (cm && cm.monthIndex === 0) return renderM0Empty(cust, r);
-    return renderPlaceholderPage(cust, r.sec, r.sub);
+    return renderSectionLayers(cust, r);
   }
 
   function pageHead(title, sub, extra) {
@@ -444,8 +446,121 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     html += '<div class="card placeholder"><h2>No data for M0</h2>' +
-      '<p class="muted">M0 data is shown on the customer panel only. Pick another month to see data here.</p></div>';
+      '<p class="muted">M0 data is shown on the customer panel only. Pick another month to see data here. The Layer schedule for M0 is listed below.</p></div>';
+    html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
+    mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
+  }
+
+  // ---- Layer schedule: All Layers page + each section's own list ----
+  // Rows come from GET /customers/:id/layers?month=Mx (one row per Layer per
+  // month with its scheduled date; created together with the months).
+  var layerCache = {};
+  var layerView = { section: '' };
+  var LAYER_STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', done: 'Done', blocked: 'Blocked', not_applicable: 'Not applicable' };
+
+  function layerRowsFor(cust) {
+    var cm = currentMonth();
+    if (!cm) return Promise.resolve(null);
+    var key = cust.id + ':' + cm.monthIndex + ':' + (cm.monthStartDate || '');
+    if (layerCache[key]) return Promise.resolve(layerCache[key]);
+    return api('/customers/' + cust.id + '/layers?month=' + encodeURIComponent(cm.monthCode || ('M' + cm.monthIndex))).then(function(rows){
+      layerCache[key] = rows || [];
+      return layerCache[key];
+    });
+  }
+
+  function layerMonthRange(r) {
+    return (r.fromMonth === 0 && r.toMonth === 12) ? 'M0–M12' : 'M' + r.fromMonth + (r.toMonth !== r.fromMonth ? '–M' + r.toMonth : ' only');
+  }
+
+  function mountLayers(cust, opts) {
+    var box = document.getElementById('layerBox');
+    if (!box) return;
+    box.innerHTML = '<div class="card"><p class="muted">Loading the Layer schedule…</p></div>';
+    layerRowsFor(cust).then(function(rows){
+      if (document.getElementById('layerBox') !== box) return;
+      if (rows === null) { box.innerHTML = '<div class="card"><p class="muted">Pick a month to see its Layers.</p></div>'; return; }
+      drawLayers(box, cust, rows, opts);
+    }).catch(function(err){
+      if (document.getElementById('layerBox') !== box) return;
+      box.innerHTML = '<div class="card"><p class="muted">Could not load the Layers: ' + escapeHtml(err.message) + '</p></div>';
+    });
+  }
+
+  function drawLayers(box, cust, rows, opts) {
+    var shown = rows.filter(function(r){
+      if (opts.section && r.section !== opts.section) return false;
+      if (!opts.section && layerView.section && r.section !== layerView.section) return false;
+      if (opts.sub && r.subsection !== opts.sub) return false;
+      return true;
+    });
+    var cm = currentMonth();
+    var today = todayIso();
+    var applicable = shown.filter(function(r){ return r.applicable; });
+    var built = shown.filter(function(r){ return r.built; }).length;
+    var dated = applicable.filter(function(r){ return r.scheduledDate; }).map(function(r){ return r.scheduledDate; }).sort();
+    var h = '<section class="card">';
+    if (opts.showSection) {
+      var secs = [];
+      rows.forEach(function(r){ if (secs.indexOf(r.section) === -1) secs.push(r.section); });
+      h += '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><label class="muted" for="layerSecSel">Section</label>' +
+        '<select id="layerSecSel"><option value="">All sections (' + rows.length + ')</option>' + secs.map(function(s){
+          var lbl = (rows.filter(function(r){ return r.section === s; })[0] || {}).sectionLabel || s;
+          return '<option value="' + escapeHtml(s) + '"' + (layerView.section === s ? ' selected' : '') + '>' + escapeHtml(lbl) + '</option>';
+        }).join('') + '</select></div>';
+    }
+    h += '<p class="muted" style="margin:0 0 12px">' + shown.length + ' Layers · ' + applicable.length + ' apply to ' + escapeHtml(cm ? cm.monthCode : 'this month') + ' · ' + built + ' built in the Engine' +
+      (dated.length ? ' · ' + escapeHtml(fmtDay(dated[0])) + ' → ' + escapeHtml(fmtDay(dated[dated.length - 1])) : '') + '</p>';
+    if (!shown.length) {
+      h += '<p class="muted">No Layers are mapped to this page.</p></section>';
+      box.innerHTML = h;
+      return;
+    }
+    h += '<div style="overflow-x:auto"><table><thead><tr><th>Layer</th><th>Name</th>' + (opts.showSection ? '<th>Section</th>' : '<th>Subsection</th>') +
+      '<th>Date</th><th>Day</th><th>Months</th><th>Build</th><th>Status</th></tr></thead><tbody>';
+    shown.forEach(function(r){
+      var isToday = r.scheduledDate === today;
+      var dim = r.applicable ? '' : ' style="opacity:.55"';
+      var opt = Object.keys(LAYER_STATUS_LABEL).map(function(k){
+        return '<option value="' + k + '"' + (r.status === k ? ' selected' : '') + '>' + LAYER_STATUS_LABEL[k] + '</option>';
+      }).join('');
+      h += '<tr' + dim + '><td><strong>L' + r.layer + '</strong></td><td>' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(opts.showSection ? r.sectionLabel : r.subsection.replace(/-/g, ' ')) + '</td>' +
+        '<td' + (isToday ? ' style="font-weight:700"' : '') + '>' + (r.scheduledDate ? escapeHtml(fmtDay(r.scheduledDate)) + (isToday ? ' · today' : '') : 'On demand') + '</td>' +
+        '<td>' + escapeHtml(r.dayLabel || '') + '</td><td>' + escapeHtml(layerMonthRange(r)) + '</td>' +
+        '<td>' + (r.built ? '<span class="badge ok">Built</span>' : '<span class="badge pending">Not built yet</span>') + '</td>' +
+        '<td>' + (r.applicable ? '<select data-lid="' + r.id + '">' + opt + '</select>' : '<span class="muted">Not in ' + escapeHtml(r.monthCode) + '</span>') + '</td></tr>';
+    });
+    h += '</tbody></table></div></section>';
+    box.innerHTML = h;
+    var sel = document.getElementById('layerSecSel');
+    if (sel) sel.addEventListener('change', function(){ layerView.section = sel.value; drawLayers(box, cust, rows, opts); });
+    Array.prototype.forEach.call(box.querySelectorAll('select[data-lid]'), function(el){
+      el.addEventListener('change', function(){
+        var id = el.getAttribute('data-lid'), val = el.value;
+        el.disabled = true;
+        api('/customers/' + cust.id + '/layers/' + id, { method: 'PATCH', body: { status: val } }).then(function(){
+          rows.forEach(function(r){ if (r.id === id) r.status = val; });
+          el.disabled = false;
+        }).catch(function(err){ el.disabled = false; alert('Could not update: ' + err.message); });
+      });
+    });
+  }
+
+  function renderAllLayers(cust, r) {
+    var html = pageHead('All Layers', 'Layer 1–194 · ' + contextLine(cust));
+    html += '<div id="layerBox"></div>';
+    document.getElementById('page').innerHTML = html;
+    mountLayers(cust, { section: '', sub: null, showSection: true });
+  }
+
+  function renderSectionLayers(cust, r) {
+    var title = r.sub ? r.sub[1] : r.sec.label;
+    var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
+    html += '<div id="layerBox"></div>';
+    document.getElementById('page').innerHTML = html;
+    mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
   // ---- placeholder pages -------------------------------------------

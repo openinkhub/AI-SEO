@@ -6,6 +6,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Customer } from '../customers/customer.entity';
 import { MONTH_COUNT, cycleDates, statusForCycle, todayInTz } from './month-cycle';
+import { LayersService } from '../layers/layers.service';
 
 @Injectable()
 export class ProjectsService {
@@ -14,6 +15,7 @@ export class ProjectsService {
     private readonly repo: Repository<Project>,
     @InjectRepository(Customer)
     private readonly customerRepo: Repository<Customer>,
+    private readonly layers: LayersService,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -59,6 +61,7 @@ export class ProjectsService {
   // signup, say) so no orphaned Months are left behind.
   async removeByCustomer(customerId: string): Promise<void> {
     const projects = await this.findAllForCustomer(customerId);
+    await this.layers.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }
 
@@ -108,6 +111,10 @@ export class ProjectsService {
       if (changed) toSave.push(p);
     }
     if (toSave.length) await this.repo.save(toSave);
-    return this.findAllForCustomer(customerId);
+    const all = await this.findAllForCustomer(customerId);
+    // Layer schedule: one row per Layer per month, created with the months
+    // (and re-dated when the month dates move).
+    await this.layers.syncIfNeeded(customerId, all, toSave.length > 0);
+    return all;
   }
 }
