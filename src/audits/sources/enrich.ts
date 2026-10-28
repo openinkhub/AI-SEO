@@ -86,14 +86,18 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
   const evidence = await deps.evidenceRepo.find({ where: { customerId, auditRunId: runId } });
   const tasks = await deps.taskRepo.find({ where: { auditRunId: runId } });
   for (const src of LIVE_SOURCES) {
-    const group = tasks.filter((t) => TASK_SOURCE[t.skillId] === src && !t.isAutomated);
-    step += 1;
-    if (!group.length) continue;
-    await progress(`step ${step}/${runners.length + LIVE_SOURCES.length}: writing ${SOURCE_LABEL[src]} (${group.length} tasks)`);
     const isAi = src === 'ai';
     const rows = isAi
       ? evidence.filter((e) => e.status === 'approved' && e.extracted)
       : evidence.filter((e) => (FEEDS[src] ?? []).includes(e.evidenceType) && e.status === 'approved' && e.extracted);
+    // A task is (re)written when it has no result yet, OR when any evidence feeding it - API data or an uploaded
+    // screenshot approved since - is newer than the task's last write. Without this, a task finished in an earlier run
+    // never picked up screenshots uploaded / approved afterwards.
+    const newest = rows.reduce((m, e) => Math.max(m, new Date(e.updatedAt).getTime()), 0);
+    const group = tasks.filter((t) => TASK_SOURCE[t.skillId] === src && (!t.isAutomated || newest > new Date(t.updatedAt).getTime()));
+    step += 1;
+    if (!group.length) continue;
+    await progress(`step ${step}/${runners.length + LIVE_SOURCES.length}: writing ${SOURCE_LABEL[src]} (${group.length} tasks)`);
     if (!rows.length) {
       const why = failed.get(src) ?? `${SOURCE_LABEL[src]} produced no data for this run (key not set, function switched off, or the call failed - see the research section).`;
       group.forEach((t) => {
@@ -126,11 +130,12 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
           t.finding = w.finding;
           t.suggestion = w.suggestion;
           t.isAutomated = true;
-        } else t.finding = `Research data was collected (${SOURCE_LABEL[src]}) but the task write-up did not finish. Run the enrichment again.`;
+        } else if (!t.isAutomated) t.finding = `Research data was collected (${SOURCE_LABEL[src]}) but the task write-up did not finish. Run the enrichment again.`;
+        // an already-finished task keeps its earlier result when a refresh does not complete
       }
     } catch (e: any) {
       notes.push(`${SOURCE_LABEL[src]} write-up: ${String(e?.message ?? e).slice(0, 160)}`);
-      group.forEach((t) => {
+      group.filter((t) => !t.isAutomated).forEach((t) => {
         t.finding = `Research data was collected (${SOURCE_LABEL[src]}) but the write-up failed: ${String(e?.message ?? e).slice(0, 120)}`;
       });
     }
