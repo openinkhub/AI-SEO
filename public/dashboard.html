@@ -237,6 +237,7 @@
       layers: [26, 27, 29] },
     { key: 'local', label: 'Local SEO', subs: [['gmb-audit', 'GMB Audit'], ['gmb-profile', 'GMB Profile']], layers: [70, 71, 72] },
     { key: 'international', label: 'International SEO', subs: [], layers: [] },
+    { key: 'api-settings', label: 'API Settings (all customers)', subs: [], layers: [] },
     { key: 'social', label: 'Social Media', subs: [['social-blog', 'Social Blog'], ['social-analytics', 'Social Analytics'], ['social-post', 'Social Post']],
       layers: [61, 62, 63, 64, 65, 66, 67, 68].concat(rng(163, 192)) }
   ];
@@ -404,6 +405,7 @@
   function renderPage() {
     renderNav();
     var page = document.getElementById('page');
+    if (parseRoute().sec.key === 'api-settings') return renderApiOverview();
     var cust = curCustomer();
     if (!cust) {
       page.innerHTML = '<div class="card empty"><h2>No customer selected</h2>' +
@@ -536,13 +538,14 @@
     var html = pageHead('Profile · Account', 'Layers 1–2 · ' + contextLine(cust));
     html += '<div class="actions" style="margin-top:0"><span class="muted">Jump to:</span>' +
       [1, 2].map(function(n){ return '<a href="#" class="jump" data-target="layer' + n + '">Layer ' + n + ' · ' + escapeHtml(LAYER_TITLES[n]) + '</a>'; }).join(' · ') + '</div>';
-    html += '<div id="layer1"></div><div id="layer2"></div>';
+    html += '<div id="layer1"></div><div id="layer2"></div><div id="layer2api"></div>';
     html += '<div class="card danger-zone"><h2>Remove customer</h2>' +
       '<p class="lead">Deletes this customer and their Month shells from the Engine. It does NOT delete their WordPress account — do that separately in wp-admin.</p>' +
       '<button type="button" id="deleteCustomerBtn" class="btn-danger">Delete customer</button></div>';
     document.getElementById('page').innerHTML = html;
     renderLayer1(cust);
     renderLayer2(cust);
+    renderCustomerApis(cust);
     document.getElementById('deleteCustomerBtn').addEventListener('click', function(){ deleteCustomer(cust); });
     Array.prototype.forEach.call(document.querySelectorAll('a.jump'), function(a){
       a.addEventListener('click', function(e){
@@ -1435,6 +1438,136 @@
     });
   }
 
+  // ---- Customer API settings (admin only; secrets are never sent back) ---
+
+  var apiState = { cid: null, items: [] };
+
+  function apiBadge(st) {
+    var map = { ok: ['ok', 'works'], set: ['ok', 'saved'], failed: ['fail', 'failing'], off: ['pending', 'off'], missing: ['pending', 'not set'] };
+    var m = map[st] || ['pending', st];
+    return '<span class="badge ' + m[0] + '">' + m[1] + '</span>';
+  }
+
+  function renderCustomerApis(cust) {
+    var box = document.getElementById('layer2api');
+    if (!box) return;
+    apiState.cid = cust.id;
+    box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 2</span>Customer API settings</h2>' +
+      '<a href="#api-settings" class="muted">See all customers</a></div>' +
+      '<p class="lead">Admin only. These keys belong to this customer and are used when the SEO Audit and the research layers run. Secrets are encrypted and never shown again (last 4 characters only). Leave a secret blank to keep the saved one.</p>' +
+      '<div id="apiBody"><p class="muted">Loading…</p></div></section>';
+    api('/customers/' + cust.id + '/api-settings').then(function(items){
+      if (cust.id !== apiState.cid) return;
+      apiState.items = items;
+      drawCustomerApis(cust);
+    }).catch(function(err){
+      var b = document.getElementById('apiBody');
+      if (b) b.innerHTML = '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function drawCustomerApis(cust) {
+    var b = document.getElementById('apiBody');
+    if (!b) return;
+    var groups = [], by = {};
+    apiState.items.forEach(function(it){ if (!by[it.group]) { by[it.group] = []; groups.push(it.group); } by[it.group].push(it); });
+    var open = {};
+    Array.prototype.forEach.call(b.querySelectorAll('details[data-p]'), function(d){ open[d.getAttribute('data-p')] = d.open; });
+    b.innerHTML = groups.map(function(g){
+      return '<h3 style="margin:14px 0 6px">' + escapeHtml(g) + '</h3>' + by[g].map(function(it){
+        var st = !it.configured ? 'missing' : (!it.enabled ? 'off' : (it.lastStatus === 'failed' ? 'failed' : (it.lastStatus === 'ok' ? 'ok' : 'set')));
+        var h = '<details class="run-row" data-p="' + it.provider + '"' + (open[it.provider] ? ' open' : '') + '><summary style="cursor:pointer"><strong>' + escapeHtml(it.label) + '</strong> ' + apiBadge(st) +
+          (it.wired ? ' <span class="badge ok">used by SEO Audit</span>' : '') + '</summary>' +
+          '<p class="muted" style="margin:6px 0">' + escapeHtml(it.description) + ' <em>Used by: ' + escapeHtml(it.usedBy) + '</em></p>' +
+          '<div class="profile-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">';
+        it.fields.forEach(function(f){
+          var ph = f.secret ? (f.isSet ? 'Saved ••••' + (f.hint || '') + ' — leave blank to keep' : 'Not set') : (f.placeholder || '');
+          h += '<label class="profile-field"><span>' + escapeHtml(f.label) + (f.optional ? ' <small>(optional)</small>' : '') + '</span>' +
+            '<input data-f="' + f.name + '" type="' + (f.secret ? 'password' : (f.number ? 'number' : 'text')) + '" autocomplete="off" value="' + (f.secret ? '' : escapeHtml(f.value || '')) + '" placeholder="' + escapeHtml(ph) + '"></label>';
+        });
+        h += '</div><div class="row-actions" style="margin-top:8px"><button class="primary" data-act="save" data-p="' + it.provider + '">Save</button>' +
+          '<button data-act="test" data-p="' + it.provider + '"' + (it.configured ? '' : ' disabled') + '>Test</button>' +
+          (it.configured ? '<label class="muted"><input type="checkbox" data-act="enabled" data-p="' + it.provider + '"' + (it.enabled ? ' checked' : '') + '> enabled</label>' : '') +
+          (it.configured ? '<button class="btn-danger" data-act="remove" data-p="' + it.provider + '">Remove</button>' : '') +
+          '<span class="muted" data-msg="' + it.provider + '">' + (it.lastMessage ? escapeHtml(it.lastMessage) : '') + '</span></div></details>';
+        return h;
+      }).join('');
+    }).join('');
+    Array.prototype.forEach.call(b.querySelectorAll('[data-act]'), function(el){
+      var prov = el.getAttribute('data-p'), act = el.getAttribute('data-act');
+      el.addEventListener(act === 'enabled' ? 'change' : 'click', function(){ apiAction(cust, prov, act, el); });
+    });
+  }
+
+  function apiMsg(prov, text) {
+    var m = document.querySelector('[data-msg="' + prov + '"]');
+    if (m) m.textContent = text;
+  }
+
+  function apiReplace(item) {
+    apiState.items = apiState.items.map(function(x){ return x.provider === item.provider ? item : x; });
+  }
+
+  function apiAction(cust, prov, act, el) {
+    var base = '/customers/' + cust.id + '/api-settings/' + prov;
+    var det = document.querySelector('details[data-p="' + prov + '"]');
+    var done = function(item){ if (item) apiReplace(item); drawCustomerApis(cust); };
+    if (act === 'save') {
+      var values = {};
+      Array.prototype.forEach.call(det.querySelectorAll('input[data-f]'), function(i){ values[i.getAttribute('data-f')] = i.value; });
+      el.disabled = true; apiMsg(prov, 'Saving…');
+      api(base, { method: 'PUT', body: { values: values } }).then(done)
+        .catch(function(err){ el.disabled = false; apiMsg(prov, 'Could not save: ' + err.message); });
+    } else if (act === 'test') {
+      el.disabled = true; apiMsg(prov, 'Testing…');
+      api(base + '/test', { method: 'POST', body: {} }).then(done)
+        .catch(function(err){ el.disabled = false; apiMsg(prov, 'Test failed: ' + err.message); });
+    } else if (act === 'enabled') {
+      api(base, { method: 'PUT', body: { enabled: el.checked } }).then(done)
+        .catch(function(err){ apiMsg(prov, 'Could not update: ' + err.message); });
+    } else if (act === 'remove') {
+      if (!window.confirm('Remove the saved ' + prov + ' settings for this customer?')) return;
+      api(base, { method: 'DELETE' }).then(function(){ return api('/customers/' + cust.id + '/api-settings'); })
+        .then(function(items){ apiState.items = items; drawCustomerApis(cust); })
+        .catch(function(err){ apiMsg(prov, 'Could not remove: ' + err.message); });
+    }
+  }
+
+  // All customers x all APIs. Click a customer to open their Layer 2 card.
+  function renderApiOverview() {
+    var page = document.getElementById('page');
+    page.innerHTML = pageHead('API Settings', 'All customers · admin only') + '<div class="card"><p class="muted">Loading…</p></div>';
+    api('/api-settings/overview').then(function(d){
+      var groups = [], names = {};
+      d.providers.forEach(function(p){ if (names[p.group] == null) { names[p.group] = []; groups.push(p.group); } names[p.group].push(p); });
+      var head = '<tr><th>Customer</th>' + groups.map(function(g){ return '<th>' + escapeHtml(g) + '</th>'; }).join('') + '</tr>';
+      var rows = d.customers.map(function(c){
+        var tds = groups.map(function(g){
+          var chips = names[g].map(function(p){
+            var st = c.apis[p.key];
+            var cls = st === 'ok' || st === 'set' ? 'ok' : (st === 'failed' ? 'fail' : 'pending');
+            return '<span class="badge ' + cls + '" title="' + escapeHtml(p.label + ': ' + st) + '" style="margin:0 4px 4px 0">' + escapeHtml(p.label.replace(/ \(Layer 20\)| \(Layer 23\).*$/, '')) + '</span>';
+          }).join('');
+          return '<td>' + chips + '</td>';
+        }).join('');
+        return '<tr><td><a href="#" data-cust="' + c.id + '"><strong>' + escapeHtml(c.companyName) + '</strong></a><div class="muted">' + escapeHtml(c.website || '') + '</div></td>' + tds + '</tr>';
+      }).join('');
+      page.innerHTML = pageHead('API Settings', 'All customers · admin only · green = saved/working, red = failing, grey = not set') +
+        '<div class="card"><div class="task-scroll" style="max-height:none"><table><thead>' + head + '</thead><tbody>' + (rows || '<tr><td>No customers yet.</td></tr>') + '</tbody></table></div></div>';
+      Array.prototype.forEach.call(page.querySelectorAll('a[data-cust]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var sel = document.getElementById('customerSelect');
+          sel.value = a.getAttribute('data-cust');
+          window.location.hash = '#profile/account';
+          sel.dispatchEvent(new Event('change'));
+        });
+      });
+    }).catch(function(err){
+      page.innerHTML = pageHead('API Settings', 'All customers') + '<div class="card"><p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p></div>';
+    });
+  }
+
   // ---- Evidence: screenshots / exports from other SEO tools -------------
   var EV_LABELS = {
     digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab', seoquake_audit: 'SEOquake audit', frase_ai_visibility: 'Frase AI visibility', seomator_geo_audit: 'SEOmator GEO audit', mangools_siteprofiler: 'Mangools SiteProfiler',
@@ -1496,8 +1629,8 @@
         return '<details data-sec="' + sec.key + '" class="run-row"' + (isOpen ? ' open' : '') + '><summary style="cursor:pointer"><strong>' + escapeHtml(sec.label) + '</strong> ' +
           '<span class="muted">' + mine.length + ' file' + (mine.length === 1 ? '' : 's') + (queued ? ' · ' + queued + ' waiting' : '') + '</span></summary>' +
           '<p class="muted" style="margin:6px 0">' + escapeHtml(sec.hint) + '</p>' +
-          '<div class="row-actions" style="margin:6px 0"><input type="file" multiple id="evFiles-' + runId + '-' + sec.key + '" accept="' + escapeHtml(sec.accepts) + '">' +
-          '<button id="evUp-' + runId + '-' + sec.key + '">Upload</button></div>' +
+          (sec.accepts ? '<div class="row-actions" style="margin:6px 0"><input type="file" multiple id="evFiles-' + runId + '-' + sec.key + '" accept="' + escapeHtml(sec.accepts) + '">' +
+          '<button id="evUp-' + runId + '-' + sec.key + '">Upload</button></div>' : '') +
           mine.map(function(e){ return evidenceRowHtml(runId, e); }).join('') + '</details>';
       }).join('');
       box.innerHTML = html;

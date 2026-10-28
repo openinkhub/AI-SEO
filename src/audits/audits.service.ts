@@ -11,6 +11,9 @@ import { buildAutomatedFinding } from './findings-builder';
 import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builder';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
+import { CustomerApisService } from '../customer-apis/customer-apis.service';
+import { runPageSpeed } from '../customer-apis/pagespeed';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class AuditsService {
@@ -20,6 +23,7 @@ export class AuditsService {
     @InjectRepository(LayerPush) private readonly pushRepo: Repository<LayerPush>,
     @InjectRepository(AuditEvidence) private readonly evidenceRepo: Repository<AuditEvidence>,
     private readonly customersService: CustomersService,
+    private readonly apis: CustomerApisService,
   ) {}
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":
@@ -93,6 +97,7 @@ export class AuditsService {
       tasks.push(task);
     }
     const savedTasks = await this.taskRepo.save(tasks);
+    const autoEvidence = await this.runCustomerApis(customerId, run.id, website);
 
     // Only tasks with a REAL (automated) finding get pushed to their
     // mapped layer(s) — pushing every scaffolded "not yet wired" placeholder
@@ -126,10 +131,47 @@ export class AuditsService {
     run.pendingLayerPushes = savedPushes.length;
     run.failureReason = failureReason;
     run.completedAt = new Date();
-    run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName);
-    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName);
+    run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName, autoEvidence);
+    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence);
     run.reportGeneratedAt = run.completedAt;
     return this.runRepo.save(run);
+  }
+
+  // Uses the customer's own API settings (Layer 2 > API settings in the admin panel). Today only
+  // PageSpeed is wired; the result is stored as pre-approved evidence so it flows through the same
+  // report rendering as uploaded tool data. A failure is recorded, never thrown - the audit still runs.
+  private async runCustomerApis(customerId: string, runId: string, website: string): Promise<AuditEvidence[]> {
+    const out: AuditEvidence[] = [];
+    if (!website) return out;
+    let keys: Record<string, Record<string, string>> = {};
+    try {
+      keys = await this.apis.getKeys(customerId);
+    } catch {
+      return out;
+    }
+    if (keys.pagespeed) {
+      const url = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+      const row = this.evidenceRepo.create({
+        customerId,
+        auditRunId: runId,
+        kind: 'text',
+        section: 'auto',
+        tool: 'pagespeed',
+        evidenceType: 'pagespeed_report',
+        fileName: 'Google PageSpeed (automatic)',
+        sha256: createHash('sha256').update(`pagespeed:${runId}`).digest('hex'),
+        includeInReport: true,
+        status: 'approved',
+      });
+      try {
+        row.extracted = (await runPageSpeed(url, keys.pagespeed.apiKey)) as unknown as Record<string, any>;
+      } catch (err) {
+        row.status = 'failed';
+        row.error = `PageSpeed: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);
+      }
+      out.push(await this.evidenceRepo.save(row));
+    }
+    return out;
   }
 
   findAllForCustomer(customerId: string): Promise<AuditRun[]> {

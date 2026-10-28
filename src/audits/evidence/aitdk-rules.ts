@@ -160,10 +160,11 @@ export function buildExtractionPrompt(tool?: string | null): string {
   ].join('\n');
 }
 
-export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['digispot_report', 'ppcblogpro_report', 'unknown']));
+export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['digispot_report', 'ppcblogpro_report', 'pagespeed_report', 'unknown']));
 
 // Upload sections shown in the admin panel (one box per tool). Add a line here when a new tool arrives.
 export const TOOL_SECTIONS: Array<{ key: string; label: string; accepts: string; hint: string }> = [
+  { key: 'auto', label: 'Automatic (customer APIs)', accepts: '', hint: 'Filled by the audit run from the customer\'s API settings (Layer 2). Nothing to upload.' },
   { key: 'aitdk', label: 'AITDK SEO Extension', accepts: 'image/png,image/jpeg,image/webp', hint: 'Screenshots (Meta, Technical, Traffic, Backlinks, GEO, SERP, Density, Social, Structured)' },
   { key: 'digispot', label: 'Digispot AI - SEO Insights', accepts: '.txt,text/plain', hint: 'Comprehensive report .txt export' },
   { key: 'ppcblogpro', label: 'PPCBlogPro - SEO / AEO / GEO', accepts: '.csv,text/csv,image/png,image/jpeg,image/webp', hint: '.csv export and/or score screenshot' },

@@ -263,14 +263,25 @@ function renderSeomator(d: Record<string, any>, admin: boolean): string {
   return h;
 }
 
+function renderPageSpeed(d: Record<string, any>): string {
+  const sc = d.scores ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Performance', sc.performance)}${scoreTile('Accessibility', sc.accessibility)}${scoreTile('Best practices', sc.bestPractices)}${scoreTile('SEO', sc.seo)}</div>`;
+  const m = (d.metrics ?? []) as Array<Record<string, any>>;
+  if (m.length) h += '<h4>Core metrics (mobile)</h4>' + grid(['Metric', 'Value'], m.map((x) => [x.label, x.value]));
+  const o = (d.opportunities ?? []) as Array<Record<string, any>>;
+  if (o.length) h += '<h4>Biggest speed opportunities</h4>' + grid(['Opportunity', 'Potential saving'], o.map((x) => [x.title, x.savings]));
+  return h;
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
+  if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
   return EVIDENCE_RULES.find((r) => r.type === type)?.label ?? 'Tool data';
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'mangools' ? 'Mangools' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -285,6 +296,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         e.evidenceType === 'digispot_report' ? renderDigispot(d, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_report' ? renderPpcReport(d as PpcReport, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_summary' ? renderPpcSummary(d)
+        : e.evidenceType === 'pagespeed_report' ? renderPageSpeed(d)
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
