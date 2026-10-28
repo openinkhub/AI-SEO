@@ -51,8 +51,8 @@ export class EvidenceController {
   }
 
   @Post('evidence/process-next')
-  processNext(@Param('customerId') customerId: string, @Param('runId') runId: string) {
-    return this.service.processNext(customerId, runId);
+  processNext(@Param('customerId') customerId: string, @Param('runId') runId: string, @Body('retry') retry?: boolean) {
+    return this.service.processNext(customerId, runId, 2, retry === true);
   }
 
   @Get('evidence/:id/data')

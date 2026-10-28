@@ -1676,9 +1676,11 @@
   function completeEvidence(runId) {
     var btn = document.getElementById('evComplete-' + runId);
     btn.disabled = true;
-    var total = 0, failed = 0;
+    var total = 0, failed = 0, first = true;
     function step() {
-      return api(evBase(runId) + '/evidence/process-next', { method: 'POST', body: {} }).then(function(r){
+      var body = first ? { retry: true } : {};
+      first = false;
+      return api(evBase(runId) + '/evidence/process-next', { method: 'POST', body: body }).then(function(r){
         total += r.processed; failed += r.failed;
         evProgress(runId, 'Reading files… ' + total + ' done' + (r.remaining ? ', ' + r.remaining + ' to go' : ''));
         return refreshEvidence(runId).then(function(){ return r.remaining > 0 && r.processed > 0 ? step() : r; });

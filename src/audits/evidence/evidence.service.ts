@@ -75,8 +75,12 @@ export class EvidenceService {
 
   // Complete, step 1: read the next few queued files. The panel calls this until remaining is 0
   // (keeps each request short for the host's proxy), then calls rebuild-report.
-  async processNext(customerId: string, runId: string, batch = 2) {
+  async processNext(customerId: string, runId: string, batch = 2, retryFailed = false) {
     await this.audits.findOne(customerId, runId);
+    // Complete passes retryFailed once at the start so files that failed earlier (e.g. a wrong model name) are read again.
+    if (retryFailed) {
+      await this.repo.update({ customerId, auditRunId: runId, status: 'failed' }, { status: 'uploaded', error: null });
+    }
     const queued = await this.repo.find({ where: { customerId, auditRunId: runId, status: 'uploaded' }, order: { createdAt: 'ASC' }, take: batch });
     let ok = 0, failed = 0;
     for (const row of queued) {
