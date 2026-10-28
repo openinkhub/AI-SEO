@@ -14,6 +14,8 @@ import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { enrichRun } from './sources/enrich';
 import { SOURCE_LABEL, TASK_SOURCE } from './sources/task-map';
+import { GlobalApisService } from '../customer-apis/global-apis.service';
+import { mozAuthority } from '../customer-apis/moz';
 import { ahrefsDomainRating } from '../customer-apis/ahrefs';
 import { runMangools } from '../customer-apis/mangools/run';
 import { runPageSpeed } from '../customer-apis/pagespeed';
@@ -62,6 +64,7 @@ export class AuditsService {
     @InjectRepository(AuditPackage) private readonly packageRepo: Repository<AuditPackage>,
     private readonly customersService: CustomersService,
     private readonly apis: CustomerApisService,
+    private readonly globals: GlobalApisService,
   ) {}
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":
@@ -318,7 +321,7 @@ export class AuditsService {
     try {
       keys = await this.apis.getKeys(customerId);
     } catch {
-      return out;
+      keys = {};
     }
     if (keys.pagespeed) {
       const url = /^https?:\/\//i.test(website) ? website : `https://${website}`;
@@ -361,6 +364,38 @@ export class AuditsService {
         else row.error = (r.error ?? 'failed').slice(0, 250);
         out.push(await this.evidenceRepo.save(row));
       }
+    }
+    let globalKeys: Record<string, Record<string, string>> = {};
+    try {
+      globalKeys = await this.globals.getKeys();
+    } catch {
+      globalKeys = {};
+    }
+    const moz = globalKeys.moz;
+    if (moz?.accessId && moz?.secretKey && (moz.mzAuthority ?? '').trim() !== '0') {
+      const row = this.evidenceRepo.create({
+        customerId,
+        auditRunId: runId,
+        kind: 'text',
+        section: 'auto',
+        tool: 'moz',
+        evidenceType: 'moz_authority',
+        fileName: 'Moz Domain Authority (automatic)',
+        sha256: createHash('sha256').update(`moz:da:${runId}`).digest('hex'),
+        includeInReport: true,
+        status: 'approved',
+      });
+      try {
+        const customer = await this.customersService.findOne(customerId);
+        const rawMax = (moz.mzCompetitors ?? '').trim();
+        const max = rawMax === '' ? 5 : Math.min(Math.max(parseInt(rawMax, 10) || 0, 0), 20);
+        const comps = Array.isArray(customer.competitors) ? customer.competitors.slice(0, max) : [];
+        row.extracted = (await mozAuthority(moz.accessId, moz.secretKey, website, comps)) as unknown as Record<string, any>;
+      } catch (err) {
+        row.status = 'failed';
+        row.error = `Moz: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);
+      }
+      out.push(await this.evidenceRepo.save(row));
     }
     if (keys.ahrefs?.apiKey && (keys.ahrefs.ahDomainRating ?? '').trim() !== '0') {
       const row = this.evidenceRepo.create({

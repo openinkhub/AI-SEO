@@ -151,3 +151,19 @@ export function isComplete(p: ApiProvider, vals: Record<string, string> | null):
   if (p.anyOf) return p.fields.some((f) => !!vals[f.name]);
   return p.fields.filter((f) => !f.optional).every((f) => !!vals[f.name]);
 }
+
+// Global (admin-wide) APIs: one key set for the whole Engine, not per customer. Configured in Global API Settings.
+export const GLOBAL_API_PROVIDERS: ApiProvider[] = [
+  {
+    key: 'moz', label: 'Moz Links API', group: 'Authority metrics',
+    description: 'Moz Domain Authority, Page Authority and Spam Score (Moz Links API v2, Basic auth: Access ID + Secret Key from moz.com/products/api).',
+    fields: [
+      { name: 'accessId', label: 'Access ID', secret: false },
+      { name: 'secretKey', label: 'Secret Key', secret: true },
+      { name: 'mzAuthority', label: 'Domain Authority card (0 = off, blank = on)', secret: false, number: true, optional: true },
+      { name: 'mzCompetitors', label: 'Competitors to compare: max (0 = none, blank = 5)', secret: false, number: true, optional: true },
+    ],
+    usedBy: 'SEO Audit (automatic, every customer): Domain Authority of the site and its named competitors; feeds the authority and competitor tasks. Target: Domain Authority 60+.', testable: true, wired: true,
+  },
+];
+export const findGlobalProvider = (k: string): ApiProvider | undefined => GLOBAL_API_PROVIDERS.find((p) => p.key === k);

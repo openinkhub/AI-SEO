@@ -326,6 +326,15 @@ function renderAhrefsDr(d: Record<string, any>): string {
   return h;
 }
 
+function renderMoz(d: Record<string, any>): string {
+  const site = d.site ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Domain Authority', site.domainAuthority)}${scoreTile('Page Authority', site.pageAuthority)}${scoreTile('Spam score %', site.spamScore)}</div>`;
+  h += kvTable([['Linking domains', site.linkingDomains], ['Links', site.links]]);
+  const c = (d.competitors ?? []) as Array<Record<string, any>>;
+  if (c.length) h += '<h4>Competitors</h4>' + grid(['Domain', 'Domain Authority', 'Page Authority', 'Linking domains', 'Compared with you'], c.map((x) => [x.domain, x.domainAuthority ?? 'n/a', x.pageAuthority ?? 'n/a', x.linkingDomains ?? 'n/a', x.domainAuthority != null && site.domainAuthority != null ? (site.domainAuthority >= x.domainAuthority ? 'You are ahead or level' : `${Math.round((x.domainAuthority - site.domainAuthority) * 10) / 10} points ahead of you`) : '']));
+  return h;
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -383,6 +392,7 @@ function renderDigispotDashboard(d: Record<string, any>): string {
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
+  if (type === 'moz_authority') return 'Domain Authority (Moz)';
   if (type === 'ahrefs_domain_rating') return 'Domain Rating (Ahrefs)';
   if (type === 'research_keywords') return 'Keyword research';
   if (type === 'research_competitors') return 'Competitor research';
@@ -398,7 +408,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -417,6 +427,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'pagespeed_report' ? renderPageSpeed(d)
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
+        : e.evidenceType === 'moz_authority' ? renderMoz(d)
         : e.evidenceType === 'ahrefs_domain_rating' ? renderAhrefsDr(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)

@@ -238,6 +238,7 @@
     { key: 'local', label: 'Local SEO', subs: [['gmb-audit', 'GMB Audit'], ['gmb-profile', 'GMB Profile']], layers: [70, 71, 72] },
     { key: 'international', label: 'International SEO', subs: [], layers: [] },
     { key: 'api-settings', label: 'API Settings (all customers)', subs: [], layers: [] },
+    { key: 'global-settings', label: 'Global API Settings', subs: [], layers: [] },
     { key: 'social', label: 'Social Media', subs: [['social-blog', 'Social Blog'], ['social-analytics', 'Social Analytics'], ['social-post', 'Social Post']],
       layers: [61, 62, 63, 64, 65, 66, 67, 68].concat(rng(163, 192)) }
   ];
@@ -406,6 +407,7 @@
     renderNav();
     var page = document.getElementById('page');
     if (parseRoute().sec.key === 'api-settings') return renderApiOverview();
+    if (parseRoute().sec.key === 'global-settings') return renderGlobalApis();
     var cust = curCustomer();
     if (!cust) {
       page.innerHTML = '<div class="card empty"><h2>No customer selected</h2>' +
@@ -1565,6 +1567,69 @@
       api(base, { method: 'DELETE' }).then(function(){ return api('/customers/' + cust.id + '/api-settings'); })
         .then(function(items){ apiState.items = items; drawCustomerApis(cust); })
         .catch(function(err){ apiMsg(prov, 'Could not remove: ' + err.message); });
+    }
+  }
+
+
+  // ---- Global API settings (one key set for all customers; admin only) ----
+  var globalState = { items: [] };
+
+  function renderGlobalApis() {
+    var page = document.getElementById('page');
+    page.innerHTML = pageHead('Global API Settings', 'All customers · admin only') +
+      '<div class="card"><p class="lead">These keys are shared by every customer (they are not stored per customer). Secrets are encrypted and never shown again (last 4 characters only). Leave a secret blank to keep the saved one.</p><div id="globalBody"><p class="muted">Loading…</p></div></div>';
+    api('/global-api-settings').then(function(items){ globalState.items = items; drawGlobalApis(); })
+      .catch(function(err){ var b = document.getElementById('globalBody'); if (b) b.innerHTML = '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p>'; });
+  }
+
+  function drawGlobalApis() {
+    var b = document.getElementById('globalBody');
+    if (!b) return;
+    var open = {};
+    Array.prototype.forEach.call(b.querySelectorAll('details[data-g]'), function(d){ open[d.getAttribute('data-g')] = d.open; });
+    b.innerHTML = globalState.items.map(function(it){
+      var st = !it.configured ? 'missing' : (!it.enabled ? 'off' : (it.lastStatus === 'failed' ? 'failed' : (it.lastStatus === 'ok' ? 'ok' : 'set')));
+      var h = '<details class="run-row" data-g="' + it.provider + '"' + (open[it.provider] !== false ? ' open' : '') + '><summary style="cursor:pointer"><strong>' + escapeHtml(it.label) + '</strong> ' + apiBadge(st) +
+        (it.wired ? ' <span class="badge ok">used by SEO Audit</span>' : '') + '</summary>' +
+        '<p class="muted" style="margin:6px 0">' + escapeHtml(it.description) + ' <em>Used by: ' + escapeHtml(it.usedBy) + '</em></p><div class="profile-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">';
+      it.fields.forEach(function(f){
+        var ph = f.secret ? (f.isSet ? 'Saved ••••' + (f.hint || '') + ' — leave blank to keep' : 'Not set') : '';
+        h += '<label class="profile-field"><span>' + escapeHtml(f.label) + (f.optional ? ' <small>(optional)</small>' : '') + '</span>' +
+          '<input data-f="' + f.name + '" type="' + (f.secret ? 'password' : (f.number ? 'number' : 'text')) + '" autocomplete="off" value="' + (f.secret ? '' : escapeHtml(f.value || '')) + '" placeholder="' + escapeHtml(ph) + '"></label>';
+      });
+      h += '</div><div class="row-actions" style="margin-top:8px"><button class="primary" data-gact="save" data-p="' + it.provider + '">Save</button>' +
+        '<button data-gact="test" data-p="' + it.provider + '"' + (it.configured ? '' : ' disabled') + '>Test</button>' +
+        (it.configured ? '<label class="muted"><input type="checkbox" data-gact="enabled" data-p="' + it.provider + '"' + (it.enabled ? ' checked' : '') + '> enabled</label>' : '') +
+        (it.configured ? '<button class="btn-danger" data-gact="remove" data-p="' + it.provider + '">Remove</button>' : '') +
+        '<span class="muted" data-gmsg="' + it.provider + '">' + (it.lastMessage ? escapeHtml(it.lastMessage) : '') + '</span></div></details>';
+      return h;
+    }).join('');
+    Array.prototype.forEach.call(b.querySelectorAll('[data-gact]'), function(el){
+      var prov = el.getAttribute('data-p'), act = el.getAttribute('data-gact');
+      el.addEventListener(act === 'enabled' ? 'change' : 'click', function(){ globalAction(prov, act, el); });
+    });
+  }
+
+  function globalMsg(prov, text) { var m = document.querySelector('[data-gmsg="' + prov + '"]'); if (m) m.textContent = text; }
+
+  function globalAction(prov, act, el) {
+    var base = '/global-api-settings/' + prov;
+    var det = document.querySelector('details[data-g="' + prov + '"]');
+    var done = function(item){ if (item) globalState.items = globalState.items.map(function(x){ return x.provider === item.provider ? item : x; }); drawGlobalApis(); };
+    if (act === 'save') {
+      var values = {};
+      Array.prototype.forEach.call(det.querySelectorAll('input[data-f]'), function(i){ values[i.getAttribute('data-f')] = i.value; });
+      el.disabled = true; globalMsg(prov, 'Saving…');
+      api(base, { method: 'PUT', body: { values: values } }).then(done).catch(function(err){ el.disabled = false; globalMsg(prov, 'Could not save: ' + err.message); });
+    } else if (act === 'test') {
+      el.disabled = true; globalMsg(prov, 'Testing…');
+      api(base + '/test', { method: 'POST', body: {} }).then(done).catch(function(err){ el.disabled = false; globalMsg(prov, 'Test failed: ' + err.message); });
+    } else if (act === 'enabled') {
+      api(base, { method: 'PUT', body: { enabled: el.checked } }).then(done).catch(function(err){ globalMsg(prov, 'Could not update: ' + err.message); });
+    } else if (act === 'remove') {
+      if (!window.confirm('Remove the saved ' + prov + ' settings? This affects every customer.')) return;
+      api(base, { method: 'DELETE' }).then(function(){ return api('/global-api-settings'); })
+        .then(function(items){ globalState.items = items; drawGlobalApis(); }).catch(function(err){ globalMsg(prov, 'Could not remove: ' + err.message); });
     }
   }
 
