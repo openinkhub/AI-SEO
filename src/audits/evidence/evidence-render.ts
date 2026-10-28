@@ -415,7 +415,7 @@ function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
 
-function renderSeomator(d: Record<string, any>, admin: boolean): string {
+function renderSeomator(d: Record<string, any>, _admin = false): string {
   let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('GEO readiness', d.score)}</div>`;
   h += kvTable([['Grade', d.grade], ['Business type', d.businessType], ['Pages analysed', d.pagesAnalyzed], ['Date', d.date]]);
   if (d.summary) h += `<p>${esc(d.summary)}</p>`;
@@ -433,12 +433,11 @@ function renderSeomator(d: Record<string, any>, admin: boolean): string {
   if (ee.length) h += '<h4>E-E-A-T</h4>' + grid(['Pillar', 'Score', 'Evidence'], ee.map((x) => [x.pillar, `${x.score}/${x.max}`, x.evidence]));
   const br = (d.brandRecommendations ?? []) as string[];
   if (br.length) h += '<h4>Brand recommendations</h4><ul class="ev-list">' + br.map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>';
-  if (admin) {
-    const ti = (d.technicalIssues ?? []) as Array<Record<string, any>>;
-    if (ti.length) h += '<h4>Technical findings (admin)</h4>' + grid(['Severity', 'Issue', 'Page'], ti.map((x) => [x.severity, x.issue, x.page]));
-    const m = (d.metrics ?? []) as Array<Record<string, any>>;
-    if (m.length) h += '<h4>Key metrics (admin)</h4>' + grid(['Metric', 'Value'], m.map((x) => [x.label, x.value]));
-  }
+  // Shown to the customer as well as the admin (the customer sees the same SEOmator GEO Audit once it is approved).
+  const ti = (d.technicalIssues ?? []) as Array<Record<string, any>>;
+  if (ti.length) h += '<h4>Technical findings</h4>' + grid(['Severity', 'Issue', 'Page'], ti.map((x) => [x.severity, x.issue, x.page]));
+  const m = (d.metrics ?? []) as Array<Record<string, any>>;
+  if (m.length) h += '<h4>Key metrics</h4>' + grid(['Metric', 'Value'], m.map((x) => [x.label, x.value]));
   return h;
 }
 
