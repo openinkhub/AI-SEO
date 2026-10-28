@@ -61,6 +61,10 @@ export class AuditRun {
   @Column({ type: 'timestamp', nullable: true })
   reportGeneratedAt: Date | null;
 
+  // Set once the "your SEO report is ready" notification mail has been sent for this run (never mailed twice).
+  @Column({ type: 'timestamp', nullable: true })
+  reportEmailSentAt: Date | null;
+
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 

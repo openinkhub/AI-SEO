@@ -19,6 +19,6 @@ import { WpPagesController } from './wp-pages.controller';
   ],
   providers: [PageImagesService, StorageService, WpApiKeyGuard],
   controllers: [PageImagesController, WpPagesController],
-  exports: [StorageService],
+  exports: [StorageService, PageImagesService],
 })
 export class PageImagesModule {}

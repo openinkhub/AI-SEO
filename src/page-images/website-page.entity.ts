@@ -37,6 +37,14 @@ export class WebsitePage {
   @Column({ nullable: true })
   h1Keyword: string | null;
 
+  // The page's <title> and meta description, read live together with the H1.
+  // null = not fetched yet; '' = fetched but the page has none.
+  @Column({ type: 'text', nullable: true })
+  metaTitle: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  metaDescription: string | null;
+
   @Column({ nullable: true })
   libraryImageId: string | null;
 

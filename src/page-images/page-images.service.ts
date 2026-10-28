@@ -11,7 +11,7 @@ import { CustomersService } from '../customers/customers.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 import { normalizeUrl, guessPageName, aliasFromUrl } from './url-utils';
-import { liveSiteScan, liveMediaUrls, fetchH1Many, isMediaPageUrl, NOT_A_PAGE } from './site-scanner';
+import { liveSiteScan, liveMediaUrls, fetchPageMetaMany, isMediaPageUrl, NOT_A_PAGE } from './site-scanner';
 import { StorageService } from './storage.service';
 
 const MAX_DISTINCT_IMAGES = 30;
@@ -50,7 +50,7 @@ export class PageImagesService {
   async extractH1ForCustomer(customerId: string, force = false): Promise<WebsitePage[]> {
     await this.customers.findOne(customerId);
     const rows = await this.pages.find({ where: { customerId } });
-    await this.applyH1(rows.filter((p) => force || !p.h1Keyword), H1_BUDGET_MS);
+    await this.applyH1(rows.filter((p) => force || !p.h1Keyword || p.metaTitle == null), H1_BUDGET_MS);
     return this.listPages(customerId);
   }
 
@@ -62,14 +62,25 @@ export class PageImagesService {
 
   private async applyH1(rows: WebsitePage[], budgetMs: number): Promise<void> {
     if (rows.length === 0) return;
-    const found = await fetchH1Many(rows.map((r) => r.pageUrl), budgetMs);
+    const found = await fetchPageMetaMany(rows.map((r) => r.pageUrl), budgetMs);
     const changed: WebsitePage[] = [];
     rows.forEach((r) => {
-      const h1 = found.get(r.pageUrl);
-      if (h1 && h1 !== r.h1Keyword) {
-        r.h1Keyword = h1;
-        changed.push(r);
+      const m = found.get(r.pageUrl);
+      if (!m) return; // a failed fetch never overwrites an existing value
+      let touched = false;
+      if (m.h1 && m.h1 !== r.h1Keyword) {
+        r.h1Keyword = m.h1;
+        touched = true;
       }
+      if (m.metaTitle !== r.metaTitle) {
+        r.metaTitle = m.metaTitle;
+        touched = true;
+      }
+      if (m.metaDescription !== r.metaDescription) {
+        r.metaDescription = m.metaDescription;
+        touched = true;
+      }
+      if (touched) changed.push(r);
     });
     if (changed.length > 0) await this.pages.save(changed);
   }

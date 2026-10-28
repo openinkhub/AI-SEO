@@ -28,6 +28,9 @@ import { StorageService } from '../page-images/storage.service';
 import { WpClientService } from '../wp-integration/wp-client.service';
 import { fetchGscExport } from './sources/gsc';
 import { collectMetrics, metricsSummary } from './evidence/metrics';
+import { WebsitePage } from '../page-images/website-page.entity';
+import { PageImagesService } from '../page-images/page-images.service';
+import { EmailService } from '../email/email.service';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
 const ymd = (v: unknown): string | null => {
@@ -105,7 +108,16 @@ export class AuditsService implements OnModuleInit {
     private readonly globals: GlobalApisService,
     private readonly storage: StorageService,
     private readonly wp: WpClientService,
+    @InjectRepository(WebsitePage) private readonly pageRepo: Repository<WebsitePage>,
+    private readonly pageImages: PageImagesService,
+    private readonly email: EmailService,
   ) {}
+
+  // The customer's website pages for the report's "Website pages" list (page, URL, H1 keyword, meta tags).
+  private async reportPages(customerId: string) {
+    const rows = await this.pageRepo.find({ where: { customerId }, order: { pageUrl: 'ASC' } });
+    return rows.map((p) => ({ pageName: p.pageName, pageUrl: p.pageUrl, h1Keyword: p.h1Keyword, metaTitle: p.metaTitle, metaDescription: p.metaDescription }));
+  }
 
   // Layer 69 — "complete website audit with all SEO Matrix 140 skills":
   // snapshots the full catalog into AuditTask rows, runs the one live
@@ -221,7 +233,7 @@ export class AuditsService implements OnModuleInit {
     run.failureReason = failureReason;
     run.completedAt = new Date();
     run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName, autoEvidence);
-    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence);
+    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence, await this.reportPages(customerId));
     run.reportGeneratedAt = run.completedAt;
     run.enrichStatus = failureReason ? null : 'running';
     const saved = await this.runRepo.save(run);
@@ -317,7 +329,14 @@ export class AuditsService implements OnModuleInit {
       run.enrichStatus = status;
       run.enrichNote = note;
       await this.runRepo.save(run);
+      // Read each page's H1 / meta title / meta description (time-boxed) so the report's pages list is filled.
+      try {
+        await this.pageImages.extractH1ForCustomer(customerId, false);
+      } catch {
+        // the pages list simply shows what is already known
+      }
       await this.rebuildReports(customerId, runId);
+      if (status === 'done') await this.notifyReportReady(customerId, runId);
     } catch {
       // the run may have been removed; nothing to update
     }
@@ -589,8 +608,26 @@ export class AuditsService implements OnModuleInit {
     const tasks = await this.taskRepo.find({ where: { auditRunId: runId } });
     const evidence = await this.evidenceRepo.find({ where: { auditRunId: runId }, order: { createdAt: 'ASC' } });
     run.reportHtml = buildBrandedReportHtml(run, tasks, customer.companyName, evidence);
-    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence);
+    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence, await this.reportPages(customerId));
     await this.runRepo.save(run);
+  }
+
+  // One notification mail per run once the report (including research) is generated. The customer's notification
+  // address is used (falls back to the account / contact email); the global Cc and Reply-To are added by EmailService.
+  private async notifyReportReady(customerId: string, runId: string): Promise<void> {
+    const run = await this.findOne(customerId, runId);
+    if (run.reportEmailSentAt || run.status !== AuditRunStatus.COMPLETED) return;
+    const customer = await this.customersService.findOne(customerId);
+    const to = customer.notificationEmail || customer.accountEmail || customer.contactEmail;
+    if (!to) {
+      this.log.warn(`Report-ready mail for ${customer.companyName} skipped - no notification, account or contact email on file`);
+      return;
+    }
+    const sent = await this.email.sendReportReadyEmail(to, customer.companyName, run.website || customer.website || '', customer.portalLoginUrl || process.env.CUSTOMER_PORTAL_URL || null);
+    if (sent) {
+      run.reportEmailSentAt = new Date();
+      await this.runRepo.save(run);
+    }
   }
 
   async listPushes(customerId: string, runId: string): Promise<LayerPush[]> {

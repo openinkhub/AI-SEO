@@ -202,6 +202,57 @@ export function extractH1FromHtml(html: string): string | null {
   return null;
 }
 
+export interface PageMeta {
+  h1: string | null;
+  metaTitle: string;
+  metaDescription: string;
+}
+
+// <title> and <meta name="description"> text ('' when the page has none).
+export function extractMetaFromHtml(html: string): { metaTitle: string; metaDescription: string } {
+  const clean = (s: string) => decodeEntities(s.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  const t = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  let desc = '';
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    if (!/\bname\s*=\s*["']description["']/i.test(tag)) continue;
+    const c = /\bcontent\s*=\s*"([^"]*)"|\bcontent\s*=\s*'([^']*)'/i.exec(tag);
+    if (c) {
+      desc = clean(c[1] ?? c[2] ?? '');
+      break;
+    }
+  }
+  return { metaTitle: t ? clean(t[1]).slice(0, 300) : '', metaDescription: desc.slice(0, 500) };
+}
+
+export async function fetchPageMeta(url: string): Promise<PageMeta | null> {
+  try {
+    const { data } = await axios.get<string>(withProtocol(url), {
+      timeout: FETCH_TIMEOUT_MS,
+      responseType: 'text',
+      maxContentLength: MAX_HTML_BYTES,
+      headers: { Accept: 'text/html', 'User-Agent': 'Mozilla/5.0 (compatible; OpenInkHubBot/1.0)' },
+    });
+    return typeof data === 'string' ? { h1: extractH1FromHtml(data), ...extractMetaFromHtml(data) } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPageMetaMany(urls: string[], budgetMs: number): Promise<Map<string, PageMeta | null>> {
+  const out = new Map<string, PageMeta | null>();
+  const deadline = Date.now() + budgetMs;
+  let next = 0;
+  const worker = async () => {
+    while (Date.now() < deadline) {
+      const idx = next++;
+      if (idx >= urls.length) return;
+      out.set(urls[idx], await fetchPageMeta(urls[idx]));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(H1_CONCURRENCY, urls.length) }, worker));
+  return out;
+}
+
 export async function fetchH1(url: string): Promise<string | null> {
   try {
     const { data } = await axios.get<string>(withProtocol(url), {

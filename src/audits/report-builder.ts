@@ -53,8 +53,9 @@ export function buildCustomerReportHtml(
   tasks: AuditTask[],
   customerName: string,
   evidence: AuditEvidence[] = [],
+  pages: ReportPage[] = [],
 ): string {
-  const bodyHtml = customerReportBody(run, tasks, evidence);
+  const bodyHtml = customerReportBody(run, tasks, evidence, pages);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -75,7 +76,25 @@ ${styleBlock()}
 }
 
 // Inner sections of the customer report (stats, findings, approved tool evidence) - reused by the compiled package.
-export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: AuditEvidence[] = []): string {
+export interface ReportPage {
+  pageName: string | null;
+  pageUrl: string;
+  h1Keyword: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+}
+
+// "Website pages" list view: one row per page of the customer's site.
+function pagesBlock(pages: ReportPage[]): string {
+  if (!pages.length) return '';
+  const cell = (v: string | null) => (v ? escapeHtml(v) : '—');
+  const rows = pages
+    .map((p) => `<tr><td>${cell(p.pageName)}</td><td><a href="${escapeHtml(p.pageUrl)}">${escapeHtml(p.pageUrl)}</a></td><td>${cell(p.h1Keyword)}</td><td>${cell(p.metaTitle)}</td><td>${cell(p.metaDescription)}</td></tr>`)
+    .join('');
+  return `<section class="layers"><h2>Website pages (${pages.length})</h2><p class="empty">Every page we found on your site, with its main heading (H1 keyword), meta title and meta description.</p><table><thead><tr><th>Page</th><th>URL</th><th>H1 keyword</th><th>Meta title</th><th>Meta description</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: AuditEvidence[] = [], pages: ReportPage[] = []): string {
   // Every completed task gets its own row (each names its task and research source), no hiding of look-alike findings.
   const items = tasks.filter((t) => t.isAutomated && t.finding);
   const real = items;
@@ -108,6 +127,7 @@ export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: 
     ${stat('Not applicable to an SEO audit', notApplicable)}
     ${stat('Not completed yet', inProgress)}
   </section>
+  ${pagesBlock(pages)}
   ${body}`;
 }
 

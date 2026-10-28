@@ -20,11 +20,14 @@ import { Project } from '../projects/project.entity';
 import { AuditPackage } from './package/audit-package.entity';
 import { PackageService } from './package/package.service';
 import { PackageController } from './package/package.controller';
+import { WebsitePage } from '../page-images/website-page.entity';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage]),
+    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage, WebsitePage]),
     CustomersModule,
+    EmailModule,
     CustomerApisModule,
     PageImagesModule,
     MulterModule.register({}),

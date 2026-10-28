@@ -157,6 +157,41 @@ export class EmailService {
     });
   }
 
+  // "Your SEO report is ready" - sent once per audit run after the report (incl. research) is generated.
+  async sendReportReadyEmail(
+    toEmail: string,
+    companyName: string,
+    website: string,
+    portalUrl: string | null = null,
+  ): Promise<boolean> {
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const name = companyName || 'there';
+    const site = website ? ` for ${website}` : '';
+    const button = portalUrl
+      ? `<p style="text-align:center;margin:0 0 24px;"><a href="${esc(portalUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:15px;">Open your SEO report</a></p>`
+      : '';
+    const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;">
+      <tr><td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr><td style="background:#111827;padding:24px 32px;"><span style="color:#ffffff;font-size:20px;font-weight:bold;">Openink Hub</span></td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="font-size:20px;margin:0 0 16px;color:#111827;">Your SEO report is ready</h1>
+            <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 20px;">Hello ${esc(name)}, your SEO report${esc(site)} has been generated. It lists every page of your website with its H1 keyword, meta title and meta description, followed by the audit findings and our suggestions.</p>
+            ${button}
+            <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0;">Sign in to your Openink Hub account to view the full report.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+    const text = `Hello ${name},\n\nYour SEO report${site} has been generated. It lists every page of your website with its H1 keyword, meta title and meta description, followed by the audit findings and our suggestions.\n${portalUrl ? `\nOpen your report: ${portalUrl}\n` : '\nSign in to your Openink Hub account to view the full report.\n'}`;
+    return this.deliver({ to: toEmail, subject: `Your SEO report is ready${companyName ? ' - ' + companyName : ''}`, html, text });
+  }
+
   private renderOnboardingHtml(
     companyName: string,
     onboardingUrl: string,
