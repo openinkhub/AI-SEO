@@ -282,6 +282,41 @@ function renderMangoolsFn(type: string, d: Record<string, any>): string {
   return '';
 }
 
+function renderResearch(type: string, d: Record<string, any>): string {
+  const f = (v: any) => (v == null ? '' : String(v));
+  if (type === 'research_keywords') {
+    let h = kvTable([['Seed keywords', (d.seeds ?? []).join(', ')]]);
+    const k = (d.keywords ?? []) as Array<Record<string, any>>;
+    if (k.length) h += '<h4>Keyword opportunities (Mangools KWFinder)</h4>' + grid(['Keyword', 'Searches / month', 'Difficulty', 'CPC', 'From seed'], k.map((x) => [x.keyword, f(x.volume), f(x.difficulty), f(x.cpc), x.seed]));
+    const r = (d.rankChecks ?? []) as Array<Record<string, any>>;
+    if (r.length) h += '<h4>Where the site ranks on Google today</h4>' + grid(['Search', 'Your position', 'Top results', 'AI Overview shown'], r.map((x) => [x.query, x.ownPosition ? '#' + x.ownPosition : 'Not in top 20', (x.top ?? []).map((t: any) => t.domain).join(', '), x.aiOverview ? 'Yes' : 'No']));
+    if ((d.questions ?? []).length) h += '<h4>Questions people ask</h4><ul class="ev-list">' + d.questions.map((q: string) => `<li>${esc(q)}</li>`).join('') + '</ul>';
+    if ((d.relatedSearches ?? []).length) h += '<h4>Related searches</h4><p>' + d.relatedSearches.map((q: string) => esc(q)).join(' &middot; ') + '</p>';
+    return h;
+  }
+  if (type === 'research_competitors') {
+    let h = '';
+    if ((d.namedCompetitors ?? []).length) h += kvTable([['Competitors named in your profile', d.namedCompetitors.join(', ')]]);
+    const o = (d.ownKeywords ?? []) as Array<Record<string, any>>;
+    if (o.length) h += '<h4>Keywords your site already ranks for</h4>' + grid(['Keyword', 'Searches / month', 'Position', 'Est. visits'], o.map((x) => [x.keyword, f(x.volume), f(x.position), f(x.visits)]));
+    const s = (d.domainsSharingKeywords ?? []) as Array<Record<string, any>>;
+    if (s.length) h += '<h4>Sites competing for the same keywords</h4>' + grid(['Domain', 'Shared keywords'], s.map((x) => [x.domain, f(x.sharedKeywords)]));
+    for (const c of (d.competitorKeywords ?? []) as Array<Record<string, any>>) {
+      h += `<h4>${esc(c.competitor)} - ${esc(f(c.total))} ranking keywords</h4>` + grid(['Keyword', 'Searches / month'], (c.top ?? []).map((x: any) => [x.keyword, f(x.volume)]));
+    }
+    return h || '<p class="empty">No competitor keyword data was returned.</p>';
+  }
+  if (type === 'research_local') {
+    let h = kvTable([['Search run', d.query], ['Location', d.location], ['Your site in Google results', d.ownOrganicPosition ? '#' + d.ownOrganicPosition : 'Not in top 20'], ['Your business in the local pack', d.ownInLocalPack ? 'Yes' : 'No']]);
+    const p = (d.localPack ?? []) as Array<Record<string, any>>;
+    if (p.length) h += '<h4>Local pack (who Google shows)</h4>' + grid(['Business', 'Rating', 'Reviews', 'Address'], p.map((x) => [x.name + (x.own ? ' (you)' : ''), f(x.rating), f(x.reviews), x.address]));
+    const t = (d.topOrganic ?? []) as Array<Record<string, any>>;
+    if (t.length) h += '<h4>Top organic results</h4>' + grid(['#', 'Site', 'Title'], t.map((x) => [f(x.pos), x.domain, x.title]));
+    return h;
+  }
+  return '';
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -339,6 +374,9 @@ function renderDigispotDashboard(d: Record<string, any>): string {
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
+  if (type === 'research_keywords') return 'Keyword research';
+  if (type === 'research_competitors') return 'Competitor research';
+  if (type === 'research_local') return 'Local search research';
   if (type === 'mangools_sp_overview') return 'Authority overview (Mangools SiteProfiler)';
   if (type === 'mangools_sp_backlinks') return 'Backlink profile (Mangools SiteProfiler)';
   if (type === 'mangools_sp_competitors') return 'Competitors (Mangools SiteProfiler)';
@@ -350,7 +388,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -372,6 +410,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
         : e.evidenceType.startsWith('mangools_') ? renderMangoolsFn(e.evidenceType, d)
+        : e.evidenceType.startsWith('research_') ? renderResearch(e.evidenceType, d)
         : e.evidenceType.startsWith('seoanalyzer_') ? renderSeoAnalyzer(e.evidenceType, d)
         : renderAitdk(e.evidenceType, d);
       const flag = audience === 'admin' && e.status !== 'approved' ? '<span class="ev-flag">Not approved yet - hidden from customer</span>' : '';

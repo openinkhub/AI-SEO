@@ -12,6 +12,8 @@ import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builde
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
+import { enrichRun } from './sources/enrich';
+import { SOURCE_LABEL, TASK_SOURCE } from './sources/task-map';
 import { runMangools } from '../customer-apis/mangools/run';
 import { runPageSpeed } from '../customer-apis/pagespeed';
 import { Project } from '../projects/project.entity';
@@ -108,7 +110,10 @@ export class AuditsService {
         finding = result.finding;
         suggestion = result.suggestion;
       } else if (!isAutomated) {
-        finding = `Automated check not yet wired for this skill — requires ${describeDataSource(def.plugin)} integration. Task is scaffolded and ready to run once that integration exists.`;
+        const srcKey = TASK_SOURCE[def.id];
+        finding = srcKey === 'na'
+          ? 'Not an SEO audit task (advisory, setup or non-SEO tool) - nothing to measure.'
+          : `Pending: this task is fed by ${srcKey ? SOURCE_LABEL[srcKey] : describeDataSource(def.plugin)}, which has not run for this audit yet.`;
       } else {
         finding = failureReason ?? 'Site scan unavailable.';
       }
@@ -127,6 +132,7 @@ export class AuditsService {
         layerMappingRaw: def.layerMappingRaw,
         layerNumbers: def.layerNumbers,
         isAutomated,
+        dataSource: TASK_SOURCE[def.id] ? SOURCE_LABEL[isAutomated ? 'site' : TASK_SOURCE[def.id]] : null,
         status: AuditTaskStatus.COMPLETED,
         finding,
         suggestion,
@@ -173,7 +179,67 @@ export class AuditsService {
     run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName, autoEvidence);
     run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence);
     run.reportGeneratedAt = run.completedAt;
-    return this.runRepo.save(run);
+    run.enrichStatus = failureReason ? null : 'running';
+    const saved = await this.runRepo.save(run);
+    if (saved.enrichStatus === 'running') void this.enrich(customerId, saved.id);
+    return saved;
+  }
+
+  // Keyword / competitor / local research + per-task write-ups. Runs in the background after the audit is saved
+  // (many sequential calls), and can be run again for an existing run (the audit itself is once per cycle).
+  async startEnrich(customerId: string, runId: string): Promise<AuditRun> {
+    const run = await this.findOne(customerId, runId);
+    run.enrichStatus = 'running';
+    run.enrichNote = null;
+    const saved = await this.runRepo.save(run);
+    void this.enrich(customerId, runId);
+    return saved;
+  }
+
+  private async enrich(customerId: string, runId: string): Promise<void> {
+    let status = 'done';
+    let note: string | null = null;
+    try {
+      const run = await this.findOne(customerId, runId);
+      const customer = await this.customersService.findOne(customerId);
+      let keys: Record<string, Record<string, string>> = {};
+      try {
+        keys = await this.apis.getKeys(customerId);
+      } catch {
+        keys = {};
+      }
+      const site = run.website || customer.website || '';
+      const domain = site.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '');
+      const notes = await enrichRun(
+        { taskRepo: this.taskRepo, evidenceRepo: this.evidenceRepo },
+        customerId,
+        runId,
+        {
+          domain,
+          companyName: customer.companyName,
+          industry: customer.industry,
+          description: customer.description,
+          competitors: Array.isArray(customer.competitors) ? customer.competitors : [],
+          profile: (customer.profile ?? {}) as Record<string, any>,
+          mangools: keys.mangools,
+          serpApiKey: keys.serpapi?.apiKey,
+        },
+        site,
+      );
+      note = notes.length ? notes.join(' | ').slice(0, 900) : null;
+    } catch (err) {
+      status = 'failed';
+      note = (err instanceof Error ? err.message : 'Enrichment failed').slice(0, 400);
+    }
+    try {
+      const run = await this.findOne(customerId, runId);
+      run.enrichStatus = status;
+      run.enrichNote = note;
+      await this.runRepo.save(run);
+      await this.rebuildReports(customerId, runId);
+    } catch {
+      // the run may have been removed; nothing to update
+    }
   }
 
   async ruleStatus(customerId: string): Promise<AuditRuleStatus> {

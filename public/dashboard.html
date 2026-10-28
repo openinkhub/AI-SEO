@@ -1390,6 +1390,11 @@
       if (evBtn) evBtn.addEventListener('click', function(){ togglePanel(r.id, 'evidence'); });
       var pkgBtn = document.getElementById('package-' + r.id);
       if (pkgBtn) pkgBtn.addEventListener('click', function(){ togglePanel(r.id, 'package'); });
+      var resBtn = document.getElementById('research-' + r.id);
+      if (resBtn) resBtn.addEventListener('click', function(){
+        resBtn.disabled = true;
+        api('/customers/' + state.cid + '/audits/' + r.id + '/enrich', { method: 'POST' }).then(function(){ loadRuns(); }).catch(function(err){ resBtn.disabled = false; alert('Could not start research: ' + err.message); });
+      });
       var refreshBtn = document.getElementById('refresh-' + r.id);
       if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
     });
@@ -1407,13 +1412,15 @@
     html += '<div>' + statusBadge(r.status) +
       ' <strong>' + (r.completedSkills != null ? r.completedSkills : 0) + '/' +
       (r.totalSkills != null ? r.totalSkills : 140) + '</strong> skills' +
-      ' <span class="muted">started ' + fmtDate(r.startedAt || r.createdAt) + '</span></div>';
+      ' <span class="muted">started ' + fmtDate(r.startedAt || r.createdAt) + '</span>' +
+      (r.enrichStatus ? ' <span class="muted">· research: ' + (r.enrichStatus === 'running' ? 'collecting…' : r.enrichStatus) + (r.enrichNote ? ' (' + escapeHtml(String(r.enrichNote).slice(0, 160)) + ')' : '') + '</span>' : '') + '</div>';
     html += '<div class="row-actions">';
     html += '<button id="refresh-' + r.id + '">Refresh</button>';
     html += '<button id="report-' + r.id + '"' + (r.status !== 'completed' ? ' disabled' : '') + '>View report</button>';
     html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
     html += '<button id="evidence-' + r.id + '">' + (panel === 'evidence' ? 'Hide evidence' : 'Evidence') + '</button>';
+    html += '<button id="research-' + r.id + '"' + (r.status !== 'completed' || r.enrichStatus === 'running' ? ' disabled' : '') + '>Run research</button>';
     html += '<button id="package-' + r.id + '">' + (panel === 'package' ? 'Hide package' : 'Package') + '</button>';
     html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;
@@ -1433,11 +1440,11 @@
         return '<tr><td>' + escapeHtml(t.group) + '</td><td>' + escapeHtml(t.plugin + ':' + t.skill) + '</td>' +
           '<td>' + statusBadge(t.status) + '</td><td>' + (t.isAutomated ? 'Yes' : 'No') + '</td>' +
           '<td>' + escapeHtml(t.layerNumbers ? t.layerNumbers.join(', ') : '') + '</td>' +
-          '<td>' + escapeHtml((t.finding || '').slice(0, 140)) + '</td></tr>';
+          '<td>' + escapeHtml(t.dataSource || '') + '</td><td>' + escapeHtml((t.finding || '').slice(0, 140)) + '</td></tr>';
       }).join('');
       var p = document.getElementById('panel-' + runId);
       if (p) p.innerHTML = '<div class="task-scroll"><table><thead><tr>' +
-        '<th>Group</th><th>Skill</th><th>Status</th><th>Automated</th><th>Layers</th><th>Finding</th>' +
+        '<th>Group</th><th>Skill</th><th>Status</th><th>Automated</th><th>Layers</th><th>Research source</th><th>Finding</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>';
     }).catch(function(err){
       var p = document.getElementById('panel-' + runId);

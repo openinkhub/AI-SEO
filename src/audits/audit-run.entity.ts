@@ -64,6 +64,13 @@ export class AuditRun {
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 
+  // Research enrichment (keyword / competitor / local sources + per-task write-ups) runs after the run is saved.
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  enrichStatus: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  enrichNote: string | null;
+
   @Column({ type: 'timestamp', nullable: true })
   startedAt: Date | null;
 

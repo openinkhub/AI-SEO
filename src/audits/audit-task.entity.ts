@@ -65,6 +65,10 @@ export class AuditTask {
   @Column({ default: false })
   isAutomated: boolean;
 
+  // Which research source feeds this task (SOURCE_LABEL), shown next to its finding.
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  dataSource: string | null;
+
   @Column({ type: 'enum', enum: AuditTaskStatus, default: AuditTaskStatus.PENDING })
   status: AuditTaskStatus;
 

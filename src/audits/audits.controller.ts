@@ -26,6 +26,12 @@ export class AuditsController {
     return this.service.ruleStatus(customerId);
   }
 
+  // Re-run the research enrichment for an existing run (keyword / competitor / local sources + task write-ups).
+  @Post(':runId/enrich')
+  enrich(@Param('customerId') customerId: string, @Param('runId') runId: string) {
+    return this.service.startEnrich(customerId, runId);
+  }
+
   @Get(':runId')
   findOne(@Param('customerId') customerId: string, @Param('runId') runId: string) {
     return this.service.findOne(customerId, runId);

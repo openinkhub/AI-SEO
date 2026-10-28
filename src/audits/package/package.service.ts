@@ -51,14 +51,16 @@ export class PackageService {
     const run = await this.audits.findOne(customerId, runId);
     const row = pkg ?? (await this.row(customerId, runId));
 
-    const auditOk = run.status === AuditRunStatus.COMPLETED && !run.failureReason;
+    const auditOk = run.status === AuditRunStatus.COMPLETED && !run.failureReason && !(run.enrichStatus === 'running' && Date.now() - new Date(run.updatedAt).getTime() < 20 * 60 * 1000);
     const audit: Gate = {
       key: 'audit',
       label: 'Internal SEO Audit completed',
       ok: auditOk,
       detail: auditOk
         ? `Completed${run.monthCode ? ` (${run.monthCode})` : ''}.`
-        : run.failureReason
+        : run.enrichStatus === 'running' && Date.now() - new Date(run.updatedAt).getTime() < 20 * 60 * 1000
+          ? 'Research is still being collected for this audit (keywords, competitors, local). Wait a few minutes, then refresh.'
+          : run.failureReason
           ? `The run did not finish cleanly: ${run.failureReason}`
           : `Run status is "${run.status}".`,
     };
