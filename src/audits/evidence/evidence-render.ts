@@ -198,6 +198,40 @@ function renderPpcReport(d: PpcReport, admin: boolean): string {
   return h;
 }
 
+const STATUS_LABEL: Record<string, string> = { pass: 'Pass', warning: 'Warning', error: 'Error' };
+
+function renderSeoquake(d: Record<string, any>, admin: boolean): string {
+  const c = d.counts ?? {};
+  const checks = (d.checks ?? []) as Array<Record<string, any>>;
+  let h = `<p><span class="ev-tag pass">${esc(c.passed ?? 0)} passed</span> <span class="ev-tag critical">${esc(c.errors ?? 0)} errors</span> <span class="ev-tag warn">${esc(c.warnings ?? 0)} warnings</span></p>`;
+  const issues = checks.filter((x) => x.status === 'error' || x.status === 'warning').sort((a, b) => (a.status === 'error' ? 0 : 1) - (b.status === 'error' ? 0 : 1));
+  h += '<h4>Needs attention</h4>' + (issues.length ? grid(['Check', 'Status', 'Found', 'Detail'], issues.map((x) => [x.name, STATUS_LABEL[x.status] ?? x.status, x.value ?? '', x.detail ?? ''])) : '<p class="empty">Nothing needs attention.</p>');
+  if (admin) {
+    const ok = checks.filter((x) => x.status === 'pass');
+    if (ok.length) h += '<h4>Passed checks (admin)</h4>' + grid(['Check', 'Result'], ok.map((x) => [x.name, x.value ?? '']));
+    const im = d.images ?? {};
+    h += kvTable([['Images (total / with alt / missing alt / oversized)', im.total != null ? [im.total, im.withAlt, im.missingAlt, im.oversized].join(' / ') : null], ['Image formats', im.formats], ['Schema types', d.schemaTypes]]);
+    const hd = (d.headings ?? []) as Array<Record<string, any>>;
+    if (hd.length) h += '<h4>Heading outline</h4><ul class="ev-list">' + hd.map((x) => `<li style="margin-left:${Math.max(0, Number(x.level) - 1) * 14}px">H${esc(x.level)} ${esc(x.text)}</li>`).join('') + '</ul>';
+  }
+  return h;
+}
+
+function renderMangools(d: Record<string, any>): string {
+  const a = d.authority ?? {}, b = d.backlinks ?? {}, r = d.referring ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Domain authority', a.domainAuthority)}${scoreTile('Page authority', a.pageAuthority)}${scoreTile('Citation flow', a.citationFlow)}${scoreTile('Trust flow', a.trustFlow)}</div>`;
+  h += kvTable([['Active backlinks', b.active], ['Lost backlinks', b.lost], ['Total backlinks', b.total != null ? b.total + (b.totalChangePercent ? ` (${b.totalChangePercent})` : '') : null], ['Dofollow ratio', b.dofollowRatio], ['Active links ratio', b.activeRatio], ['Referring domains', r.domains], ['Referring IPs', r.ips ?? d.referringIps], ['Referring subnets', r.subnets], ['Anchor type mix', d.anchorTypeDistribution]]);
+  const dom = (d.topReferringDomains ?? []) as Array<Record<string, any>>;
+  if (dom.length) h += '<h4>Top referring domains</h4>' + grid(['Domain', 'CF', 'TF', 'Links', 'WPR'], dom.map((x) => [x.domain, x.cf, x.tf, x.links, x.wpr]));
+  const an = (d.anchors ?? []) as Array<Record<string, any>>;
+  if (an.length) h += '<h4>Anchor texts</h4>' + grid(['Anchor', 'Type', 'Ref. domains', 'Total', 'Share'], an.map((x) => [x.text, x.type, x.rd, x.total, x.share]));
+  const tc = (d.topContent ?? []) as Array<Record<string, any>>;
+  if (tc.length) h += '<h4>Top content (by referring domains)</h4>' + grid(['Page', 'Facebook', 'Ref. domains'], tc.map((x) => [x.url, x.fb, x.rd]));
+  const cp = (d.competitors ?? []) as Array<Record<string, any>>;
+  if (cp.length) h += '<h4>Competitors</h4>' + grid(['Site', 'WPR', 'RI', 'FB', 'SK'], cp.map((x) => [x.url, x.wpr, x.ri, x.fb, x.sk]));
+  return h;
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
@@ -205,7 +239,7 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'mangools' ? 'Mangools' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
@@ -220,10 +254,13 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         e.evidenceType === 'digispot_report' ? renderDigispot(d, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_report' ? renderPpcReport(d as PpcReport, audience === 'admin')
         : e.evidenceType === 'ppcblogpro_summary' ? renderPpcSummary(d)
+        : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
+        : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
         : e.evidenceType.startsWith('seoanalyzer_') ? renderSeoAnalyzer(e.evidenceType, d)
         : renderAitdk(e.evidenceType, d);
       const flag = audience === 'admin' && e.status !== 'approved' ? '<span class="ev-flag">Not approved yet - hidden from customer</span>' : '';
-      const shot = audience === 'admin' && e.url ? `<div><img class="ev-shot" src="${esc(e.url)}" alt="${esc(e.fileName)}" /></div>` : '';
+      const isPdf = /\.pdf$/i.test(e.fileName);
+      const shot = audience === 'admin' && e.url && isPdf ? `<p class="ev-src"><a href="${esc(e.url)}" target="_blank" rel="noopener">Open original PDF</a></p>` : audience === 'admin' && e.url ? `<div><img class="ev-shot" src="${esc(e.url)}" alt="${esc(e.fileName)}" /></div>` : '';
       return `<div class="ev-card"><h3>${esc(labelFor(e.evidenceType))}${flag}</h3><p class="ev-src">${esc(toolName(e.tool))} &middot; ${esc(e.fileName)}</p>${body}${shot}</div>`;
     })
     .join('');

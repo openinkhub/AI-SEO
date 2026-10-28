@@ -11,7 +11,7 @@ import { extractFromImage, extractorConfigured } from './evidence-extractor';
 import { KNOWN_TYPES } from './aitdk-rules';
 import { UpdateEvidenceDto } from './evidence.dto';
 
-const IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp'];
+const IMAGE_MIME = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 const FOLDER = 'audit-evidence';
 
 // Never send the stored text export back in list responses (it can be large).
@@ -42,7 +42,7 @@ export class EvidenceService {
     await this.audits.findOne(customerId, runId);
     const isText = /^text\//.test(file.mimetype) || /\.(txt|csv)$/i.test(file.originalname);
     const isImage = IMAGE_MIME.includes(file.mimetype);
-    if (!isText && !isImage) throw new BadRequestException('Upload a PNG/JPEG/WebP screenshot, a .txt report or a .csv export.');
+    if (!isText && !isImage) throw new BadRequestException('Upload a PNG/JPEG/WebP screenshot, a PDF, a .txt report or a .csv export.');
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
     const dup = await this.repo.findOne({ where: { auditRunId: runId, sha256 } });
     if (dup) throw new BadRequestException(`"${file.originalname}" is already uploaded for this audit.`);
@@ -105,7 +105,7 @@ export class EvidenceService {
     try {
       const out = await extractFromImage(buffer, mime);
       row.evidenceType = out.type;
-      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : 'unknown';
+      row.tool = out.type.startsWith('aitdk_') ? 'aitdk' : out.type.startsWith('ppcblogpro_') ? 'ppcblogpro' : out.type.startsWith('seoanalyzer_') ? 'seoanalyzer' : out.type.startsWith('seoquake_') ? 'seoquake' : out.type.startsWith('mangools_') ? 'mangools' : 'unknown';
       row.extracted = out.data;
       row.status = 'extracted';
       row.error = null;
@@ -132,7 +132,7 @@ export class EvidenceService {
       const res = await fetch(row.url);
       if (!res.ok) throw new BadRequestException(`Could not fetch the stored screenshot (HTTP ${res.status}).`);
       const buf = Buffer.from(await res.arrayBuffer());
-      await this.applyImage(row, buf, res.headers.get('content-type')?.split(';')[0] || 'image/png');
+      await this.applyImage(row, buf, res.headers.get('content-type')?.split(';')[0] || (/\.pdf$/i.test(row.fileName) ? 'application/pdf' : 'image/png'));
     }
     const saved = await this.repo.save(row);
     await this.audits.rebuildReports(customerId, runId);

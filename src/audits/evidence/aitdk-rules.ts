@@ -109,6 +109,22 @@ export const EVIDENCE_RULES: EvidenceRule[] = [
     fields:
       '{"tab":str,"items":[{"label":str,"value":str}]}  (tab = selected tab name; items = every visible row/heading/link count in order, one label/value pair each)',
   },
+  {
+    type: 'seoquake_audit',
+    tool: 'seoquake',
+    label: 'SEOquake On-Page SEO Audit',
+    recognise: 'PDF titled "On-Page SEO Audit Report" with Passed / Error / Warning counts, then Page Analysis, Mobile Compliance, Technical Compliance, Document Info, Heading Structure, Image Analysis and Schema Summary sections.',
+    fields:
+      '{"date":str,"counts":{"passed":int,"errors":int,"warnings":int},"checks":[{"group":"Page Analysis|Mobile Compliance|Technical Compliance|Other","name":str,"status":"pass|warning|error","value":str,"detail":str}],"headings":[{"level":int,"text":str}],"images":{"total":int,"withAlt":int,"missingAlt":int,"oversized":int,"formats":[str]},"schemaTypes":[str]}  (one check per row, e.g. {"name":"Meta Description","status":"warning","value":"166 CHARS","detail":"the advice/finding text"}; value = the badge on the right; status: green/passed = pass, amber = warning, red/pending/failed = error; headings in page order)',
+  },
+  {
+    type: 'mangools_siteprofiler',
+    tool: 'mangools',
+    label: 'Mangools SiteProfiler (backlinks & authority)',
+    recognise: 'PDF printed from app.mangools.com/siteprofiler: domain header, Domain Authority / Page Authority / Citation Flow / Trust Flow gauges, Backlink profile, Referring domains, Anchor texts, Top content, Competitors.',
+    fields:
+      '{"domain":str,"authority":{"domainAuthority":int,"pageAuthority":int,"citationFlow":int,"trustFlow":int},"referringIps":int|null,"backlinks":{"active":int,"lost":int,"total":int,"totalChangePercent":str|null,"dofollowRatio":str|null,"activeRatio":str|null},"referring":{"domains":int,"ips":int,"subnets":int},"anchorTypeDistribution":str|null,"topReferringDomains":[{"domain":str,"cf":int,"tf":int,"links":int,"wpr":int}],"anchors":[{"text":str,"type":str,"rd":int,"total":int,"share":str}],"topContent":[{"url":str,"fb":str,"rd":int}],"competitors":[{"url":str,"wpr":str,"ri":str,"fb":str,"sk":str}]}  (N/A stays "N/A"; domain names cut off in the printout are copied as shown)',
+  },
 ];
 
 export function buildExtractionPrompt(): string {
@@ -116,7 +132,7 @@ export function buildExtractionPrompt(): string {
     (r) => `- type "${r.type}" (${r.label}): ${r.recognise}\n  data shape: ${r.fields}`,
   ).join('\n');
   return [
-    'You read a screenshot taken from an SEO browser extension and return its data as JSON.',
+    'You read a screenshot or PDF exported from an SEO tool and return its data as JSON.',
     'Pick exactly one type from the list below, then fill that type\'s data shape from what is visible.',
     'Rules: copy numbers and text exactly as shown; never guess or invent a value - use null (or omit the item) for anything not visible; ignore ads, banners and menus.',
     'If the screenshot matches none of the types, use type "unknown" with data {"title":str,"items":[{"label":str,"value":str}]}.',

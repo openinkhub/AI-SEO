@@ -26,12 +26,14 @@ export async function extractFromImage(buffer: Buffer, mime: string): Promise<Im
     },
     body: JSON.stringify({
       model,
-      max_tokens: 3000,
+      max_tokens: mime === 'application/pdf' ? 8000 : 3000,
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: mime, data: buffer.toString('base64') } },
+            mime === 'application/pdf'
+              ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
+              : { type: 'image', source: { type: 'base64', media_type: mime, data: buffer.toString('base64') } },
             { type: 'text', text: buildExtractionPrompt() },
           ],
         },

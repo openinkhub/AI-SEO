@@ -1437,7 +1437,7 @@
 
   // ---- Evidence: screenshots / exports from other SEO tools -------------
   var EV_LABELS = {
-    digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab',
+    digispot_report: 'Digispot report', ppcblogpro_report: 'PPCBlogPro checks', ppcblogpro_summary: 'PPCBlogPro score', seoanalyzer_summary: 'SEO Analyzer summary', seoanalyzer_tab: 'SEO Analyzer tab', seoquake_audit: 'SEOquake audit', mangools_siteprofiler: 'Mangools SiteProfiler',
     aitdk_meta: 'Meta', aitdk_technical: 'Technical', aitdk_traffic: 'Traffic', aitdk_backlinks: 'Backlinks',
     aitdk_geo_section: 'GEO section', aitdk_serp: 'SERP / indexed', aitdk_density: 'Keyword density',
     aitdk_social: 'Social tags', aitdk_structured_data: 'Structured data', unknown: 'Unknown'
@@ -1458,7 +1458,7 @@
       panel.setAttribute('data-ev', '1');
       panel.innerHTML = '<div class="ev-wrap"><p class="muted" id="evNote-' + runId + '">Loading…</p>' +
         '<div class="row-actions" style="margin:8px 0">' +
-        '<input type="file" id="evFiles-' + runId + '" multiple accept="image/png,image/jpeg,image/webp,.txt,.csv,text/plain,text/csv">' +
+        '<input type="file" id="evFiles-' + runId + '" multiple accept="image/png,image/jpeg,image/webp,.pdf,application/pdf,.txt,.csv,text/plain,text/csv">' +
         '<button class="primary" id="evUpload-' + runId + '">Upload</button>' +
         '<button id="evRebuild-' + runId + '">Rebuild report</button></div>' +
         '<p class="muted" style="margin:0 0 8px">Screenshots (AITDK, PPCBlogPro…) are read by AI and need your approval before the customer sees them. Digispot .txt and PPCBlogPro .csv exports are read by fixed rules and are approved automatically.</p>' +
@@ -1503,7 +1503,8 @@
 
   function evidenceRowHtml(runId, e) {
     var h = '<div class="run-row" style="display:flex;gap:12px;align-items:flex-start">';
-    if (e.kind === 'image' && e.url) h += '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(e.url) + '" alt="" style="width:90px;height:64px;object-fit:cover;border:1px solid var(--border-soft);border-radius:6px"></a>';
+    if (e.kind === 'image' && e.url && /\.pdf$/i.test(e.fileName)) h += '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener" class="badge pending">PDF</a>';
+    else if (e.kind === 'image' && e.url) h += '<a href="' + escapeHtml(e.url) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(e.url) + '" alt="" style="width:90px;height:64px;object-fit:cover;border:1px solid var(--border-soft);border-radius:6px"></a>';
     h += '<div style="flex:1;min-width:0"><div>' + evStatusBadge(e.status) + ' <strong>' + escapeHtml(EV_LABELS[e.evidenceType] || e.evidenceType) + '</strong> ' +
       '<span class="muted">' + escapeHtml(e.fileName) + '</span></div>';
     if (e.error) h += '<div class="muted" style="color:#b42318;margin-top:4px">' + escapeHtml(e.error) + '</div>';
