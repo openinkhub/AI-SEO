@@ -159,5 +159,32 @@ export const SOURCE_LABEL: Record<SourceKey, string> = {
   na: 'Not an SEO audit task',
 };
 
-// Sources the Engine can run today. Everything else stays an honest "pending" row.
-export const LIVE_SOURCES: SourceKey[] = ['keywords', 'competitors', 'local', 'backlinks', 'visibility'];
+// Internal audit = the customer's own website (scan, crawl, speed, on-page tools, AI review of those findings).
+// External audit = everything outside it (search results, competitors, authority, backlinks, AI engines, local).
+export type AuditSide = 'internal' | 'external' | 'other';
+export const SOURCE_SIDE: Record<SourceKey, AuditSide> = {
+  site: 'internal',
+  site_ai: 'internal',
+  ai: 'internal',
+  pagespeed: 'internal',
+  fetch: 'internal',
+  keywords: 'external',
+  competitors: 'external',
+  backlinks: 'external',
+  visibility: 'external',
+  local: 'external',
+  gsc: 'external',
+  na: 'other',
+};
+
+const EXTERNAL_TOOLS = new Set(['mangools', 'serpapi', 'moz', 'ahrefs', 'frase']);
+const EXTERNAL_TYPE = /^(mangools_|research_|moz_|ahrefs_|frase_)/;
+export function evidenceSide(tool: string | null | undefined, type: string | null | undefined): 'internal' | 'external' {
+  if (type && EXTERNAL_TYPE.test(type)) return 'external';
+  if (tool && EXTERNAL_TOOLS.has(tool)) return 'external';
+  return 'internal';
+}
+
+// Sources the Engine can run today, in run order ('ai' last: it reads everything the others collected).
+// Everything else stays an honest "pending" row.
+export const LIVE_SOURCES: SourceKey[] = ['site_ai', 'keywords', 'competitors', 'local', 'backlinks', 'visibility', 'ai'];

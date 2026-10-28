@@ -2,7 +2,7 @@ import { AuditRun } from './audit-run.entity';
 import { AuditTask } from './audit-task.entity';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { evidenceStyle, renderEvidenceHtml } from './evidence/evidence-render';
-import { SOURCE_LABEL, TASK_SOURCE } from './sources/task-map';
+import { SOURCE_LABEL, SOURCE_SIDE, TASK_SOURCE } from './sources/task-map';
 
 // Builds the "Branded report" the user's spec calls for: "create a Branded
 // report ... report will be generated and view on customer panel." The
@@ -34,7 +34,8 @@ ${styleBlock()}
     <p class="meta">${escapeHtml(customerName)} &middot; ${escapeHtml(run.website ?? '')} &middot; ${formatDate(run.completedAt ?? run.createdAt)}</p>
   </header>
   ${summaryBlock(run, tasks, automated, withFindings)}
-  ${renderEvidenceHtml(evidence, 'admin')}
+  ${renderEvidenceHtml(evidence, 'admin', { side: 'internal', heading: 'Internal audit - research sources (your website)' })}
+  ${renderEvidenceHtml(evidence, 'admin', { side: 'external', heading: 'External audit - research sources (search engines, competitors, authority)' })}
   ${taskMatrixBlock(tasks)}
   ${layerSectionsBlock(byLayer)}
   ${appendixBlock(tasks)}
@@ -81,21 +82,31 @@ export function customerReportBody(run: AuditRun, tasks: AuditTask[], evidence: 
   const inProgress = Math.max(tasks.length - real.length - notApplicable, 0);
   const stat = (label: string, value: string | number) =>
     `<div class="stat"><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div>`;
-  const rows = items
-    .map(
-      (t) => `<tr><td>${escapeHtml(taskName(t))}</td><td>${escapeHtml(t.dataSource ?? '')}</td><td>${escapeHtml(t.finding ?? '')}</td><td>${escapeHtml(t.suggestion ?? '—')}</td></tr>`,
-    )
-    .join('');
-  const body = items.length
-    ? `<section class="layers"><h2>SEO task results</h2><p class="empty">Each result below comes from one of the research sources above.</p><table><thead><tr><th>Task</th><th>Research source</th><th>What we found</th><th>What we suggest</th></tr></thead><tbody>${rows}</tbody></table></section>`
-    : `<section class="layers"><h2>SEO task results</h2><p class="empty">${escapeHtml(run.failureReason ?? 'No findings were produced for this audit.')}</p></section>`;
-  const research = renderEvidenceHtml(evidence, 'customer');
+  const taskTable = (list: AuditTask[], note: string): string => {
+    if (!list.length) return '<p class="empty">No completed tasks in this part yet.</p>';
+    const rows = list
+      .map((t) => `<tr><td>${escapeHtml(taskName(t))}</td><td>${escapeHtml(t.dataSource ?? '')}</td><td>${escapeHtml(t.finding ?? '')}</td><td>${escapeHtml(t.suggestion ?? '—')}</td></tr>`)
+      .join('');
+    return `<p class="empty">${escapeHtml(note)}</p><table><thead><tr><th>Task</th><th>Research source</th><th>What we found</th><th>What we suggest</th></tr></thead><tbody>${rows}</tbody></table>`;
+  };
+  const sideOf = (t: AuditTask) => SOURCE_SIDE[TASK_SOURCE[`${t.plugin}:${t.skill}`] ?? 'ai'] ?? 'internal';
+  const internal = items.filter((t) => sideOf(t) !== 'external');
+  const external = items.filter((t) => sideOf(t) === 'external');
+  const part = (title: string, intro: string, ev: string, list: AuditTask[]) =>
+    `<section class="layers"><h2>${escapeHtml(title)}</h2><p class="empty">${escapeHtml(intro)}</p></section>${ev}<section class="layers"><h3>${escapeHtml(title)} - task results</h3>${taskTable(list, 'Each result comes from the research above.')}</section>`;
+  const internalEv = renderEvidenceHtml(evidence, 'customer', { side: 'internal', heading: 'Research sources - your website' });
+  const externalEv = renderEvidenceHtml(evidence, 'customer', { side: 'external', heading: 'Research sources - search engines, competitors and authority' });
+  const body = !items.length
+    ? `<section class="layers"><h2>SEO task results</h2><p class="empty">${escapeHtml(run.failureReason ?? 'No findings were produced for this audit.')}</p></section>`
+    : part('Internal audit', 'What we checked on your own website: pages, technical set-up, speed, on-page elements and content.', internalEv, internal) +
+      part('External audit', 'What we checked outside your website: Google results, keywords, competitors, authority, backlinks and AI search visibility.', externalEv, external);
   return `<section class="summary">
     ${stat('Tasks completed', `${real.length} of ${tasks.length}`)}
+    ${stat('Internal audit tasks', internal.length)}
+    ${stat('External audit tasks', external.length)}
     ${stat('Not applicable to an SEO audit', notApplicable)}
     ${stat('Not completed yet', inProgress)}
   </section>
-  ${research ? research.replace('<h2>Tool findings</h2>', '<h2>Research sources</h2>') : ''}
   ${body}`;
 }
 
@@ -119,7 +130,7 @@ function taskMatrixBlock(tasks: AuditTask[]): string {
       const rows = list
         .map((t) => `<tr><td>${escapeHtml(t.plugin)}:${escapeHtml(t.skill)}</td><td>${t.isAutomated ? 'Done' : 'Pending'}</td><td>${escapeHtml(truncate(t.finding ?? '', 260))}</td><td>${escapeHtml(truncate(t.suggestion ?? '', 200))}</td></tr>`)
         .join('');
-      return `<div class="layer-card"><h3>${escapeHtml(SOURCE_LABEL[k as keyof typeof SOURCE_LABEL])} <span class="muted">(${done}/${list.length} done)</span></h3><table><thead><tr><th>Task</th><th>Status</th><th>Finding</th><th>Suggestion</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      return `<div class="layer-card"><h3>${escapeHtml(SOURCE_SIDE[k as keyof typeof SOURCE_LABEL] === 'external' ? 'External' : SOURCE_SIDE[k as keyof typeof SOURCE_LABEL] === 'internal' ? 'Internal' : 'N/A')} audit · ${escapeHtml(SOURCE_LABEL[k as keyof typeof SOURCE_LABEL])} <span class="muted">(${done}/${list.length} done)</span></h3><table><thead><tr><th>Task</th><th>Status</th><th>Finding</th><th>Suggestion</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     })
     .join('');
   return `<section class="layers"><h2>140-Task Matrix (by research source)</h2>${sections}</section>`;

@@ -3,11 +3,13 @@ import { Repository } from 'typeorm';
 import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
 import { LIVE_SOURCES, SOURCE_LABEL, SourceKey, TASK_SOURCE } from './task-map';
+import { crawlSite } from './site-crawl';
 import { Research, ResearchInput, runCompetitorResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
 
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
 const FEEDS: Partial<Record<SourceKey, string[]>> = {
+  site_ai: ['site_crawl', 'pagespeed_report'],
   keywords: ['research_keywords'],
   competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating', 'moz_authority'],
   backlinks: ['moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer'],
@@ -36,6 +38,7 @@ async function saveResearch(deps: EnrichDeps, customerId: string, runId: string,
 export async function enrichRun(deps: EnrichDeps, customerId: string, runId: string, input: ResearchInput, site: string): Promise<string[]> {
   const notes: string[] = [];
   const runners: Array<[SourceKey, () => Promise<Research[]>]> = [
+    ['site_ai', async () => [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: (await crawlSite(site)) as unknown as Record<string, any> }]],
     ['keywords', () => runKeywordResearch(input)],
     ['competitors', () => runCompetitorResearch(input)],
     ['local', () => runLocalResearch(input)],
@@ -54,7 +57,10 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
   for (const src of LIVE_SOURCES) {
     const group = tasks.filter((t) => TASK_SOURCE[t.skillId] === src && !t.isAutomated);
     if (!group.length) continue;
-    const rows = evidence.filter((e) => (FEEDS[src] ?? []).includes(e.evidenceType) && e.status === 'approved' && e.extracted);
+    const isAi = src === 'ai';
+    const rows = isAi
+      ? evidence.filter((e) => e.status === 'approved' && e.extracted)
+      : evidence.filter((e) => (FEEDS[src] ?? []).includes(e.evidenceType) && e.status === 'approved' && e.extracted);
     if (!rows.length) {
       const why = failed.get(src) ?? `${SOURCE_LABEL[src]} produced no data for this run (key not set, function switched off, or the call failed - see the research section).`;
       group.forEach((t) => {
@@ -63,9 +69,15 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
       await deps.taskRepo.save(group);
       continue;
     }
-    const data = Object.fromEntries(rows.map((r) => [r.evidenceType, r.extracted]));
+    const data: Record<string, any> = isAi
+      ? {
+          client: { company: input.companyName, website: site, industry: input.industry, about: (input.description ?? '').slice(0, 400), competitors: input.competitors.slice(0, 6) },
+          evidence: Object.fromEntries(rows.map((r) => [r.evidenceType, JSON.stringify(r.extracted).slice(0, 1800)])),
+          taskResults: tasks.filter((t) => t.isAutomated && t.finding && TASK_SOURCE[t.skillId] !== 'ai').slice(0, 45).map((t) => `${t.skill}: ${String(t.finding).slice(0, 180)}`),
+        }
+      : Object.fromEntries(rows.map((r) => [r.evidenceType, r.extracted]));
     try {
-      const written = await writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site);
+      const written = await writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : {});
       for (const t of group) {
         const w = written.get(t.id);
         if (w) {

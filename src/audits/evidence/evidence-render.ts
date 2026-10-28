@@ -1,3 +1,4 @@
+import { evidenceSide } from '../sources/task-map';
 import { AuditEvidence } from './audit-evidence.entity';
 import { EVIDENCE_RULES } from './aitdk-rules';
 import type { PpcReport } from './ppcblogpro-parser';
@@ -351,6 +352,26 @@ function renderMoz(d: Record<string, any>): string {
   return h;
 }
 
+function renderCrawl(d: Record<string, any>): string {
+  const f = (v: any) => (v == null ? '' : String(v));
+  let h = kvTable([
+    ['Pages checked', d.pagesChecked],
+    ['Pages with no meta description', d.missingMeta],
+    ['Pages with no H1 heading', d.missingH1],
+    ['Thin pages (under 300 words)', d.thinPages],
+    ['Pages set to noindex (hidden from Google)', d.noindexPages],
+    ['Images without alt text', d.imagesTotal ? `${d.imagesMissingAlt} of ${d.imagesTotal}` : null],
+    ['Links checked for errors', d.linksChecked],
+    ['Broken links found', (d.brokenLinks ?? []).length],
+    ['Pages sharing the same title', (d.duplicateTitles ?? []).length],
+  ]);
+  const p = (d.pages ?? []) as Array<Record<string, any>>;
+  if (p.length) h += '<h4>Pages</h4>' + grid(['Page', 'Status', 'Title length', 'Meta length', 'H1', 'Words', 'Schema types'], p.map((x) => [x.url, f(x.status), f(x.titleLength), f(x.metaLength), (x.h1 ?? []).length ? 'Yes' : 'Missing', f(x.words), (x.schemaTypes ?? []).join(', ')]));
+  const b = (d.brokenLinks ?? []) as Array<Record<string, any>>;
+  if (b.length) h += '<h4>Broken links</h4>' + grid(['Link', 'Result', 'Found on'], b.map((x) => [x.url, f(x.status), x.foundOn]));
+  return h;
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -408,6 +429,7 @@ function renderDigispotDashboard(d: Record<string, any>): string {
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
+  if (type === 'site_crawl') return 'Website crawl (your own pages)';
   if (type === 'moz_authority') return 'Domain Authority (Moz)';
   if (type === 'ahrefs_domain_rating') return 'Domain Rating (Ahrefs)';
   if (type === 'research_keywords') return 'Keyword research';
@@ -424,11 +446,11 @@ function labelFor(type: string): string {
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : tool === 'sitescan' ? 'Openink Hub site crawl' : 'Other tool';
 }
 
-export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer'): string {
-  const items = all.filter((e) => e.includeInReport && e.extracted && (audience === 'admin' ? e.status === 'extracted' || e.status === 'approved' : e.status === 'approved'));
+export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer', opts: { side?: 'internal' | 'external'; heading?: string } = {}): string {
+  const items = all.filter((e) => (!opts.side || evidenceSide(e.tool, e.evidenceType) === opts.side) && e.includeInReport && e.extracted && (audience === 'admin' ? e.status === 'extracted' || e.status === 'approved' : e.status === 'approved'));
   if (!items.length) return '';
   const order = (e: AuditEvidence) => (e.evidenceType === 'digispot_report' ? 0 : e.evidenceType === 'ppcblogpro_report' ? 1 : 2);
   const sorted = [...items].sort((a, b) => order(a) - order(b) || a.createdAt.getTime() - b.createdAt.getTime());
@@ -443,6 +465,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'pagespeed_report' ? renderPageSpeed(d)
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
+        : e.evidenceType === 'site_crawl' ? renderCrawl(d)
         : e.evidenceType === 'moz_authority' ? renderMoz(d)
         : e.evidenceType === 'ahrefs_domain_rating' ? renderAhrefsDr(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
@@ -457,5 +480,5 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
       return `<div class="ev-card"><h3>${esc(labelFor(e.evidenceType))}${flag}</h3><p class="ev-src">${esc(toolName(e.tool))} &middot; ${esc(e.fileName)}</p>${body}${shot}</div>`;
     })
     .join('');
-  return `<section class="layers"><h2>Tool findings</h2>${cards}</section>`;
+  return `<section class="layers"><h2>${esc(opts.heading ?? 'Tool findings')}</h2>${cards}</section>`;
 }
