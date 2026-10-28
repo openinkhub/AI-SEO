@@ -35,7 +35,9 @@ const AREAS = SCOPE_SECTIONS.map((s) => s.title);
 const fixScope = (t: string): string =>
   t
     .replace(/\b1,?000(?=\s+(?:[\w-]+\s+){0,2}(?:profile|submission))/gi, '300')
-    .replace(/\bprofile\s+submissions?/gi, 'backlink submissions');
+    .replace(/\bprofile\s+submissions?/gi, 'backlink submissions')
+    .replace(/\b(Domain Authority(?:\s*\(DA\))?(?:\s+of)?\s+)40\+/gi, '$160+')
+    .replace(/\b(DA\s+(?:of\s+)?)40\+/g, '$160+');
 const str = (v: unknown, max = 600): string => (typeof v === 'string' ? fixScope(v.trim()).slice(0, max) : '');
 const strList = (v: unknown, maxItems = 12, max = 400): string[] =>
   Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, maxItems) : [];
@@ -105,7 +107,7 @@ RULES
 - Never promise or guarantee rankings, traffic or revenue. Targets are goals, not guarantees.
 - Every priority must name one "area" taken exactly from this list: ${AREAS.join(' | ')}.
 - Do not plan website designing, development, implementation or publishing of site changes (indicative only); phrase these as recommendations the client's team implements.
-- Prioritise by impact on the three targets (Domain Authority 40+, Domain Rating 60%+, AI Overview 40%+).
+- Prioritise by impact on the three targets (Domain Authority 60+, Domain Rating 60%+, AI Overview 40%+).
 - 4 to 7 priorities, a 4-week plan (period "Week 1".."Week 4"), 3 to 5 risks, 4 to 6 KPIs.
 
 Reply with ONLY a JSON object of this exact shape:
@@ -184,7 +186,7 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
     when: 'Week 1-4',
   });
   return {
-    executiveSummary: `This strategy turns the SEO audit of ${input.website || input.companyName} into this month’s plan. The audit found ${input.findings.length} item${input.findings.length === 1 ? '' : 's'} to act on. The plan fixes technical and on-page issues first, then builds authority and AI-search visibility, aiming at Domain Authority 40+, Domain Rating 60%+ and AI Overview 40%+. These are goals, not guarantees.`,
+    executiveSummary: `This strategy turns the SEO audit of ${input.website || input.companyName} into this month’s plan. The audit found ${input.findings.length} item${input.findings.length === 1 ? '' : 's'} to act on. The plan fixes technical and on-page issues first, then builds authority and AI-search visibility, aiming at Domain Authority 60+, Domain Rating 60%+ and AI Overview 40%+. These are goals, not guarantees.`,
     currentPosition: input.findings.slice(0, 6).map((f) => f.finding.slice(0, 300)),
     targets: SCOPE_TARGETS.map((t) => ({ ...t, note: '' })),
     priorities,
