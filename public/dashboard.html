@@ -1452,13 +1452,14 @@
           '<td>' + escapeHtml(t.api || '') + (t.apiWired === false && t.state !== 'not_applicable' ? ' <em>(not wired)</em>' : '') + '</td>' +
           '<td>' + escapeHtml(t.apiKey || '') + '</td>' +
           '<td>' + escapeHtml(t.layerNumbers ? t.layerNumbers.join(', ') : '') + '</td>' +
-          '<td>' + escapeHtml((t.finding || '').slice(0, 160)) + '</td></tr>';
+          '<td>' + escapeHtml((t.finding || '').slice(0, 160)) + '</td>' +
+          '<td>' + (t.metrics && t.metrics.length ? t.metrics.map(function(m){ return escapeHtml(m); }).join('<br>') : '') + '</td></tr>';
       }).join('');
       var summary = Object.keys(STATE).map(function(k){ return (counts[k] || 0) + ' ' + STATE[k].toLowerCase(); }).join(' · ');
       var p = document.getElementById('panel-' + runId);
       if (p) p.innerHTML = '<p class="muted"><strong>' + tasks.length + ' tasks</strong> — ' + summary + '. Blocked and waiting tasks are listed first.</p>' +
         '<div class="task-scroll"><table><thead><tr>' +
-        '<th>#</th><th>Group</th><th>Skill</th><th>State</th><th>API / tool</th><th>Key needed</th><th>Layers</th><th>Finding / reason</th>' +
+        '<th>#</th><th>Group</th><th>Skill</th><th>State</th><th>API / tool</th><th>Key needed</th><th>Layers</th><th>Finding / reason</th><th>Source comparison (DA, PA, DR, traffic, backlinks…)</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>';
     }).catch(function(err){
       var p = document.getElementById('panel-' + runId);

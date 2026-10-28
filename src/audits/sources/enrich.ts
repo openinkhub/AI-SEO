@@ -6,14 +6,17 @@ import { LIVE_SOURCES, SOURCE_LABEL, SourceKey, TASK_SOURCE } from './task-map';
 import { crawlSite } from './site-crawl';
 import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runGscResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
+import { collectMetrics, metricsSummary } from '../evidence/metrics';
 
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
+// Approved screenshots / exports uploaded by the admin feed the same tasks as the matching API data; a task fed by
+// both sees both (each labelled by its evidence type) and reports each source's own numbers.
 const FEEDS: Partial<Record<SourceKey, string[]>> = {
-  site_ai: ['site_crawl', 'pagespeed_report'],
-  keywords: ['research_keywords'],
-  competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating', 'moz_authority'],
-  backlinks: ['moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer'],
-  visibility: ['mangools_ai_watcher'],
+  site_ai: ['site_crawl', 'pagespeed_report', 'aitdk_meta', 'aitdk_technical', 'aitdk_density', 'aitdk_social', 'aitdk_structured_data', 'seoquake_audit', 'seoanalyzer_summary', 'seoanalyzer_tab', 'ppcblogpro_summary', 'ppcblogpro_report', 'digispot_dashboard', 'digispot_report', 'seomator_geo_audit'],
+  keywords: ['research_keywords', 'aitdk_density', 'aitdk_serp'],
+  competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating', 'moz_authority', 'mangools_siteprofiler'],
+  backlinks: ['moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer', 'mangools_siteprofiler', 'aitdk_backlinks', 'aitdk_traffic'],
+  visibility: ['mangools_ai_watcher', 'frase_ai_visibility', 'aitdk_geo_section', 'seomator_geo_audit'],
   local: ['research_local'],
   pagespeed: ['pagespeed_report'],
   fetch: ['site_crawl', 'screenshots'],
@@ -99,13 +102,18 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
       await deps.taskRepo.save(group);
       continue;
     }
-    const data: Record<string, any> = isAi
+    let data: Record<string, any> = isAi
       ? {
           client: { company: input.companyName, website: site, industry: input.industry, about: (input.description ?? '').slice(0, 400), competitors: input.competitors.slice(0, 6) },
           evidence: Object.fromEntries(rows.map((r) => [r.evidenceType, JSON.stringify(r.extracted).slice(0, 1800)])),
           taskResults: tasks.filter((t) => t.isAutomated && t.finding && TASK_SOURCE[t.skillId] !== 'ai').slice(0, 45).map((t) => `${t.skill}: ${String(t.finding).slice(0, 180)}`),
         }
       : Object.fromEntries(rows.map((r) => [r.evidenceType, r.extracted]));
+    // Authority / traffic / backlink numbers from every source side by side, so the write-up quotes each one by name.
+    if (!isAi && (src === 'backlinks' || src === 'competitors')) {
+      const cmp = metricsSummary(collectMetrics(rows));
+      if (cmp.length) data = { metricComparison: cmp, ...data }; // first, so the size limit can never cut it
+    }
     try {
       const written = await withTimeout(
         writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : {}),

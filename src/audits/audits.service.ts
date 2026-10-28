@@ -27,6 +27,7 @@ import { createHash } from 'crypto';
 import { StorageService } from '../page-images/storage.service';
 import { WpClientService } from '../wp-integration/wp-client.service';
 import { fetchGscExport } from './sources/gsc';
+import { collectMetrics, metricsSummary } from './evidence/metrics';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
 const ymd = (v: unknown): string | null => {
@@ -554,9 +555,13 @@ export class AuditsService implements OnModuleInit {
   async listTasks(customerId: string, runId: string): Promise<any[]> {
     await this.findOne(customerId, runId);
     const tasks = await this.taskRepo.find({ where: { auditRunId: runId }, order: { group: 'ASC', skill: 'ASC' } });
+    // Authority / traffic / backlink numbers from every source (API and uploaded screenshots), side by side, for the
+    // tasks that use them. Nothing is merged: each source keeps its own value.
+    const evidence = await this.evidenceRepo.find({ where: { auditRunId: runId } });
+    const compare = metricsSummary(collectMetrics(evidence));
     return tasks.map((t) => {
       const src = TASK_SOURCE[t.skillId] ?? 'na';
-      return { ...t, source: src, sourceLabel: SOURCE_LABEL[src], api: SOURCE_API[src].api, apiKey: SOURCE_API[src].key, apiWired: SOURCE_API[src].wired, state: taskState(t) };
+      return { ...t, source: src, sourceLabel: SOURCE_LABEL[src], api: SOURCE_API[src].api, apiKey: SOURCE_API[src].key, apiWired: SOURCE_API[src].wired, state: taskState(t), metrics: src === 'backlinks' || src === 'competitors' ? compare : [] };
     });
   }
 
