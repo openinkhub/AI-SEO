@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Project } from '../projects/project.entity';
 import { LAYER_STATUSES, ProjectLayer } from './project-layer.entity';
 import { BUILT_LAYERS, LAYER_REGISTRY, LayerDef, SECTION_LABELS } from './layers.registry';
@@ -154,6 +154,20 @@ export class LayersService {
       });
     }
     return out;
+  }
+
+  // Layer rows scheduled on a date that are still open (used by the automation tick).
+  dueRows(layerNo: number, date: string) {
+    return this.repo.find({ where: { layerNo, scheduledDate: date, status: In(['pending', 'in_progress']) } });
+  }
+
+  // Sets one Layer row of a month from code (e.g. Layer 4 -> done when its table is complete).
+  async setByMonth(customerId: string, monthIndex: number, layerNo: number, status: string) {
+    const row = await this.repo.findOne({ where: { customerId, monthIndex, layerNo } });
+    if (!row || row.status === 'not_applicable' || row.status === status) return;
+    row.status = status;
+    row.completedAt = status === 'done' ? new Date() : null;
+    await this.repo.save(row);
   }
 
   async setStatus(customerId: string, id: string, status: string) {

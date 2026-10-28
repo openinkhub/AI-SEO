@@ -1,7 +1,7 @@
 import { AuditRun } from '../audit-run.entity';
 import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
-import { customerReportBody, escapeHtml, formatDate, ReportAiKeyword, ReportPage, styleBlock } from '../report-builder';
+import { customerReportBody, escapeHtml, formatDate, ReportPage, styleBlock } from '../report-builder';
 import { Strategy } from './strategy-generator';
 import { STAMP_DATA_URI } from './stamp';
 import {
@@ -25,8 +25,6 @@ export interface PackageInput {
   evidence: AuditEvidence[];
   // Layer 3 page data (page, URL, alias, H1, meta tags, image) for the report's Website pages / Page mapping sections.
   pages?: ReportPage[];
-  // Layer 4 AI Search Keywords for the report's AI Search Keywords section.
-  aiKeywords?: ReportAiKeyword[];
   strategy: Strategy;
   preview?: boolean;
   // Date & time shown in the signature block (default: now, i.e. when the document is compiled).
@@ -65,7 +63,7 @@ function packageStyle(): string {
 }
 
 function reportPart(input: PackageInput): string {
-  return `<div class="pkg-part" id="report"><section><h2 class="part">1. SEO Report</h2></section>${customerReportBody(input.run, input.tasks, input.evidence, input.pages ?? [], input.aiKeywords ?? [])}</div>`;
+  return `<div class="pkg-part" id="report"><section><h2 class="part">1. SEO Report</h2></section>${customerReportBody(input.run, input.tasks, input.evidence, input.pages ?? [])}</div>`;
 }
 
 function strategyPart(s: Strategy): string {

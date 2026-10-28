@@ -23,7 +23,6 @@ import { PackageController } from './package/package.controller';
 import { WebsitePage } from '../page-images/website-page.entity';
 import { EmailModule } from '../email/email.module';
 import { LibraryImage } from '../page-images/library-image.entity';
-import { LayersModule } from '../layers/layers.module';
 
 @Module({
   imports: [
@@ -31,7 +30,6 @@ import { LayersModule } from '../layers/layers.module';
     CustomersModule,
     EmailModule,
     CustomerApisModule,
-    LayersModule,
     PageImagesModule,
     MulterModule.register({}),
   ],

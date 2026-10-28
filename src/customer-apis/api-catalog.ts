@@ -187,5 +187,11 @@ export const GLOBAL_API_PROVIDERS: ApiProvider[] = [
       usedBy: 'Layer 4 AI Search Keyword (and the other AI research Layers as they are built).', testable: true, wired: true,
     }),
   ),
+  {
+    key: 'google_ai', label: 'Google AI (SerpApi: AI Overview + AI Mode)', group: 'AI platforms',
+    description: 'SerpApi key used for the Google AI platform of the AI research Layers: Google AI Overview and Google AI Mode (one key for all customers).',
+    fields: [key('SerpApi key')],
+    usedBy: 'Layer 4 AI Search Keyword - Google AI.', testable: true, wired: true,
+  },
 ];
 export const findGlobalProvider = (k: string): ApiProvider | undefined => GLOBAL_API_PROVIDERS.find((p) => p.key === k);

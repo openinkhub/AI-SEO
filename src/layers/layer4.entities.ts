@@ -34,6 +34,17 @@ export class Layer4Keyword {
   @Column({ type: 'varchar', length: 20 })
   demand: string;
 
+  // The AI platform's own estimate of average monthly searches (from the prompt).
+  @Column({ type: 'int', nullable: true })
+  estVolume: number | null;
+
+  // Updated volume from a real keyword tool (Mangools), when it has the keyword.
+  @Column({ type: 'int', nullable: true })
+  volume: number | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  volumeSource: string | null;
+
   // 'api' | 'manual'
   @Column({ type: 'varchar', length: 10, default: 'api' })
   source: string;

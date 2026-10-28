@@ -18,6 +18,20 @@ export class Layer4Controller {
     return this.service.startRun(customerId, body?.month, body?.platform);
   }
 
+  // Runs every API platform of the month now, the same way the set-date automation does (background).
+  @Post('run-all')
+  async runAll(@Param('customerId') customerId: string, @Body() body: { month: string }) {
+    const p = await this.service.monthOf(customerId, body?.month);
+    void this.service.runDay([{ customerId, monthIndex: p.monthIndex }], true).catch(() => undefined);
+    return this.service.view(customerId, body?.month);
+  }
+
+  // Updates the keywords' volume from Mangools (capped per press; press again for the rest).
+  @Post('volume')
+  volume(@Param('customerId') customerId: string, @Body() body: { month: string }) {
+    return this.service.startVolumeUpdate(customerId, body?.month);
+  }
+
   @Put('manual')
   manual(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; text: string }) {
     return this.service.saveManual(customerId, body?.month, body?.platform, body?.text);

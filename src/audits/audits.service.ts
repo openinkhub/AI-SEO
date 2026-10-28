@@ -31,7 +31,6 @@ import { collectMetrics, metricsSummary } from './evidence/metrics';
 import { WebsitePage } from '../page-images/website-page.entity';
 import { LibraryImage } from '../page-images/library-image.entity';
 import { EmailService } from '../email/email.service';
-import { Layer4Service } from '../layers/layer4.service';
 
 // YYYY-MM-DD from a DATE column value (string, or Date on some drivers).
 const ymd = (v: unknown): string | null => {
@@ -112,13 +111,7 @@ export class AuditsService implements OnModuleInit {
     @InjectRepository(WebsitePage) private readonly pageRepo: Repository<WebsitePage>,
     @InjectRepository(LibraryImage) private readonly imageRepo: Repository<LibraryImage>,
     private readonly email: EmailService,
-    private readonly layer4: Layer4Service,
   ) {}
-
-  // Layer 4 AI Search Keywords for the report (latest month that has them).
-  reportAiKeywords(customerId: string) {
-    return this.layer4.reportKeywords(customerId);
-  }
 
   // The customer's website pages for the report's "Website pages" list (page, URL, H1 keyword, meta tags).
   async reportPages(customerId: string) {
@@ -244,7 +237,7 @@ export class AuditsService implements OnModuleInit {
     run.failureReason = failureReason;
     run.completedAt = new Date();
     run.reportHtml = buildBrandedReportHtml(run, savedTasks, customer.companyName, autoEvidence);
-    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence, await this.reportPages(customerId), await this.reportAiKeywords(customerId));
+    run.customerReportHtml = buildCustomerReportHtml(run, savedTasks, customer.companyName, autoEvidence, await this.reportPages(customerId));
     run.reportGeneratedAt = run.completedAt;
     run.enrichStatus = failureReason ? null : 'running';
     const saved = await this.runRepo.save(run);
@@ -614,7 +607,7 @@ export class AuditsService implements OnModuleInit {
     const tasks = await this.taskRepo.find({ where: { auditRunId: runId } });
     const evidence = await this.evidenceRepo.find({ where: { auditRunId: runId }, order: { createdAt: 'ASC' } });
     run.reportHtml = buildBrandedReportHtml(run, tasks, customer.companyName, evidence);
-    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence, await this.reportPages(customerId), await this.reportAiKeywords(customerId));
+    run.customerReportHtml = buildCustomerReportHtml(run, tasks, customer.companyName, evidence, await this.reportPages(customerId));
     await this.runRepo.save(run);
   }
 

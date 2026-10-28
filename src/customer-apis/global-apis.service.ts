@@ -96,6 +96,17 @@ export class GlobalApisService {
         msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
       }
     }
+    if (p.key === 'google_ai') {
+      try {
+        const res = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(vals.apiKey)}`, { signal: AbortSignal.timeout(20000) });
+        const b: any = await res.json().catch(() => ({}));
+        if (!res.ok || b.error) throw new Error(String(b.error || `HTTP ${res.status}`));
+        msg = `Key works - SerpApi responded (${b.total_searches_left ?? b.plan_searches_left ?? '?'} searches left).`;
+      } catch (err) {
+        ok = false;
+        msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
+      }
+    }
     if (GLOBAL_AI_KEYS.includes(p.key)) {
       try {
         const reply = await askPlatform(p.key, vals, 'Reply with the single word OK.');
