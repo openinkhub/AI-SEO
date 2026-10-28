@@ -12,6 +12,7 @@ import { buildBrandedReportHtml, buildCustomerReportHtml } from './report-builde
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 import { AuditEvidence } from './evidence/audit-evidence.entity';
 import { CustomerApisService } from '../customer-apis/customer-apis.service';
+import { runMangools } from '../customer-apis/mangools/run';
 import { runPageSpeed } from '../customer-apis/pagespeed';
 import { Project } from '../projects/project.entity';
 import { todayInTz } from '../projects/month-cycle';
@@ -273,6 +274,26 @@ export class AuditsService {
         row.error = `PageSpeed: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);
       }
       out.push(await this.evidenceRepo.save(row));
+    }
+    if (keys.mangools?.apiKey) {
+      // Each Mangools function is its own evidence card with its own limit (customer API settings).
+      for (const r of await runMangools(keys.mangools, website)) {
+        const row = this.evidenceRepo.create({
+          customerId,
+          auditRunId: runId,
+          kind: 'text',
+          section: 'auto',
+          tool: 'mangools',
+          evidenceType: r.def.evidenceType,
+          fileName: `Mangools - ${r.def.label} (automatic)`,
+          sha256: createHash('sha256').update(`mangools:${r.def.key}:${runId}`).digest('hex'),
+          includeInReport: true,
+          status: r.ok ? 'approved' : 'failed',
+        });
+        if (r.ok) row.extracted = r.data as Record<string, any>;
+        else row.error = (r.error ?? 'failed').slice(0, 250);
+        out.push(await this.evidenceRepo.save(row));
+      }
     }
     return out;
   }

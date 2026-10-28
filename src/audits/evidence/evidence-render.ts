@@ -232,6 +232,56 @@ function renderMangools(d: Record<string, any>): string {
   return h;
 }
 
+
+function mgFlow(v: any): string {
+  return v == null ? '' : String(v);
+}
+
+function renderMangoolsFn(type: string, d: Record<string, any>): string {
+  if (type === 'mangools_sp_overview') {
+    const a = d.authority ?? {};
+    let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Domain authority', a.domainAuthority)}${scoreTile('Page authority', a.pageAuthority)}${scoreTile('Citation flow', a.citationFlow)}${scoreTile('Trust flow', a.trustFlow)}</div>`;
+    const o = d.organic;
+    h += kvTable([['Referring IPs', d.referringIps], ['Keywords ranking in Google', o?.keywords], ['In top 3', o?.top3], ['In top 10', o?.top10], ['In top 20', o?.top20], ['Estimated monthly organic visits', o?.estimatedTraffic], ['New / lost keywords', o ? `${o.newKeywords ?? 0} new / ${o.lostKeywords ?? 0} lost` : null]]);
+    return h;
+  }
+  if (type === 'mangools_sp_backlinks') {
+    const b = d.backlinks ?? {}, r = d.referring ?? {}, f = d.flow ?? {}, l = d.last30Days;
+    let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Citation flow', f.citationFlow)}${scoreTile('Trust flow', f.trustFlow)}</div>`;
+    h += kvTable([['Total backlinks', b.total], ['Lost (deleted) links', b.deleted], ['Nofollow links', b.nofollow], ['Text links', b.text], ['Links to homepage', b.toHomepage], ['Referring domains', r.domains], ['Referring IPs', r.ips], ['Referring subnets', r.subnets], ['.edu / .gov domains', r.edu != null || r.gov != null ? `${r.edu ?? 0} / ${r.gov ?? 0}` : null], ['Indexed URLs', d.indexedUrls], ['Last 30 days (new / lost links)', l ? `${l.newLinks} / ${l.lostLinks}` : null]]);
+    const dom = (d.topReferringDomains ?? []) as Array<Record<string, any>>;
+    if (dom.length) h += '<h4>Top referring domains</h4>' + grid(['Domain', 'Citation flow', 'Trust flow', 'Links'], dom.map((x) => [x.domain, mgFlow(x.cf), mgFlow(x.tf), mgFlow(x.links)]));
+    const an = (d.anchors ?? []) as Array<Record<string, any>>;
+    if (an.length) h += '<h4>Anchor texts</h4>' + grid(['Anchor', 'Type', 'Ref. domains', 'Total links'], an.map((x) => [x.text, x.type, mgFlow(x.refDomains), mgFlow(x.total)]));
+    return h;
+  }
+  if (type === 'mangools_sp_competitors') {
+    const c = (d.competitors ?? []) as Array<Record<string, any>>;
+    return c.length ? grid(['Competitor', 'Overlap score', 'Referring IPs', 'Facebook shares'], c.map((x) => [x.domain, mgFlow(x.overlap), mgFlow(x.referringIps), mgFlow(x.facebookShares)])) : '<p class="empty">No competitors were returned.</p>';
+  }
+  if (type === 'mangools_sp_top_content') {
+    const p = (d.pages ?? []) as Array<Record<string, any>>;
+    return p.length ? grid(['Page', 'Ref. domains', 'Backlinks', 'Citation flow', 'Trust flow'], p.map((x) => [x.url, mgFlow(x.refDomains), mgFlow(x.backlinks), mgFlow(x.cf), mgFlow(x.tf)])) : '<p class="empty">No pages were returned.</p>';
+  }
+  if (type === 'mangools_linkminer') {
+    const u = (d.urls ?? []) as Array<Record<string, any>>;
+    return u.length ? grid(['URL', 'Citation flow', 'Trust flow', 'Ref. domains', 'Backlinks', 'Ref. IPs'], u.map((x) => [x.url, mgFlow(x.citationFlow), mgFlow(x.trustFlow), mgFlow(x.refDomains), mgFlow(x.backlinks), mgFlow(x.refIps)])) : '';
+  }
+  if (type === 'mangools_ai_watcher') {
+    const val = (m: any) => (m && m.value != null ? Math.round(m.value * 10) / 10 : null);
+    let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('AI score', val(d.score))}${scoreTile('AI visibility %', val(d.visibility))}</div>`;
+    h += kvTable([['Brand monitored', d.brand], ['Average position in AI answers', val(d.position)], ['Best AI model for you', d.bestPerforming ? `${d.bestPerforming.model} (${d.bestPerforming.value}%)` : null], ['Most cited by', d.mostCited ? `${d.mostCited.model} (${d.mostCited.value}%)` : null], ['AI models tracked', (d.models ?? []).join(', ')], ['Market', d.location], ['Period', d.dateRange ? `${d.dateRange.from} to ${d.dateRange.to}` : null]]);
+    const b = (d.brands ?? []) as Array<Record<string, any>>;
+    if (b.length) h += '<h4>Brands AI recommends (you and competitors)</h4>' + grid(['Brand', 'Rank', 'Score', 'Visibility %', 'Avg position'], b.map((x) => [x.brand + (x.you ? ' (you)' : ''), mgFlow(x.rank), mgFlow(x.score), mgFlow(x.visibility), mgFlow(x.position)]));
+    const p = (d.prompts ?? []) as Array<Record<string, any>>;
+    if (p.length) h += '<h4>Questions asked to AI</h4>' + grid(['Question', 'Score', 'Visibility %', 'Position', 'Google AI Overview'], p.map((x) => [x.text, mgFlow(x.score), mgFlow(x.visibility), mgFlow(x.position), x.aiOverview ? 'Yes' : 'No']));
+    const s = (d.citedSources ?? []) as Array<Record<string, any>>;
+    if (s.length) h += '<h4>Sources AI cites</h4>' + grid(['Source', 'Mentions', 'Your site?'], s.map((x) => [x.domain, mgFlow(x.mentions), x.yours ? 'Yes' : 'No']));
+    return h;
+  }
+  return '';
+}
+
 function renderFrase(d: Record<string, any>): string {
   return kvTable([['AI engine', d.engine], ['Test question', d.question], ['Domain cited?', d.cited === true ? 'Yes' : d.cited === false ? 'No - not cited' : null], ['Domain', d.domain], ['Note', d.note]]);
 }
@@ -289,6 +339,12 @@ function renderDigispotDashboard(d: Record<string, any>): string {
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
+  if (type === 'mangools_sp_overview') return 'Authority overview (Mangools SiteProfiler)';
+  if (type === 'mangools_sp_backlinks') return 'Backlink profile (Mangools SiteProfiler)';
+  if (type === 'mangools_sp_competitors') return 'Competitors (Mangools SiteProfiler)';
+  if (type === 'mangools_sp_top_content') return 'Top content by links (Mangools SiteProfiler)';
+  if (type === 'mangools_linkminer') return 'Link metrics for key pages (Mangools LinkMiner)';
+  if (type === 'mangools_ai_watcher') return 'AI search visibility (Mangools AI Search Watcher)';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
   return EVIDENCE_RULES.find((r) => r.type === type)?.label ?? 'Tool data';
 }
@@ -315,6 +371,7 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
+        : e.evidenceType.startsWith('mangools_') ? renderMangoolsFn(e.evidenceType, d)
         : e.evidenceType.startsWith('seoanalyzer_') ? renderSeoAnalyzer(e.evidenceType, d)
         : renderAitdk(e.evidenceType, d);
       const flag = audience === 'admin' && e.status !== 'approved' ? '<span class="ev-flag">Not approved yet - hidden from customer</span>' : '';

@@ -141,6 +141,12 @@ export class CustomerApisService {
       if (!res.ok) throw new Error(b?.error?.message || `HTTP ${res.status}`);
       return 'Key works - PageSpeed responded.';
     }
+    if (key === 'mangools') {
+      const res = await fetch('https://api.mangools.com/v3/kwfinder/limits', { headers: { 'x-access-token': v.apiKey, Accept: 'application/json' }, signal: sig });
+      const b: any = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(b?.error?.message || `HTTP ${res.status}`);
+      return 'Key works - Mangools responded.';
+    }
     if (key === 'serpapi') {
       const res = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(v.apiKey)}`, { signal: sig });
       const b: any = await res.json().catch(() => ({}));

@@ -82,7 +82,8 @@ export class PackageService {
     const evidence = await this.evidenceRepo.find({ where: { customerId, auditRunId: runId } });
     const sections = TOOL_SECTIONS.filter((s) => s.key !== 'auto' && s.key !== 'other');
     const upItems = sections.map((s) => {
-      const rows = evidence.filter((r) => r.section === s.key);
+      // Mangools runs automatically (customer API), so its automatic cards also satisfy the Mangools section.
+      const rows = evidence.filter((r) => r.section === s.key || (s.key === 'mangools' && r.section === 'auto' && r.tool === 'mangools'));
       const approved = rows.filter((r) => r.status === 'approved').length;
       const unread = rows.filter((r) => r.status === 'uploaded').length;
       const waiting = rows.filter((r) => r.status === 'extracted').length;
