@@ -39,7 +39,7 @@ export class AuditRun {
   @Column({ type: 'varchar', length: 16, nullable: true })
   monthCode: string | null;
 
-  // Instant report: run by an admin outside the Day-3 / once-per-cycle rule. Does not use up the cycle's scheduled audit.
+  // Instant report: run by an admin outside the Day-3 / once-per-cycle rule. It becomes the month's audit and replaces the scheduled one (older runs are kept as history).
   @Column({ default: false })
   instant: boolean;
 

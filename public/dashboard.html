@@ -1550,7 +1550,7 @@
     var box = document.getElementById('layer3audit');
     if (!box) return;
     box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Day 3</span>SEO Audit</h2>' +
-      '<span><button id="runInstantBtn" title="Run a report right now, outside the Day 3 lock. It does not use up this month\u2019s scheduled audit.">Instant report</button> <button class="primary" id="runAuditBtn">Run SEO Audit</button></span></div>' +
+      '<span><button id="runInstantBtn" title="Run a report right now, before Day 3. It replaces this month\u2019s scheduled report.">Instant report</button> <button class="primary" id="runAuditBtn">Run SEO Audit</button></span></div>' +
       '<p class="lead">Audits the customer’s website with the SEO skill matrix (each skill is a task). It runs once per month cycle, from Day 3. The customer sees one compiled document (SEO Report + Strategy + Deliverables + Terms &amp; Conditions) after you compile it from the Package button.</p>' +
       '<div id="auditRule" class="muted" style="margin:6px 0 10px">Checking the month cycle…</div>' +
       '<div id="runsList"><p class="muted">Loading audits…</p></div></section>';
@@ -1575,6 +1575,8 @@
           (bits.length ? bits.join(' · ') + '<br>' : '') + escapeHtml(r.reason || '');
       }
       if (btn) { btn.disabled = !r.canRun; btn.title = r.canRun ? '' : (r.reason || ''); }
+      var ibtn = document.getElementById('runInstantBtn');
+      if (ibtn) { ibtn.disabled = !r.canInstant; ibtn.title = r.canInstant ? 'Run a report right now, before Day 3. It replaces this month\u2019s scheduled report.' : 'Only available before the scheduled day (Day 3 of the cycle).'; }
     }).catch(function(err){
       var box = document.getElementById('auditRule');
       if (box) box.textContent = 'Could not check the month cycle: ' + err.message;
@@ -1610,7 +1612,7 @@
   }
 
   function runInstantReport() {
-    if (!confirm('Run an instant report now? It ignores the Day 3 lock and does not use up this month\u2019s scheduled audit. The customer is not emailed.')) return;
+    if (!confirm('Run an instant report now? It is only possible before Day 3 and replaces this month\u2019s scheduled report (the older one stays in the list as history).')) return;
     var btn = document.getElementById('runInstantBtn');
     btn.disabled = true;
     btn.textContent = 'Starting…';

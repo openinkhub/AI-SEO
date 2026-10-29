@@ -47,7 +47,7 @@ export class WpAuditsController {
         const mine = [];
         for (const r of runs) if ((await this.service.cycleForRun(r)).monthIndex === idx) mine.push(r);
         const ok = (r: any) => !r.failureReason && r.status !== ('failed' as any);
-        run = (mine.find((r) => ok(r) && !r.instant) ?? mine.find(ok) ?? mine[0]) as any;
+        run = (mine.find(ok) ?? mine[0] /* newest first: an instant report replaces the scheduled one */) as any;
       }
     }
     if (!run) return { run: null, findings: [] };
