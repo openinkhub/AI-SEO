@@ -3,6 +3,7 @@ import { AuditTask } from '../audit-task.entity';
 import { AuditEvidence } from '../evidence/audit-evidence.entity';
 import { customerReportBody, escapeHtml, formatDate, ReportPage, styleBlock } from '../report-builder';
 import { Strategy } from './strategy-generator';
+import { collectMetrics, parseMetric } from '../evidence/metrics';
 import { STAMP_DATA_URI } from './stamp';
 import {
   COMPANY_FOOTER,
@@ -53,6 +54,11 @@ function packageStyle(): string {
     .pkg-target { flex:1 1 220px; background:#fff; border:1px solid #e2e2ea; border-radius:10px; padding:14px 18px; }
     .pkg-target .big { font-size:28px; font-weight:700; color:#2563eb; }
     .pkg-target .lab { font-size:12px; color:#5b5b6e; text-transform:uppercase; letter-spacing:.04em; }
+    .pkg-goal { width:100%; border-collapse:collapse; margin:6px 0 4px; font-size:14px; background:#fff; }
+    .pkg-goal th, .pkg-goal td { border:1px solid #e2e2ea; padding:6px 10px; text-align:center; }
+    .pkg-goal th { background:#f1f1f6; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#5b5b6e; }
+    .pkg-goal td.new { font-weight:700; color:#2563eb; } .pkg-goal td.hold { color:#8a8a99; }
+    .pkg-goal tr.now td { background:#eef4ff; } .pkg-goal .ok { color:#15803d; font-weight:700; } .pkg-goal .wait { color:#b45309; font-weight:700; }
     .pkg-note { font-size:13px; color:#5b5b6e; font-style:italic; margin:6px 0 0; }
     .pkg-preview { background:#fff7e0; border-bottom:1px solid #e8d48a; color:#6b5200; padding:10px 24px; font-size:14px; text-align:center; font-weight:600; }
     .pkg-terms h3 { margin:16px 0 4px; font-size:15px; } .pkg-terms p { font-size:13.5px; line-height:1.55; margin:4px 0; }
@@ -66,7 +72,49 @@ function reportPart(input: PackageInput): string {
   return `<div class="pkg-part" id="report"><section><h2 class="part">1. SEO Report</h2></section>${customerReportBody(input.run, input.tasks, input.evidence, input.pages ?? [])}</div>`;
 }
 
-function strategyPart(s: Strategy): string {
+// Target goal achievement M0..M12 (agreed milestones). A milestone month is where the target steps up; the months in
+// between hold the last target. M0 is the baseline (today's measured value); M11-M12 hold the final target.
+const GOAL_DA: Record<number, number> = { 1: 20, 2: 30, 3: 40, 5: 50, 7: 60, 9: 70 };
+const GOAL_DR: Record<number, number> = { 1: 20, 2: 30, 4: 40, 6: 50, 8: 60, 10: 70 };
+
+function measured(evidence: AuditEvidence[], key: 'da' | 'dr'): number | null {
+  try {
+    const row = collectMetrics(evidence).find((r) => r.key === key);
+    for (const c of row?.cells ?? []) {
+      const n = parseMetric(c.value);
+      if (n != null) return n;
+    }
+  } catch {
+    /* no usable evidence */
+  }
+  return null;
+}
+
+function goalTable(monthIndex: number | null, evidence: AuditEvidence[]): string {
+  const actualDa = measured(evidence, 'da');
+  const actualDr = measured(evidence, 'dr');
+  let da = 0;
+  let dr = 0;
+  const rows: string[] = [];
+  for (let m = 0; m <= 12; m++) {
+    const newDa = GOAL_DA[m] != null;
+    const newDr = GOAL_DR[m] != null;
+    if (newDa) da = GOAL_DA[m];
+    if (newDr) dr = GOAL_DR[m];
+    const isNow = monthIndex === m;
+    const cell = (v: number, isNew: boolean, actual: number | null) => {
+      if (m === 0) return `<td>${actual != null ? 'Baseline ' + actual : 'Baseline'}</td>`;
+      const tag = isNow && actual != null ? ` <span class="${actual >= v ? 'ok' : 'wait'}">${actual >= v ? '&#10003; achieved' : 'now ' + actual}</span>` : '';
+      return `<td class="${isNew ? 'new' : 'hold'}">${v}${tag}</td>`;
+    };
+    rows.push(`<tr class="${isNow ? 'now' : ''}"><td>M${m}${isNow ? ' (this month)' : ''}</td>${cell(da, newDa, actualDa)}${cell(dr, newDr, actualDr)}</tr>`);
+  }
+  return `<h3>Target goal achievement (M0 &ndash; M12)</h3>
+    <table class="pkg-goal"><thead><tr><th>Month</th><th>Domain Authority (DA) target</th><th>Domain Rating (DR) target</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+    <p class="pkg-note">Bold = the month the target steps up; grey = the previous target is held. M0 is today's baseline. Targets are goals, not guarantees (see Terms &amp; Conditions, section 4).</p>`;
+}
+
+function strategyPart(s: Strategy, monthIndex: number | null, evidence: AuditEvidence[]): string {
   const targets = SCOPE_TARGETS.map((t) => {
     const note = s.targets.find((x) => x.label === t.label)?.note ?? '';
     return `<div class="pkg-target"><div class="lab">${e(t.label)}</div><div class="big">${e(t.target)}</div>${note ? `<div class="pkg-note">${e(note)}</div>` : ''}</div>`;
@@ -85,6 +133,7 @@ function strategyPart(s: Strategy): string {
     ${s.currentPosition.length ? `<h3>Where you stand today</h3>${ul(s.currentPosition)}` : ''}
     <h3>Targets</h3><div class="pkg-targets">${targets}</div>
     <p class="pkg-note">Targets are goals we work towards. They are not guarantees (see Terms &amp; Conditions, section 4).</p>
+    ${goalTable(monthIndex, evidence)}
     <h3>Priorities</h3>${priorities}
     ${plan ? `<h3>Action plan</h3>${plan}` : ''}
     ${s.kpis.length ? `<h3>How we measure progress</h3>${ul(s.kpis)}` : ''}
@@ -149,7 +198,7 @@ ${packageStyle()}
   </div></header>
   <nav class="pkg-toc"><a href="#report">1. SEO Report</a><a href="#strategy">2. SEO Strategy</a><a href="#deliverables">3. Deliverables</a><a href="#terms">4. Terms &amp; Conditions</a></nav>
   ${reportPart(input)}
-  ${strategyPart(input.strategy)}
+  ${strategyPart(input.strategy, input.monthIndex, input.evidence)}
   ${deliverablesPart(input.monthIndex)}
   ${termsPart(input.signedAt ?? new Date())}
   <footer class="brand-footer">${e(COMPANY_FOOTER)}</footer>
