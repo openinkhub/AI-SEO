@@ -141,8 +141,13 @@
       '</div><div class="group-save-row"><button type="button" class="secondary" id="notifSaveBtn">Save to Proceed further</button>' +
       ' <span id="notifMsg" class="msg"></span></div></div>';
     html += '<form id="onbForm">';
+    var GOOGLE_NOTE = '<div class="profile-field wide" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.6;color:#1e3a8a">' +
+      '<b>Give Google access to both addresses below</b> (Manager or Admin where the product offers it, otherwise add them as a user), then enter the IDs in the fields.<br>' +
+      '1. <b>openink.in@gmail.com</b> - Search Console, GA4, Tag Manager, Google Ads, Merchant Center, Ad Manager, Business Profile and YouTube.<br>' +
+      '2. <b>keyword-planner@openink-hub-1785436666839.iam.gserviceaccount.com</b> - Search Console (Restricted user) and GA4 (Viewer).</div>';
     ProfileFields.PROFILE_FIELD_GROUPS.forEach(function(group, gi){
-      html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">';
+      html += '<div class="profile-group" data-group-index="' + gi + '"><h3>' + escapeHtml(group.title) + '</h3><div class="profile-grid">' +
+        (group.title === 'Google & Analytics IDs' ? GOOGLE_NOTE : '');
       group.fields.forEach(function(f){
         var key = f[0], label = f[1];
         var raw = profile[key];

@@ -143,6 +143,7 @@ export class EmailService {
     const loginText = account.username
       ? `\n\nYour username: ${account.username}\nYou can also sign in with your email address.${account.loginUrl ? '\nLog in: ' + account.loginUrl : ''}`
       : '';
+    const GOOGLE_TEXT = '\n\nGoogle access: in the "Google & Analytics IDs" section, give access to both addresses (Manager or Admin where available, otherwise add as a user):\n1. openink.in@gmail.com - Search Console, GA4, Tag Manager, Google Ads, Merchant Center, Ad Manager, Business Profile, YouTube\n2. keyword-planner@openink-hub-1785436666839.iam.gserviceaccount.com - Search Console (Restricted user) and GA4 (Viewer)';
     // resend = an admin sending the link again so the customer can finish or
     // update the profile. The form opens pre-filled with what is already saved.
     return this.deliver({
@@ -152,8 +153,8 @@ export class EmailService {
         : 'Welcome to Openink Hub - complete your business profile',
       html: this.renderOnboardingHtml(companyName, onboardingUrl, resend, account),
       text: resend
-        ? `Hello!\n\nPlease review and complete your business profile here:\n${onboardingUrl}\n\nThe details we already have are filled in. Update anything and save - no field is mandatory.\n\nThis link is unique to your account - no need to create a separate login.${loginText}`
-        : `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}\n\nThis link is unique to your account - no need to create a separate login.${loginText}`,
+        ? `Hello!\n\nPlease review and complete your business profile here:\n${onboardingUrl}\n\nThe details we already have are filled in. Update anything and save - no field is mandatory.${GOOGLE_TEXT}\n\nThis link is unique to your account - no need to create a separate login.${loginText}`
+        : `Welcome to Openink Hub!\n\nComplete your business profile here:\n${onboardingUrl}${GOOGLE_TEXT}\n\nThis link is unique to your account - no need to create a separate login.${loginText}`,
     });
   }
 
@@ -234,6 +235,11 @@ export class EmailService {
               </a>
             </p>
             ${loginHtml}
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="background:#eff6ff;border-radius:6px;padding:14px 16px;font-size:13px;line-height:1.6;color:#1e3a8a;">
+              <b>Google access.</b> In the "Google &amp; Analytics IDs" section, give access to both addresses (Manager or Admin where available, otherwise add as a user):<br>
+              1. <b>openink.in@gmail.com</b> - Search Console, GA4, Tag Manager, Google Ads, Merchant Center, Ad Manager, Business Profile, YouTube<br>
+              2. <b>keyword-planner@openink-hub-1785436666839.iam.gserviceaccount.com</b> - Search Console (Restricted user) and GA4 (Viewer)
+            </td></tr></table>
             <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0;">
               This link is unique to your account - no separate login needed. You can come back
               and update these details any time.
