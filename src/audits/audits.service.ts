@@ -1,3 +1,4 @@
+import { LayersService } from '../layers/layers.service';
 import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -111,6 +112,7 @@ export class AuditsService implements OnModuleInit {
     @InjectRepository(WebsitePage) private readonly pageRepo: Repository<WebsitePage>,
     @InjectRepository(LibraryImage) private readonly imageRepo: Repository<LibraryImage>,
     private readonly email: EmailService,
+    private readonly layers: LayersService,
   ) {}
 
   // The customer's website pages for the report's "Website pages" list (page, URL, H1 keyword, meta tags).
@@ -146,6 +148,7 @@ export class AuditsService implements OnModuleInit {
       startedAt: new Date(),
     });
     run = await this.runRepo.save(run);
+    if (rule.monthIndex != null) await this.layers.setByMonth(customerId, rule.monthIndex, 3, 'in_progress').catch(() => undefined);
 
     let analysis: TechnicalAnalysis | null = null;
     let failureReason: string | null = null;
@@ -333,12 +336,20 @@ export class AuditsService implements OnModuleInit {
       run.enrichStatus = status;
       run.enrichNote = note;
       await this.runRepo.save(run);
+      const cyc = await this.cycleForRun(run);
+      if (cyc.monthIndex != null) await this.layers.setByMonth(customerId, cyc.monthIndex, 3, status === 'done' ? 'done' : 'blocked').catch(() => undefined);
       // The pages list in the report shows what Layer 3 (Page mapping) already holds; the research run never fetches pages.
       await this.rebuildReports(customerId, runId);
       if (status === 'done') await this.notifyReportReady(customerId, runId);
     } catch {
       // the run may have been removed; nothing to update
     }
+  }
+
+  // True when any audit run (even a failed one) was created today - the automation must not retry a failed run all day.
+  async attemptedToday(customerId: string): Promise<boolean> {
+    const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' }, take: 1 });
+    return !!runs[0] && dateInTz(runs[0].createdAt) === todayInTz();
   }
 
   async ruleStatus(customerId: string): Promise<AuditRuleStatus> {
