@@ -1,5 +1,5 @@
 import { LayersService } from '../layers/layers.service';
-import { ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AuditRun, AuditRunStatus } from './audit-run.entity';
@@ -139,6 +139,14 @@ export class AuditsService implements OnModuleInit {
     const instant = dto.instant === true;
     if (!instant && !rule.canRun) throw new ForbiddenException(rule.reason);
     if (instant && !rule.canInstant) throw new ForbiddenException(rule.unlockDate ? `An instant report can only be run before the scheduled day. The scheduled audit for ${rule.monthCode} unlocked on ${rule.unlockDate} (Day 3).` : 'An instant report needs an active month cycle (it can only be run before Day 3 of the cycle).');
+
+    // One audit at a time per cycle: a second click while the first is still scanning / researching would repeat every paid API call.
+    const existingRuns = await this.runRepo.find({ where: { customerId } });
+    const stallMs = (Number(process.env.ENRICH_STALL_MINUTES) || 20) * 60000;
+    const busy = existingRuns.find(
+      (r) => (!rule.projectId || r.projectId === rule.projectId) && (r.status === AuditRunStatus.RUNNING || r.enrichStatus === 'running') && Date.now() - new Date(r.updatedAt).getTime() < stallMs,
+    );
+    if (busy) throw new ConflictException(`An audit for ${rule.monthCode ?? 'this customer'} is already running (started ${dateInTz(busy.createdAt)}). Wait until it finishes before starting another.`);
 
     const skills = getAllAuditSkills();
     let run = this.runRepo.create({
