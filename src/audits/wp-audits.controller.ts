@@ -46,7 +46,8 @@ export class WpAuditsController {
       if (!isNaN(idx)) {
         const mine = [];
         for (const r of runs) if ((await this.service.cycleForRun(r)).monthIndex === idx) mine.push(r);
-        run = (mine.find((r) => !r.failureReason && r.status !== ('failed' as any)) ?? mine[0]) as any;
+        const ok = (r: any) => !r.failureReason && r.status !== ('failed' as any);
+        run = (mine.find((r) => ok(r) && !r.instant) ?? mine.find(ok) ?? mine[0]) as any;
       }
     }
     if (!run) return { run: null, findings: [] };

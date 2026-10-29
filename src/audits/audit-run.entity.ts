@@ -39,6 +39,10 @@ export class AuditRun {
   @Column({ type: 'varchar', length: 16, nullable: true })
   monthCode: string | null;
 
+  // Instant report: run by an admin outside the Day-3 / once-per-cycle rule. Does not use up the cycle's scheduled audit.
+  @Column({ default: false })
+  instant: boolean;
+
   @Column({ default: 0 })
   totalSkills: number;
 

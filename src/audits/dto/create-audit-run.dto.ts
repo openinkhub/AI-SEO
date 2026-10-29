@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class CreateAuditRunDto {
   // Optional override of the Customer's stored website — lets an agency
@@ -6,4 +6,9 @@ export class CreateAuditRunDto {
   @IsOptional()
   @IsString()
   website?: string;
+
+  // Instant report: skip the Day-3 lock and the once-per-cycle limit (admin button).
+  @IsOptional()
+  @IsBoolean()
+  instant?: boolean;
 }

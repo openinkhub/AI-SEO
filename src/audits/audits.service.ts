@@ -135,7 +135,8 @@ export class AuditsService implements OnModuleInit {
     const customer = await this.customersService.findOne(customerId);
     const website = dto.website ?? customer.website ?? '';
     const rule = await this.ruleStatus(customerId);
-    if (!rule.canRun) throw new ForbiddenException(rule.reason);
+    const instant = dto.instant === true;
+    if (!instant && !rule.canRun) throw new ForbiddenException(rule.reason);
 
     const skills = getAllAuditSkills();
     let run = this.runRepo.create({
@@ -143,12 +144,13 @@ export class AuditsService implements OnModuleInit {
       website,
       projectId: rule.projectId,
       monthCode: rule.monthCode,
+      instant,
       status: AuditRunStatus.RUNNING,
       totalSkills: skills.length,
       startedAt: new Date(),
     });
     run = await this.runRepo.save(run);
-    if (rule.monthIndex != null) await this.layers.setByMonth(customerId, rule.monthIndex, 3, 'in_progress').catch(() => undefined);
+    if (!instant && rule.monthIndex != null) await this.layers.setByMonth(customerId, rule.monthIndex, 3, 'in_progress').catch(() => undefined);
 
     let analysis: TechnicalAnalysis | null = null;
     let failureReason: string | null = null;
@@ -337,10 +339,10 @@ export class AuditsService implements OnModuleInit {
       run.enrichNote = note;
       await this.runRepo.save(run);
       const cyc = await this.cycleForRun(run);
-      if (cyc.monthIndex != null) await this.layers.setByMonth(customerId, cyc.monthIndex, 3, status === 'done' ? 'done' : 'blocked').catch(() => undefined);
+      if (!run.instant && cyc.monthIndex != null) await this.layers.setByMonth(customerId, cyc.monthIndex, 3, status === 'done' ? 'done' : 'blocked').catch(() => undefined);
       // The pages list in the report shows what Layer 3 (Page mapping) already holds; the research run never fetches pages.
       await this.rebuildReports(customerId, runId);
-      if (status === 'done') await this.notifyReportReady(customerId, runId);
+      if (status === 'done' && !run.instant) await this.notifyReportReady(customerId, runId);
     } catch {
       // the run may have been removed; nothing to update
     }
@@ -348,7 +350,7 @@ export class AuditsService implements OnModuleInit {
 
   // True when any audit run (even a failed one) was created today - the automation must not retry a failed run all day.
   async attemptedToday(customerId: string): Promise<boolean> {
-    const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' }, take: 1 });
+    const runs = await this.runRepo.find({ where: { customerId, instant: false }, order: { createdAt: 'DESC' }, take: 1 });
     return !!runs[0] && dateInTz(runs[0].createdAt) === todayInTz();
   }
 
@@ -378,6 +380,7 @@ export class AuditsService implements OnModuleInit {
     const unlocked = today >= unlockDate;
     const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' } });
     const used = runs.find((r) => {
+      if (r.instant) return false; // an instant report never uses up the cycle's scheduled audit
       if (r.status === AuditRunStatus.FAILED || r.failureReason) return false;
       if (r.projectId) return r.projectId === cur.id;
       const d = dateInTz(r.createdAt);
