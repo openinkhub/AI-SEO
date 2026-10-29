@@ -86,7 +86,7 @@ export const SCOPE_SECTIONS: ScopeSection[] = [
     title: 'Social Media Optimization',
     ongoing: true,
     items: [
-      { title: 'Platforms Covered', monthly: '6', text: 'Facebook, Instagram, Threads, YouTube, LinkedIn, and Twitter.' },
+      { title: 'Platforms Covered', monthly: '5', text: 'Facebook, Instagram, YouTube, LinkedIn, and Twitter.' },
       { title: 'Scope', text: 'Only Primary Profile Optimization — focus on Banner, Logo, Heading, Description, and Profile NAP (Name, Address, Phone) consistency.' },
       { title: 'Brand Analysis', monthly: '1', text: 'Analysis of your brand presence across social platforms to generate a Brand Audit Report.' },
     ],
