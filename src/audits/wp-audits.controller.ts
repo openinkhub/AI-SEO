@@ -34,11 +34,21 @@ export class WpAuditsController {
   }
 
   // Latest run + its real (automated) findings; null run when none yet.
+  // ?month=M3 returns that Month Cycle's audit (every cycle keeps its own run; none is overwritten).
   @Get('latest')
-  async latest(@Param('wpUserId') wpUserId: string) {
+  async latest(@Param('wpUserId') wpUserId: string, @Query('month') month?: string) {
     const customerId = await this.customerId(wpUserId);
     const runs = await this.service.findAllForCustomer(customerId);
-    const run = runs[0];
+    let run = runs[0];
+    if (month) {
+      const idx = parseInt(String(month).replace(/^m/i, ''), 10);
+      run = undefined as any;
+      if (!isNaN(idx)) {
+        const mine = [];
+        for (const r of runs) if ((await this.service.cycleForRun(r)).monthIndex === idx) mine.push(r);
+        run = (mine.find((r) => !r.failureReason && r.status !== ('failed' as any)) ?? mine[0]) as any;
+      }
+    }
     if (!run) return { run: null, findings: [] };
     const tasks = await this.service.listTasks(customerId, run.id);
     return {
