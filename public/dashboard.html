@@ -1652,6 +1652,12 @@
         resBlkBtn.disabled = true;
         api('/customers/' + state.cid + '/audits/' + r.id + '/enrich?mode=blocked', { method: 'POST' }).then(function(){ loadRuns(); }).catch(function(err){ resBlkBtn.disabled = false; alert('Could not start research: ' + err.message); });
       });
+      var delBtn = document.getElementById('delrun-' + r.id);
+      if (delBtn) delBtn.addEventListener('click', function(){
+        if (!confirm('Delete this audit run permanently? Its tasks, uploaded evidence, package and report are removed and cannot be restored.')) return;
+        delBtn.disabled = true;
+        api('/customers/' + state.cid + '/audits/' + r.id, { method: 'DELETE' }).then(function(){ delete state.expanded[r.id]; return loadRuns(); }).then(function(){ return loadRule(); }).catch(function(err){ delBtn.disabled = false; alert('Could not delete: ' + err.message); });
+      });
       var refreshBtn = document.getElementById('refresh-' + r.id);
       if (refreshBtn) refreshBtn.addEventListener('click', function(){ loadRuns(); });
     });
@@ -1683,6 +1689,7 @@
     html += '<button id="research-' + r.id + '"' + (r.status !== 'completed' || r.enrichStatus === 'running' ? ' disabled' : '') + '>Run research</button>';
     html += '<button id="research-blocked-' + r.id + '" title="Collect only the sources that still have blocked or waiting tasks"' + (r.status !== 'completed' || r.enrichStatus === 'running' ? ' disabled' : '') + '>Run blocked only</button>';
     html += '<button id="package-' + r.id + '">' + (panel === 'package' ? 'Hide package' : 'Package') + '</button>';
+    html += '<button class="btn-danger" id="delrun-' + r.id + '" title="Delete this audit run with its tasks, evidence and package">Delete</button>';
     html += '</div></div><div id="panel-' + r.id + '"></div></div>';
     return html;
   }

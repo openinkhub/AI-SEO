@@ -358,6 +358,38 @@ export class AuditsService implements OnModuleInit {
     }
   }
 
+  // Admin clean-up: removes one run with its tasks, layer pushes, evidence (and stored screenshots) and package.
+  // A run that is still scanning / researching is refused. Layer 3 goes back to pending when no other run is left in that cycle.
+  async deleteRun(customerId: string, runId: string): Promise<{ deleted: boolean }> {
+    const run = await this.findOne(customerId, runId);
+    const stallMs = (Number(process.env.ENRICH_STALL_MINUTES) || 20) * 60000;
+    if ((run.status === AuditRunStatus.RUNNING || run.enrichStatus === 'running') && Date.now() - new Date(run.updatedAt).getTime() < stallMs) {
+      throw new ConflictException('This audit is still running. Wait until it finishes, then delete it.');
+    }
+    const cyc = await this.cycleForRun(run);
+    const images = await this.evidenceRepo.find({ where: { auditRunId: runId, kind: 'image' } });
+    for (const row of images) {
+      try {
+        const filename = (row.storageKey ?? row.url ?? '').split('/').pop() ?? '';
+        await this.storage.remove(customerId, filename, row.storageKey, 'audit-evidence');
+      } catch {
+        // a missing stored file must not block the clean-up
+      }
+    }
+    await this.evidenceRepo.delete({ auditRunId: runId });
+    await this.taskRepo.delete({ auditRunId: runId });
+    await this.pushRepo.delete({ auditRunId: runId });
+    await this.packageRepo.delete({ auditRunId: runId });
+    await this.runRepo.delete({ id: runId });
+    if (cyc.monthIndex != null) {
+      const left = (await this.runRepo.find({ where: { customerId } }));
+      let any = false;
+      for (const r of left) if ((await this.cycleForRun(r)).monthIndex === cyc.monthIndex && !r.failureReason) any = true;
+      if (!any) await this.layers.setByMonth(customerId, cyc.monthIndex, 3, 'pending').catch(() => undefined);
+    }
+    return { deleted: true };
+  }
+
   // True when any audit run (even a failed one) was created today - the automation must not retry a failed run all day.
   async attemptedToday(customerId: string): Promise<boolean> {
     const runs = await this.runRepo.find({ where: { customerId }, order: { createdAt: 'DESC' }, take: 1 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditsService } from './audits.service';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
@@ -37,6 +37,12 @@ export class AuditsController {
   // ?mode=blocked collects only the sources that still have unfinished (blocked / waiting) tasks.
   enrich(@Param('customerId') customerId: string, @Param('runId') runId: string, @Query('mode') mode?: string) {
     return this.service.startEnrich(customerId, runId, mode === 'blocked');
+  }
+
+  // Remove one audit run with everything stored under it (admin clean-up, e.g. a duplicate run).
+  @Delete(':runId')
+  remove(@Param('customerId') customerId: string, @Param('runId') runId: string) {
+    return this.service.deleteRun(customerId, runId);
   }
 
   @Get(':runId')
