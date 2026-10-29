@@ -361,11 +361,23 @@ export class AuditsService implements OnModuleInit {
     const enforced = process.env.AUDIT_ENFORCE_CYCLE_RULE !== 'off';
     const today = todayInTz();
     const projects = await this.projectRepo.find({ where: { customerId } });
-    const cur = projects.find((p) => {
+    let cur = projects.find((p) => {
       const a = ymd(p.monthStartDate);
       const b = ymd(p.monthEndDate);
       return !!a && !!b && a <= today && today <= b;
     });
+    // Before the first cycle has started (e.g. the account was created today and M0 begins tomorrow) the next upcoming
+    // cycle is used, so an instant report can still be run before its Day 3.
+    let upcoming = false;
+    if (!cur) {
+      const next = projects
+        .filter((p) => !!ymd(p.monthStartDate) && !!ymd(p.monthEndDate) && (ymd(p.monthStartDate) as string) > today)
+        .sort((x, y) => (ymd(x.monthStartDate) as string).localeCompare(ymd(y.monthStartDate) as string))[0];
+      if (next) {
+        cur = next;
+        upcoming = true;
+      }
+    }
     const base = { canInstant: !enforced, enforced, today, projectId: null, monthCode: null, monthIndex: null, monthStart: null, monthEnd: null, unlockDate: null, unlocked: false, runExists: false, existingRunId: null as string | null };
     if (!cur) {
       return {
@@ -388,8 +400,9 @@ export class AuditsService implements OnModuleInit {
       return d >= monthStart && d <= monthEnd;
     });
     let reason = `${cur.monthCode}: the SEO Audit can run now (once per cycle).`;
+    const instantHint = ' An instant report can be run until then.';
     if (used) reason = `The SEO Audit for ${cur.monthCode} has already been run. It runs once per month cycle; the next one unlocks on Day 3 of the next cycle.`;
-    else if (!unlocked) reason = `The SEO Audit for ${cur.monthCode} unlocks on ${unlockDate} (Day 3 of the cycle).`;
+    else if (!unlocked) reason = `${upcoming ? `${cur.monthCode} starts on ${monthStart}. ` : ''}The SEO Audit for ${cur.monthCode} unlocks on ${unlockDate} (Day 3 of the cycle).${instantHint}`;
     return {
       enforced,
       today,
