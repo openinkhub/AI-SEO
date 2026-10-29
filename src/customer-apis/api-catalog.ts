@@ -80,16 +80,6 @@ export const API_PROVIDERS: ApiProvider[] = [
     usedBy: 'SEO Audit (automatic, each function separately): SiteProfiler overview / backlinks / competitors / top content, LinkMiner, AI Search Watcher. Layer 11-12 keyword validation.', testable: true, wired: true, required: true,
   },
   {
-    key: 'ahrefs', label: 'Ahrefs (free Domain Rating)', group: 'Research & SERP data',
-    description: 'Free Domain Rating API (Ahrefs API v3 key from Account settings > API keys). Shows the site’s Domain Rating next to its competitors. Credit: Domain Rating by Ahrefs.',
-    fields: [
-      key('API v3 key'),
-      { name: 'ahDomainRating', label: 'Domain Rating card (0 = off, blank = on)', secret: false, number: true, optional: true },
-      { name: 'ahDrCompetitors', label: 'Competitors to compare: max (0 = none, blank = 5)', secret: false, number: true, optional: true },
-    ],
-    usedBy: 'SEO Audit (automatic): Domain Rating of the site and its named competitors; feeds the authority and competitor tasks.', testable: true, wired: true,
-  },
-  {
     key: 'geekflare', label: 'Geekflare', group: 'Site analysis',
     description: 'Competitor-page extraction, Lighthouse and technical checks.',
     fields: [key()], usedBy: 'Layer 12 competitor extraction, Layer 13 content-gap evidence, technical / Core Web Vitals checks.', testable: false, wired: false,
@@ -104,11 +94,6 @@ export const API_PROVIDERS: ApiProvider[] = [
     description: 'Renders JavaScript-only (SPA) customer sites so real pages and menu names can be found.',
     fields: [key('API key (token)'), { name: 'endpoint', label: 'Region endpoint (optional, blank = default)', secret: false, optional: true, placeholder: 'https://production-sfo.browserless.io' }],
     usedBy: 'Page Image Library fetch on SPA sites.', testable: false, wired: false,
-  },
-  {
-    key: 'pagespeed', label: 'Google PageSpeed Insights', group: 'Site analysis',
-    description: 'Lighthouse scores and Core Web Vitals for the customer’s site.',
-    fields: [key()], usedBy: 'Added automatically to every SEO Audit run.', testable: true, wired: true, required: true,
   },
   {
     key: 'google_ids', label: 'Google properties (common account)', group: 'Google',
@@ -168,6 +153,21 @@ export const GLOBAL_API_PROVIDERS: ApiProvider[] = [
     ],
     usedBy: 'SEO Audit (automatic, every customer): Domain Authority of the site and its named competitors; feeds the authority and competitor tasks. Target: Domain Authority 60+.', testable: true, wired: true,
     oneOfSets: [['apiToken'], ['accessId', 'secretKey']],
+  },
+  {
+    key: 'ahrefs', label: 'Ahrefs (free Domain Rating)', group: 'Authority metrics',
+    description: 'Free Domain Rating API (Ahrefs API v3 key from Account settings > API keys). Shows the site’s Domain Rating next to its competitors. Credit: Domain Rating by Ahrefs.',
+    fields: [
+      key('API v3 key'),
+      { name: 'ahDomainRating', label: 'Domain Rating card (0 = off, blank = on)', secret: false, number: true, optional: true },
+      { name: 'ahDrCompetitors', label: 'Competitors to compare: max (0 = none, blank = 5)', secret: false, number: true, optional: true },
+    ],
+    usedBy: 'SEO Audit (automatic, every customer): Domain Rating of the site and its named competitors; feeds the authority and competitor tasks.', testable: true, wired: true,
+  },
+  {
+    key: 'pagespeed', label: 'Google PageSpeed Insights', group: 'Site analysis',
+    description: 'Lighthouse scores and Core Web Vitals for each customer’s site (one key for all customers).',
+    fields: [key()], usedBy: 'Added automatically to every SEO Audit run (every customer).', testable: true, wired: true,
   },
   ...(
     [

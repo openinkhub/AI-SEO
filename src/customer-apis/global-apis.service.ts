@@ -96,6 +96,29 @@ export class GlobalApisService {
         msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
       }
     }
+    if (p.key === 'pagespeed') {
+      try {
+        const q = new URLSearchParams({ url: 'https://example.com', key: vals.apiKey, category: 'seo', strategy: 'mobile' });
+        const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(45000) });
+        const b: any = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(b?.error?.message || `HTTP ${res.status}`);
+        msg = 'Key works - PageSpeed responded.';
+      } catch (err) {
+        ok = false;
+        msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
+      }
+    }
+    if (p.key === 'ahrefs') {
+      try {
+        const res = await fetch('https://api.ahrefs.com/v3/public/domain-rating-free?target=ahrefs.com&output=json', { headers: { Authorization: `Bearer ${vals.apiKey}`, Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+        const b: any = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'Ahrefs rejected the API key.' : b?.error || `HTTP ${res.status}`);
+        msg = 'Key works - Ahrefs Domain Rating API responded.';
+      } catch (err) {
+        ok = false;
+        msg = (err instanceof Error ? err.message : 'Test failed').slice(0, 250);
+      }
+    }
     if (p.key === 'google_ai') {
       try {
         const res = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(vals.apiKey)}`, { signal: AbortSignal.timeout(20000) });

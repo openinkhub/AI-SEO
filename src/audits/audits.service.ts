@@ -436,8 +436,15 @@ export class AuditsService implements OnModuleInit {
     } catch {
       keys = {};
     }
-    if (!keys.pagespeed && !have.has('pagespeed')) skipped.push('PageSpeed: no API key set for this customer');
-    if (keys.pagespeed && !have.has('pagespeed')) {
+    let globalKeys: Record<string, Record<string, string>> = {};
+    try {
+      globalKeys = await this.globals.getKeys();
+    } catch {
+      globalKeys = {};
+    }
+    const pagespeed = globalKeys.pagespeed;
+    if (!pagespeed?.apiKey && !have.has('pagespeed')) skipped.push('PageSpeed: no PageSpeed key in the global API settings');
+    if (pagespeed?.apiKey && !have.has('pagespeed')) {
       const url = /^https?:\/\//i.test(website) ? website : `https://${website}`;
       const row = this.evidenceRepo.create({
         customerId,
@@ -452,7 +459,7 @@ export class AuditsService implements OnModuleInit {
         status: 'approved',
       });
       try {
-        row.extracted = (await runPageSpeed(url, keys.pagespeed.apiKey)) as unknown as Record<string, any>;
+        row.extracted = (await runPageSpeed(url, pagespeed.apiKey)) as unknown as Record<string, any>;
       } catch (err) {
         row.status = 'failed';
         row.error = `PageSpeed: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);
@@ -479,12 +486,6 @@ export class AuditsService implements OnModuleInit {
         else row.error = (r.error ?? 'failed').slice(0, 250);
         out.push(await this.evidenceRepo.save(row));
       }
-    }
-    let globalKeys: Record<string, Record<string, string>> = {};
-    try {
-      globalKeys = await this.globals.getKeys();
-    } catch {
-      globalKeys = {};
     }
     const moz = globalKeys.moz;
     if (!have.has('moz')) {
@@ -516,11 +517,12 @@ export class AuditsService implements OnModuleInit {
       }
       out.push(await this.evidenceRepo.save(row));
     }
+    const ahrefs = globalKeys.ahrefs;
     if (!have.has('ahrefs')) {
-      if (!keys.ahrefs?.apiKey) skipped.push('Ahrefs DR: no Ahrefs key set for this customer');
-      else if ((keys.ahrefs.ahDomainRating ?? '').trim() === '0') skipped.push('Ahrefs DR: switched off in this customer\'s API settings');
+      if (!ahrefs?.apiKey) skipped.push('Ahrefs DR: no Ahrefs key in the global API settings');
+      else if ((ahrefs.ahDomainRating ?? '').trim() === '0') skipped.push('Ahrefs DR: switched off in the global API settings');
     }
-    if (!have.has('ahrefs') && keys.ahrefs?.apiKey && (keys.ahrefs.ahDomainRating ?? '').trim() !== '0') {
+    if (!have.has('ahrefs') && ahrefs?.apiKey && (ahrefs.ahDomainRating ?? '').trim() !== '0') {
       const row = this.evidenceRepo.create({
         customerId,
         auditRunId: runId,
@@ -535,10 +537,10 @@ export class AuditsService implements OnModuleInit {
       });
       try {
         const customer = await this.customersService.findOne(customerId);
-        const rawMax = (keys.ahrefs.ahDrCompetitors ?? '').trim();
+        const rawMax = (ahrefs.ahDrCompetitors ?? '').trim();
         const max = rawMax === '' ? 5 : Math.min(Math.max(parseInt(rawMax, 10) || 0, 0), 20);
         const comps = Array.isArray(customer.competitors) ? customer.competitors.slice(0, max) : [];
-        row.extracted = (await ahrefsDomainRating(keys.ahrefs.apiKey, website, comps)) as unknown as Record<string, any>;
+        row.extracted = (await ahrefsDomainRating(ahrefs.apiKey, website, comps)) as unknown as Record<string, any>;
       } catch (err) {
         row.status = 'failed';
         row.error = `Ahrefs: ${err instanceof Error ? err.message : 'failed'}`.slice(0, 250);

@@ -134,24 +134,11 @@ export class CustomerApisService {
 
   private async liveTest(key: string, v: Values): Promise<string> {
     const sig = AbortSignal.timeout(20000);
-    if (key === 'pagespeed') {
-      const q = new URLSearchParams({ url: 'https://example.com', key: v.apiKey, category: 'seo', strategy: 'mobile' });
-      const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(45000) });
-      const b: any = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(b?.error?.message || `HTTP ${res.status}`);
-      return 'Key works - PageSpeed responded.';
-    }
     if (key === 'mangools') {
       const res = await fetch('https://api.mangools.com/v3/kwfinder/limits', { headers: { 'x-access-token': v.apiKey, Accept: 'application/json' }, signal: sig });
       const b: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(b?.error?.message || `HTTP ${res.status}`);
       return 'Key works - Mangools responded.';
-    }
-    if (key === 'ahrefs') {
-      const res = await fetch('https://api.ahrefs.com/v3/public/domain-rating-free?target=ahrefs.com&output=json', { headers: { Authorization: `Bearer ${v.apiKey}`, Accept: 'application/json' }, signal: sig });
-      const b: any = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'Ahrefs rejected the API key.' : b?.error || `HTTP ${res.status}`);
-      return 'Key works - Ahrefs Domain Rating API responded.';
     }
     if (key === 'serpapi') {
       const res = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(v.apiKey)}`, { signal: sig });
