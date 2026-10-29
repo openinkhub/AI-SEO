@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { buildExtractionPrompt, KNOWN_TYPES } from './aitdk-rules';
+import { aiModel, logAiUsage } from '../ai-usage';
 
 export interface ImageExtraction {
   type: string;
@@ -16,7 +17,7 @@ export function extractorConfigured(): boolean {
 export async function extractFromImage(buffer: Buffer, mime: string, tool?: string | null): Promise<ImageExtraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server, so screenshots cannot be read yet.');
-  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
+  const model = aiModel('evidence-reader');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -43,7 +44,9 @@ export async function extractFromImage(buffer: Buffer, mime: string, tool?: stri
   const body = (await res.json().catch(() => ({}))) as {
     content?: Array<{ type: string; text?: string }>;
     error?: { message?: string };
+    usage?: { input_tokens?: number; output_tokens?: number };
   };
+  logAiUsage('evidence-reader', model, body.usage);
   if (!res.ok) {
     const msg = body?.error?.message || `HTTP ${res.status}`;
     logger.warn(`Anthropic call failed: ${msg}`);

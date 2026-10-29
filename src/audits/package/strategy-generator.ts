@@ -133,16 +133,19 @@ Reply with ONLY a JSON object of this exact shape:
 {"executiveSummary":"3-5 sentences","currentPosition":["short bullet",...],"targets":[{"label":"Domain Authority","note":"how this month moves toward it"},{"label":"Domain Rating","note":"..."},{"label":"AI Overview","note":"..."}],"priorities":[{"area":"...","title":"...","why":"...","actions":["..."],"when":"Week 1-2"}],"plan":[{"period":"Week 1","focus":"...","actions":["..."]}],"risks":["..."],"kpis":["..."]}`;
 }
 
+import { aiModel, logAiUsage } from '../ai-usage';
+
 export async function generateStrategyWithAi(input: StrategyInput): Promise<Strategy> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server.');
-  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
+  const model = aiModel('strategy');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model, max_tokens: 6000, messages: [{ role: 'user', content: buildPrompt(input) }] }),
   });
-  const body = (await res.json().catch(() => ({}))) as { content?: Array<{ type: string; text?: string }>; error?: { message?: string } };
+  const body = (await res.json().catch(() => ({}))) as { content?: Array<{ type: string; text?: string }>; error?: { message?: string }; usage?: { input_tokens?: number; output_tokens?: number } };
+  logAiUsage('strategy', model, body.usage);
   if (!res.ok) {
     const msg = body?.error?.message || `HTTP ${res.status}`;
     logger.warn(`Strategy call failed: ${msg}`);
