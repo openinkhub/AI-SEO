@@ -19,6 +19,7 @@ import {
   StrategyInput,
   strategyAiConfigured,
 } from './strategy-generator';
+import { compareToGoal, measuredAuthority } from './goals';
 
 export interface Gate {
   key: string;
@@ -138,8 +139,18 @@ export class PackageService {
       compiled: !!row.html,
       aiConfigured: strategyAiConfigured(),
       gates,
+      // INTERNAL ONLY (admin): this month's planned DA / DR pace vs the measured numbers. Not part of any customer document.
+      goalCheck: await this.goalCheck(customerId, runId),
       canCompile: gates.every((g) => g.ok),
     };
+  }
+
+  async goalCheck(customerId: string, runId: string) {
+    const run = await this.audits.findOne(customerId, runId);
+    const cycle = await this.audits.cycleForRun(run);
+    const evidence = await this.evidenceRepo.find({ where: { customerId, auditRunId: runId } });
+    const m = measuredAuthority(evidence);
+    return compareToGoal(cycle.monthIndex, m.da, m.dr);
   }
 
   private async buildInput(customerId: string, runId: string): Promise<StrategyInput> {
@@ -171,6 +182,7 @@ export class PackageService {
       monthIndex: cycle.monthIndex,
       findings,
       evidence,
+      internalGoal: compareToGoal(cycle.monthIndex, measuredAuthority(evidenceRows).da, measuredAuthority(evidenceRows).dr),
     };
   }
 

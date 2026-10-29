@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { GoalCheck } from './goals';
 import { SCOPE_SECTIONS, SCOPE_TARGETS, scopeAsPromptText } from './service-scope';
 
 const logger = new Logger('StrategyGenerator');
@@ -23,6 +24,16 @@ export interface StrategyInput {
   monthIndex?: number | null;
   findings: Array<{ finding: string; suggestion: string | null }>;
   evidence: Array<{ tool: string; type: string; summary: string }>;
+  // Internal pace check (confidential month-by-month DA / DR plan vs the measured numbers). Never printed to the customer.
+  internalGoal?: GoalCheck | null;
+}
+
+const TARGETS_TEXT = SCOPE_TARGETS.map((t) => `${t.label} ${t.target}`).join(', ');
+
+function paceText(g?: GoalCheck | null): string {
+  if (!g || g.baseline) return 'This is the starting month (baseline): no pace target applies yet.';
+  const n = (v: number | null) => (v == null ? 'n/a' : String(v));
+  return `Planned pace this month: DA ${n(g.targetDa)}, DR ${n(g.targetDr)}. Measured: DA ${n(g.actualDa)}, DR ${n(g.actualDr)}. Status: ${g.status}.`;
 }
 
 export function strategyAiConfigured(): boolean {
@@ -103,11 +114,15 @@ ${findings || '(no automated findings)'}
 TOOL EVIDENCE (approved or extracted from the tools the team ran)
 ${evidence || '(none)'}
 
+INTERNAL PACE CHECK (confidential)
+${paceText(input.internalGoal)}
+Use it ONLY to decide how hard to push authority building this month (if behind, front-load backlink, syndication and content actions; if on track or ahead, keep the pace). NEVER write these pace numbers or any month-by-month DA / DR targets in the output. Only the final goal may be stated: ${TARGETS_TEXT}.
+
 RULES
 - Never promise or guarantee rankings, traffic or revenue. Targets are goals, not guarantees.
 - Every priority must name one "area" taken exactly from this list: ${AREAS.join(' | ')}.
 - Do not plan website designing, development, implementation or publishing of site changes (indicative only); phrase these as recommendations the client's team implements.
-- Prioritise by impact on the three targets (Domain Authority 60+, Domain Rating 60%+, AI Overview 40%+).
+- Prioritise by impact on the three targets (${TARGETS_TEXT}).
 - 4 to 7 priorities, a 4-week plan (period "Week 1".."Week 4"), 3 to 5 risks, 4 to 6 KPIs.
 
 Reply with ONLY a JSON object of this exact shape:
@@ -182,11 +197,16 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
     actions:
       input.monthIndex === 0
         ? ['Complete the 300 backlink submissions for the starting month.', 'Confirm the 30 target pages and keyword mapping.']
-        : ['Publish the month’s AI-assisted, human-edited blogs against the mapped keywords.', 'Syndicate each blog to the 30 premium sites.', 'Continue backlink submissions.'],
+        : [
+            'Publish the month’s AI-assisted, human-edited blogs against the mapped keywords.',
+            'Syndicate each blog to the 30 premium sites.',
+            'Continue backlink submissions.',
+            ...(input.internalGoal?.status === 'behind' ? ['Increase authority-building effort this month (more premium syndication and backlink outreach) to get back on the planned pace.'] : []),
+          ],
     when: 'Week 1-4',
   });
   return {
-    executiveSummary: `This strategy turns the SEO audit of ${input.website || input.companyName} into this month’s plan. The audit found ${input.findings.length} item${input.findings.length === 1 ? '' : 's'} to act on. The plan fixes technical and on-page issues first, then builds authority and AI-search visibility, aiming at Domain Authority 60+, Domain Rating 60%+ and AI Overview 40%+. These are goals, not guarantees.`,
+    executiveSummary: `This strategy turns the SEO audit of ${input.website || input.companyName} into this month’s plan. The audit found ${input.findings.length} item${input.findings.length === 1 ? '' : 's'} to act on. The plan fixes technical and on-page issues first, then builds authority and AI-search visibility, aiming at ${TARGETS_TEXT.replace(/, ([^,]*)$/, ' and $1')}. These are goals, not guarantees.`,
     currentPosition: input.findings.slice(0, 6).map((f) => f.finding.slice(0, 300)),
     targets: SCOPE_TARGETS.map((t) => ({ ...t, note: '' })),
     priorities,

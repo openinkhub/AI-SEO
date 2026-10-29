@@ -15,8 +15,8 @@ export interface ScopeSection {
 }
 
 export const SCOPE_TARGETS: Array<{ label: string; target: string }> = [
-  { label: 'Domain Authority', target: '60+' },
-  { label: 'Domain Rating', target: '60%+' },
+  { label: 'Domain Authority', target: '70 by M10' },
+  { label: 'Domain Rating', target: '70 by M10' },
   { label: 'AI Overview', target: '40%+' },
 ];
 
