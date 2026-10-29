@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { GoalCheck } from './goals';
 import { SCOPE_SECTIONS, SCOPE_TARGETS, scopeAsPromptText } from './service-scope';
+import { GEO_FACTS, geoKnowledgeAsPromptText } from './geo-knowledge';
 
 const logger = new Logger('StrategyGenerator');
 
@@ -103,10 +104,13 @@ Website: ${input.website}
 Industry: ${input.industry || 'not provided'}
 About: ${input.description || 'not provided'}
 Competitors: ${input.competitors || 'not provided'}
-Month cycle: ${input.monthCode || 'unknown'}${input.monthIndex === 0 ? ' (starting month: no blog published, 300 backlink submissions)' : ''}
+Month cycle: ${input.monthCode || 'unknown'}
 
 AGREED SERVICE SCOPE (only plan work inside this scope)
 ${scopeAsPromptText(input.monthIndex ?? null)}
+
+AI-SEARCH KNOWLEDGE BASE (general industry findings from Openink Hub, NOT data about this client; use them to choose and justify AEO / GEO / AIO actions, and never present them as the client's own numbers)
+${geoKnowledgeAsPromptText()}
 
 SEO AUDIT FINDINGS
 ${findings || '(no automated findings)'}
@@ -162,18 +166,17 @@ export async function generateStrategyWithAi(input: StrategyInput): Promise<Stra
 
 // No-model fallback: a sound first draft built from the findings and the service scope. The admin edits it.
 const AREA_KEYWORDS: Array<{ area: string; re: RegExp }> = [
-  { area: 'Strategy & Technical Foundation', re: /speed|vital|lcp|cls|mobile|ssl|https|robots|sitemap|canonical|redirect|crawl|index|broken|404|viewport|compress|cache/i },
-  { area: 'On-Page & AI-Driven Content Optimization', re: /title|meta|description|heading|h1|h2|alt|image|content|word|keyword|schema|structured|faq|link/i },
+  { area: 'Strategy & Technical Foundation', re: /speed|vital|lcp|cls|mobile|ssl|https|robots|sitemap|canonical|redirect|crawl|index|broken|404|viewport|compress|cache|title|meta|description|heading|h1|h2|alt|image|link/i },
+  { area: 'Brand Authority & AI Driven Content Optimization', re: /content|word|keyword|schema|structured|faq|blog|backlink|authority|domain rating|referring|profile|brand mention/i },
   { area: 'Advanced Search Optimization (AEO, GEO, AIO & CXO)', re: /\bai\b|geo|aeo|llm|answer|citation|chatgpt|perplexity|llms\.txt/i },
   { area: 'Local SEO & Business Visibility', re: /local|business profile|gbp|nap|map/i },
-  { area: 'Off Page SEO & Brand Authority', re: /backlink|authority|domain rating|referring|profile|brand mention/i },
 ];
 
 export function ruleBasedStrategy(input: StrategyInput): Strategy {
   const groups = new Map<string, Array<{ finding: string; suggestion: string | null }>>();
   for (const f of input.findings) {
     const hit = AREA_KEYWORDS.find((k) => k.re.test(`${f.finding} ${f.suggestion ?? ''}`));
-    const area = hit?.area ?? 'On-Page & AI-Driven Content Optimization';
+    const area = hit?.area ?? 'Strategy & Technical Foundation';
     groups.set(area, [...(groups.get(area) ?? []), f]);
   }
   const priorities: Strategy['priorities'] = [];
@@ -191,19 +194,23 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
     });
   }
   priorities.push({
-    area: 'Off Page SEO & Brand Authority',
-    title: input.monthIndex === 0 ? 'Build the starting authority base' : 'Publish and syndicate this month’s blogs',
+    area: 'Brand Authority & AI Driven Content Optimization',
+    title: 'Deliver this month’s ongoing activities',
     why: 'Authority and fresh, keyword-mapped content move Domain Authority and Domain Rating the most.',
-    actions:
-      input.monthIndex === 0
-        ? ['Complete the 300 backlink submissions for the starting month.', 'Confirm the 30 target pages and keyword mapping.']
-        : [
-            'Publish the month’s AI-assisted, human-edited blogs against the mapped keywords.',
-            'Syndicate each blog to the 30 premium sites.',
-            'Continue backlink submissions.',
-            ...(input.internalGoal?.status === 'behind' ? ['Increase authority-building effort this month (more premium syndication and backlink outreach) to get back on the planned pace.'] : []),
-          ],
+    actions: [
+      'Publish the 30 website blogs mapped to your keywords and optimize the 30 target webpages.',
+      'Publish on the 30 premium platforms and across the 18 social platforms.',
+      'Complete the 300 backlink submissions.',
+      ...(input.internalGoal?.status === 'behind' ? ['Increase authority-building effort this month (more premium syndication and backlink outreach) to get back on the planned pace.'] : []),
+    ],
     when: 'Week 1-4',
+  });
+  priorities.push({
+    area: 'Advanced Search Optimization (AEO, GEO, AIO & CXO)',
+    title: 'Make the site easy for AI search to read and cite',
+    why: 'AI assistants and Google AI Overviews cite pages that are easy to crawl, clearly structured and backed by named sources.',
+    actions: GEO_FACTS.filter((g) => ['crawlers', 'llms', 'sameas', 'overviews', 'passage', 'statistics', 'bing'].includes(g.key)).map((g) => g.action),
+    when: 'Week 2-4',
   });
   return {
     executiveSummary: `This strategy turns the SEO audit of ${input.website || input.companyName} into this month’s plan. The audit found ${input.findings.length} item${input.findings.length === 1 ? '' : 's'} to act on. The plan fixes technical and on-page issues first, then builds authority and AI-search visibility, aiming at ${TARGETS_TEXT.replace(/, ([^,]*)$/, ' and $1')}. These are goals, not guarantees.`,

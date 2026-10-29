@@ -25,6 +25,7 @@ import { EmailModule } from '../email/email.module';
 import { LibraryImage } from '../page-images/library-image.entity';
 import { LayersModule } from '../layers/layers.module';
 import { AuditAutomation } from './audit-automation';
+import { StrategyKnowledgeController } from './package/strategy-knowledge.controller';
 
 @Module({
   imports: [
@@ -37,6 +38,6 @@ import { AuditAutomation } from './audit-automation';
     MulterModule.register({}),
   ],
   providers: [AuditsService, EvidenceService, PackageService, WpApiKeyGuard, WpClientService, AuditAutomation],
-  controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController],
+  controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController, StrategyKnowledgeController],
 })
 export class AuditsModule {}

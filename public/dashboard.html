@@ -238,6 +238,7 @@
       layers: [26, 27, 29] },
     { key: 'local', label: 'Local SEO', subs: [['gmb-audit', 'GMB Audit'], ['gmb-profile', 'GMB Profile']], layers: [70, 71, 72] },
     { key: 'international', label: 'International SEO', subs: [], layers: [] },
+    { key: 'strategy', label: 'Strategy', subs: [], layers: [] },
     { key: 'api-settings', label: 'API Settings (all customers)', subs: [], layers: [] },
     { key: 'global-settings', label: 'Global API Settings', subs: [], layers: [] },
     { key: 'social', label: 'Social Media', subs: [['social-blog', 'Social Blog'], ['social-analytics', 'Social Analytics'], ['social-post', 'Social Post']],
@@ -409,6 +410,7 @@
     var page = document.getElementById('page');
     if (parseRoute().sec.key === 'api-settings') return renderApiOverview();
     if (parseRoute().sec.key === 'global-settings') return renderGlobalApis();
+    if (parseRoute().sec.key === 'strategy') return renderStrategyKnowledge();
     var cust = curCustomer();
     if (!cust) {
       page.innerHTML = '<div class="card empty"><h2>No customer selected</h2>' +
@@ -1848,6 +1850,21 @@
 
 
   // ---- Global API settings (one key set for all customers; admin only) ----
+  // Strategy: the AI-search knowledge base fed into every monthly SEO Strategy (one list, kept in the Engine).
+  function renderStrategyKnowledge() {
+    var page = document.getElementById('page');
+    page.innerHTML = pageHead('Strategy', 'AI-search knowledge base · all customers · admin only') +
+      '<div class="card"><p class="lead">General AI-search (AEO / GEO / AIO) findings that the strategy writer uses for every customer’s monthly SEO Strategy, in the AI-written draft and in the rules-based draft. They are industry guidance, not measurements of one customer, so the strategy turns them into actions and does not quote them as the customer’s own numbers.</p><div id="strategyBody"><p class="muted">Loading…</p></div></div>';
+    api('/strategy-knowledge').then(function(d){
+      var b = document.getElementById('strategyBody');
+      if (!b) return;
+      var facts = (d && d.facts) || [];
+      b.innerHTML = '<table><thead><tr><th style="width:4%">#</th><th style="width:48%">Finding</th><th>What the strategy does with it</th></tr></thead><tbody>' +
+        facts.map(function(f, i){ return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(f.fact) + '</td><td>' + escapeHtml(f.action) + '</td></tr>'; }).join('') +
+        '</tbody></table>';
+    }).catch(function(err){ var b = document.getElementById('strategyBody'); if (b) b.innerHTML = '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p>'; });
+  }
+
   var globalState = { items: [] };
 
   function renderGlobalApis() {
