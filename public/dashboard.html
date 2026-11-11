@@ -1862,6 +1862,18 @@
       b.innerHTML = '<table><thead><tr><th style="width:4%">#</th><th style="width:48%">Finding</th><th>What the strategy does with it</th></tr></thead><tbody>' +
         facts.map(function(f, i){ return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(f.fact) + '</td><td>' + escapeHtml(f.action) + '</td></tr>'; }).join('') +
         '</tbody></table>';
+      var rm = (d && d.roadmap) || {};
+      var li = function(arr){ return (arr || []).map(function(a){ return '&bull; ' + escapeHtml(a); }).join('<br>'); };
+      b.innerHTML += '<h3 style="margin:24px 0 6px">AI Visibility Roadmap (6 months)</h3><p class="muted">The four-phase plan behind each customer’s AI-visibility work. The strategy writer places every month’s actions on the right phase.</p>' +
+        '<table><thead><tr><th style="width:12%">Phase</th><th style="width:11%">When</th><th>Key activities</th><th style="width:22%">Deliverables</th></tr></thead><tbody>' +
+        (rm.phases || []).map(function(p){ return '<tr><td><strong>' + escapeHtml(p.name) + '</strong></td><td>' + escapeHtml(p.timeline) + '</td><td>' + li(p.activities) + '</td><td>' + li(p.deliverables) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        '<h3 style="margin:24px 0 6px">Three work streams</h3><table><tbody>' +
+        (rm.workstreams || []).map(function(w){ return '<tr><td style="width:20%"><strong>' + escapeHtml(w.name) + '</strong></td><td>' + li(w.points) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        '<h3 style="margin:24px 0 6px">How it is measured (every month, same prompt set)</h3><table><thead><tr><th>Metric</th><th>Definition</th><th>How often</th></tr></thead><tbody>' +
+        (rm.kpis || []).map(function(k){ return '<tr><td><strong>' + escapeHtml(k.metric) + '</strong></td><td>' + escapeHtml(k.definition) + '</td><td>' + escapeHtml(k.frequency) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        '<p class="muted" style="margin-top:10px">' + (rm.expectations || []).map(escapeHtml).join('<br>') + '</p>' +
+        '<h3 style="margin:24px 0 6px">Prompt library (filled in per customer on every audit)</h3><table><thead><tr><th>ID</th><th>Type</th><th>Buyer stage</th><th>Prompt template</th></tr></thead><tbody>' +
+        (rm.prompts || []).map(function(p){ return '<tr><td>' + escapeHtml(p.id) + '</td><td>' + escapeHtml(p.category) + '</td><td>' + escapeHtml(p.stage) + '</td><td>' + escapeHtml(p.template) + '</td></tr>'; }).join('') + '</tbody></table>';
     }).catch(function(err){ var b = document.getElementById('strategyBody'); if (b) b.innerHTML = '<p class="muted">Failed to load: ' + escapeHtml(err.message) + '</p>'; });
   }
 

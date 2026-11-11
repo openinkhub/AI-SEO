@@ -6,6 +6,8 @@ import { LIVE_SOURCES, SOURCE_LABEL, SourceKey, TASK_SOURCE } from './task-map';
 import { crawlSite } from './site-crawl';
 import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runGscResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
+import { auditLocationPages } from './location-pages';
+import { buildPromptSet } from '../package/ai-roadmap';
 import { collectMetrics, metricsSummary } from '../evidence/metrics';
 
 // Evidence rows that feed each source (the Mangools function cards are produced earlier in the run).
@@ -15,9 +17,9 @@ const FEEDS: Partial<Record<SourceKey, string[]>> = {
   site_ai: ['site_crawl', 'pagespeed_report', 'aitdk_meta', 'aitdk_technical', 'aitdk_density', 'aitdk_social', 'aitdk_structured_data', 'seoquake_audit', 'seoanalyzer_summary', 'seoanalyzer_tab', 'ppcblogpro_summary', 'ppcblogpro_report', 'digispot_dashboard', 'digispot_report', 'seomator_geo_audit'],
   keywords: ['research_keywords', 'aitdk_density', 'aitdk_serp'],
   competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating', 'moz_authority', 'mangools_siteprofiler'],
-  backlinks: ['moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer', 'mangools_siteprofiler', 'aitdk_backlinks', 'aitdk_traffic'],
-  visibility: ['mangools_ai_watcher', 'frase_ai_visibility', 'aitdk_geo_section', 'seomator_geo_audit'],
-  local: ['research_local'],
+  backlinks: ['backlink_tracker', 'moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer', 'mangools_siteprofiler', 'aitdk_backlinks', 'aitdk_traffic'],
+  visibility: ['ai_prompt_tracker', 'research_ai_prompts', 'mangools_ai_watcher', 'frase_ai_visibility', 'aitdk_geo_section', 'seomator_geo_audit'],
+  local: ['research_local', 'research_location_pages', 'location_links', 'location_monthly', 'location_checklist'],
   pagespeed: ['pagespeed_report'],
   fetch: ['site_crawl', 'screenshots'],
   gsc: ['gsc_performance'],
@@ -52,6 +54,30 @@ function withTimeout<T>(p: Promise<T>, label: string, ms = STEP_TIMEOUT_MS): Pro
   return Promise.race([p, timer]).finally(() => clearTimeout(t));
 }
 
+const asArr = (v: unknown): string[] => (Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[,;\n]+/) : []).map((x) => String(x).trim()).filter(Boolean);
+
+// Cities / service areas on the customer profile (comma separated or a list).
+function locationsOf(i: ResearchInput): string[] {
+  const p = i.profile ?? {};
+  return [...new Set([p.city, p.target_location, p.service_area, p.service_areas, p.locations].flatMap(asArr))].filter((x) => x.length > 1).slice(0, 12);
+}
+
+// The customer's own set of buyer prompts (from the AI Visibility Prompt Tracker library) for the monthly AI answer test.
+function promptSetResearch(i: ResearchInput): Research[] {
+  const p = i.profile ?? {};
+  const service = [...asArr(p.products_services), ...asArr(p.seed_keywords), ...(i.industry ? [i.industry] : [])][0] ?? '';
+  const city = locationsOf(i)[0] ?? '';
+  if (!i.companyName || !service) return [];
+  const prompts = buildPromptSet({ brand: i.companyName, service, city, audience: asArr(p.target_audience ?? p.audience)[0] ?? '', problem: asArr(p.main_problem ?? p.customer_problem)[0] ?? '', competitors: i.competitors });
+  return [{ type: 'research_ai_prompts', tool: 'tracker', label: 'AI visibility prompt set', data: { brand: i.companyName, service, city, prompts, how: 'Run these prompts every month on ChatGPT, Claude, Perplexity, Gemini, Google AI Overviews and Copilot. Record each answer (mentioned, cited, position, sentiment, competitors, sources) in the AI Visibility Prompt Tracker, then upload that sheet as a .csv to add the results to this audit.' } }];
+}
+
+// The write-up needs the crawl's summary, scores, issues and site checks, not 500 page rows (cost and size).
+function forWriter(type: string, d: any): any {
+  if (type !== 'site_crawl' || !d || !Array.isArray(d.issues)) return d;
+  return { ...d, pages: undefined, brokenLinks: (d.brokenLinks ?? []).slice(0, 10), issues: d.issues.slice(0, 25).map((i: any) => ({ ...i, examples: (i.examples ?? []).slice(0, 2) })) };
+}
+
 export type EnrichProgress = (message: string) => Promise<void> | void;
 
 export interface EnrichOptions {
@@ -74,7 +100,17 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     }
   };
   const runners: Array<[SourceKey, () => Promise<Research[]>]> = [
-    ['site_ai', async () => [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: (await crawlSite(site)) as unknown as Record<string, any> }]],
+    [
+      'site_ai',
+      async () => {
+        const crawl = await crawlSite(site);
+        const out: Research[] = [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: crawl as unknown as Record<string, any> }];
+        const locs = locationsOf(input);
+        if (locs.length) out.push({ type: 'research_location_pages', tool: 'sitescan', label: 'Location pages', data: auditLocationPages(crawl.pages, locs) as unknown as Record<string, any> });
+        return out;
+      },
+    ],
+    ['visibility', async () => promptSetResearch(input)],
     ['keywords', () => runKeywordResearch(input)],
     ['competitors', () => runCompetitorResearch(input)],
     ['local', () => runLocalResearch(input)],
@@ -123,7 +159,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
           evidence: Object.fromEntries(rows.map((r) => [r.evidenceType, JSON.stringify(r.extracted).slice(0, 1800)])),
           taskResults: tasks.filter((t) => t.isAutomated && t.finding && TASK_SOURCE[t.skillId] !== 'ai').slice(0, 45).map((t) => `${t.skill}: ${String(t.finding).slice(0, 180)}`),
         }
-      : Object.fromEntries(rows.map((r) => [r.evidenceType, r.extracted]));
+      : Object.fromEntries(rows.map((r) => [r.evidenceType, forWriter(r.evidenceType, r.extracted)]));
     // Authority / traffic / backlink numbers from every source side by side, so the write-up quotes each one by name.
     if (!isAi && (src === 'backlinks' || src === 'competitors')) {
       const cmp = metricsSummary(collectMetrics(rows));
@@ -131,7 +167,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     }
     try {
       const written = await withTimeout(
-        writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : {}),
+        writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : src === 'site_ai' ? { maxChars: 16000 } : {}),
         `${SOURCE_LABEL[src]} write-up`,
         15 * 60 * 1000,
       );

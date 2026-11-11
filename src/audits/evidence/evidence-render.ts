@@ -352,6 +352,10 @@ function renderMoz(d: Record<string, any>): string {
 }
 
 function renderCrawl(d: Record<string, any>): string {
+  return Array.isArray(d.issues) ? renderCrawlDeep(d) : renderCrawlLegacy(d);
+}
+
+function renderCrawlLegacy(d: Record<string, any>): string {
   const f = (v: any) => (v == null ? '' : String(v));
   let h = kvTable([
     ['Pages checked', d.pagesChecked],
@@ -463,6 +467,129 @@ function renderDigispotDashboard(d: Record<string, any>): string {
   return h || '<p class="empty">Nothing could be read from this image.</p>';
 }
 
+// ---- deep site crawl, tracker sheets, AI prompt set, location pages ---------------------------------------
+
+function sevTag(s: string): string {
+  return `<span class="ev-tag ${s === 'critical' ? 'critical' : s === 'warning' ? 'warn' : 'minor'}">${esc(s === 'critical' ? 'Fix first' : s === 'warning' ? 'Should fix' : 'Nice to fix')}</span>`;
+}
+const yn = (v: any): string => (v === true ? 'Yes' : v === false ? 'No' : v == null ? 'Could not check' : String(v));
+
+function renderCrawlDeep(d: Record<string, any>): string {
+  const f = (v: any) => (v == null ? '' : String(v));
+  const sc = d.scores ?? {};
+  let h = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0">${scoreTile('Technical', sc.technical)}${scoreTile('On-page', sc.onPage)}${scoreTile('Structured data', sc.structuredData)}${scoreTile('AI search readiness', sc.aiReadiness)}</div>`;
+  const s = d.summary ?? {};
+  h += kvTable([
+    ['Pages crawled', `${d.pagesChecked}${d.crawl?.stoppedEarly ? ' (stopped at the time limit)' : d.crawl?.discoveredNotCrawled ? ` (limit ${d.crawl.limit}; ${d.crawl.discoveredNotCrawled} more found)` : ''}`],
+    ['Indexable pages', s.indexablePages],
+    ['Pages with errors (4xx / 5xx)', s.status4xx5xx],
+    ['Redirecting URLs / redirect chains', `${f(s.redirectedPages)} / ${f(s.redirectChains)}`],
+    ['Orphan pages (no internal links)', s.orphanPages],
+    ['Pages with duplicate body text', s.duplicateContentPages],
+    ['Average words per page', s.avgWords],
+    ['Average time to load the HTML', s.avgResponseMs != null ? `${s.avgResponseMs} ms` : null],
+    ['Images without alt text', d.imagesTotal ? `${d.imagesMissingAlt} of ${d.imagesTotal}` : null],
+    ['Pages listed in the sitemap / crawled pages missing from it', `${f(s.sitemapUrls)} / ${f(s.pagesNotInSitemap)}`],
+  ]);
+  const issues = (d.issues ?? []) as Array<Record<string, any>>;
+  if (issues.length) {
+    h += `<h4>What to fix (${issues.length} issues found, biggest first)</h4>` + grid(['Priority', 'Area', 'Issue', 'Pages', 'Examples', 'How to fix'], issues.slice(0, 30).map((i) => [sevTag(String(i.severity)), i.area, i.title, f(i.count), (i.examples ?? []).slice(0, 2).map((e: string) => e.slice(0, 80)), i.fix]));
+  }
+  const sc2 = d.siteChecks ?? {};
+  if (sc2.https) {
+    h += '<h4>Site-wide checks</h4>' + kvTable([
+      ['Served over HTTPS', yn(sc2.https.usesHttps)],
+      ['HTTP redirects to HTTPS', yn(sc2.https.httpRedirectsToHttps)],
+      ['www / non-www resolve to one version', yn(sc2.https.wwwConsistent)],
+      ['HSTS security header', yn(sc2.https.hsts)],
+      ['robots.txt present / blocks the whole site', `${yn(sc2.robots?.exists)} / ${yn(sc2.robots?.blocksEverything)}`],
+      ['XML sitemap found', sc2.sitemap?.found ? `Yes (${sc2.sitemap.total} URLs${sc2.sitemap.indexFile ? ', sitemap index' : ''}; declared in robots.txt: ${yn(sc2.sitemap.declaredInRobots)})` : 'No'],
+      ['llms.txt (AI site map)', sc2.llmsTxt?.exists ? `Yes${sc2.llmsTxt.wellFormed ? '' : ' (format needs work)'}${sc2.llmsTxt.fullVersion ? ', plus llms-full.txt' : ''}` : 'No'],
+      ['Unknown URLs return a real 404', yn(sc2.notFound?.correct404)],
+      ['Compression / caching header', `${f(sc2.headers?.compression) || 'none'} / ${yn(sc2.headers?.cacheControl)}`],
+      ['Security headers (nosniff, frame protection, referrer policy)', [sc2.headers?.xContentTypeOptions, sc2.headers?.frameProtection, sc2.headers?.referrerPolicy].filter(Boolean).length + ' of 3'],
+      ['Google / Bing verification tag on homepage', `${yn(sc2.verification?.google)} / ${yn(sc2.verification?.bing)}`],
+      ['IndexNow', sc2.indexNow],
+    ]);
+    const ai = (sc2.robots?.aiCrawlers ?? []) as Array<Record<string, any>>;
+    if (ai.length) h += '<h4>Can AI tools read the site? (robots.txt)</h4>' + grid(['AI crawler', 'Company', 'Used for', 'Access'], ai.map((c) => [c.agent, c.owner, c.purpose, c.allowed ? 'Allowed' : 'Blocked']));
+  }
+  const a = d.aiReadiness;
+  if (a) {
+    h += `<h4>AI search readiness: ${esc(a.score)}/100</h4>` + kvTable([
+      ['AI crawler access', a.crawlerAccess], ['Content readable without JavaScript', a.serverRendered], ['llms.txt', a.llmsTxt], ['Pages with structured data', a.pagesWithSchema],
+      ['Organization schema links to other profiles (sameAs)', yn(a.organizationSameAs)], ['Pages with FAQ content', a.faqPages], ['Pages that open with a short direct answer', a.answerFirstPages],
+      ['Pages with question-style headings', a.questionHeadingPages], ['Pages with specific numbers / statistics', a.pagesWithStats], ['Pages showing an author', a.authorPages], ['Pages showing a date', a.datedPages],
+    ]);
+  }
+  const pages = ((d.pages ?? []) as Array<Record<string, any>>);
+  if (pages.length) {
+    const bad = (p: Record<string, any>) => (p.status !== 200 ? 3 : 0) + (!p.title ? 1 : 0) + (!p.metaDescription ? 1 : 0) + (!(p.h1 ?? []).length ? 1 : 0) + (p.words < 300 ? 1 : 0) + ((p.schemaTypes ?? []).length ? 0 : 1) + ((p.schemaErrors ?? []).length ? 1 : 0);
+    const worst = [...pages].sort((x, y) => bad(y) - bad(x)).slice(0, 30);
+    h += `<h4>Pages with the most problems (${worst.length} of ${pages.length})</h4>` + grid(['Page', 'Status', 'Title', 'Meta', 'H1', 'Words', 'Schema'], worst.map((x) => [x.url, f(x.status ?? 'no response'), f(x.titleLength), f(x.metaLength), (x.h1 ?? []).length ? 'Yes' : 'Missing', f(x.words), (x.schemaTypes ?? []).join(', ')]));
+  }
+  const b = (d.brokenLinks ?? []) as Array<Record<string, any>>;
+  if (b.length) h += '<h4>Broken links</h4>' + grid(['Link', 'Result', 'Found on'], b.map((x) => [x.url, f(x.status), x.foundOn]));
+  if ((d.notes ?? []).length) h += '<p class="ev-src">' + (d.notes as string[]).map((n) => esc(n)).join(' ') + '</p>';
+  return h;
+}
+
+const findingsList = (d: Record<string, any>): string => ((d.findings ?? []) as string[]).length ? '<h4>What this shows</h4><ul class="ev-list">' + (d.findings as string[]).map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>' : '';
+const mixGrid = (mix: Array<Record<string, any>>): string => grid(['Anchor type', 'Links', 'Actual', 'Target', 'Gap'], (mix ?? []).map((m) => [m.type, m.count, `${m.actualPct}%`, `${m.targetPct}%`, `${m.gap > 0 ? '+' : ''}${m.gap} pts`]));
+
+function renderBacklinkTracker(d: Record<string, any>): string {
+  const t = d.totals ?? {};
+  let h = kvTable([
+    ['Backlinks tracked', t.entered], ['Referring domains', t.referringDomains], ['Marked live', t.live], ['DoFollow / NoFollow / Sponsored / UGC', `${t.doFollow} / ${t.noFollow} / ${t.sponsored} / ${t.ugc}`],
+    ['Indexed in Google (reported)', t.indexed], ['No index evidence', t.noIndexEvidence], ['Quality: Strong / Moderate / Review', `${t.strong} / ${t.moderate} / ${t.review}`], ['Checked live by Openink Hub', d.verified ? 'Yes - each page was opened and the link looked for' : 'No'],
+  ]);
+  h += findingsList(d);
+  h += '<h4>Anchor text mix</h4>' + mixGrid(d.anchorMix);
+  const rows = (d.rows ?? []) as Array<Record<string, any>>;
+  if (rows.length) {
+    h += '<h4>Backlinks</h4>' + grid(['Page linking to you', 'Anchor', 'Live (sheet)', 'Live check', 'Follow type', 'Indexed', 'DA / DR', 'Quality'], rows.slice(0, 40).map((r) => [r.pageUrl, r.anchor, r.live, r.check ? (r.check.live ? 'Link found' : r.check.note) : '', r.check?.attribute ?? r.attribute, r.indexed, `${r.da ?? '-'} / ${r.dr ?? '-'}`, r.quality]));
+  }
+  return h;
+}
+
+function renderPromptTracker(d: Record<string, any>): string {
+  const o = d.overall ?? {};
+  let h = kvTable([['Answers tested', o.tested], ['Brand mentioned', `${o.mentions} (${o.mentionRate}%)`], ['Brand cited with a link', `${o.citations} (${o.citationRate}%)`], ['Test dates', d.dates?.first ? `${d.dates.first} to ${d.dates.last}` : null]]);
+  h += findingsList(d);
+  h += '<h4>By AI platform</h4>' + grid(['Platform', 'Tested', 'Mentions', 'Mention rate', 'Citations', 'Citation rate', 'Positive / Neutral / Negative'], (d.platforms ?? []).map((p: any) => [p.platform, p.tested, p.mentions, `${p.mentionRate}%`, p.citations, `${p.citationRate}%`, `${p.positive} / ${p.neutral} / ${p.negative}`]));
+  if ((d.shareOfVoice ?? []).length) h += '<h4>Share of voice (brands named in the answers)</h4>' + grid(['Brand', 'Mentions', 'Share'], d.shareOfVoice.map((s: any) => [s.brand, s.mentions, `${s.share}%`]));
+  if ((d.topSources ?? []).length) h += '<h4>Sources the AI answers cite</h4>' + grid(['Site', 'Times cited'], d.topSources.map((s: any) => [s.domain, s.count]));
+  if ((d.gaps ?? []).length) h += '<h4>Prompts where the brand is never named</h4>' + grid(['Prompt', 'Question', 'Brands named instead'], d.gaps.map((g: any) => [g.promptId, g.prompt, g.competitors]));
+  return h;
+}
+
+function renderLocationTracker(d: Record<string, any>): string {
+  if (d.kind === 'location_links') {
+    let h = kvTable([['Link prospects', d.prospects], ['Published links', d.published], ['By status', Object.entries(d.byStatus ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ')]]);
+    h += findingsList(d) + '<h4>Anchor text mix (published links)</h4>' + mixGrid(d.anchorMix);
+    return h;
+  }
+  if (d.kind === 'location_monthly') {
+    return findingsList(d) + '<h4>Monthly review</h4>' + grid(['Month', 'Rank', 'Impressions', 'Clicks', 'New backlinks', 'Reviews gained'], (d.months ?? []).map((m: any) => [m.month, m.rank ?? '', m.impressions ?? '', m.clicks ?? '', m.newBacklinks ?? '', m.reviews ?? '']));
+  }
+  let h = kvTable([['Tasks done', `${d.done} of ${d.total} (${d.progress}%)`]]) + findingsList(d);
+  h += '<h4>Progress by phase</h4>' + grid(['Phase', 'Done', 'Total'], (d.byPhase ?? []).map((p: any) => [p.phase, p.done, p.total]));
+  if ((d.open ?? []).length) h += '<h4>Still to do</h4>' + grid(['Phase', 'Task', 'Status', 'Owner'], d.open.map((t: any) => [t.phase, t.task, t.status, t.owner]));
+  return h;
+}
+
+function renderAiPrompts(d: Record<string, any>): string {
+  return kvTable([['Brand', d.brand], ['Service', d.service], ['City', d.city]]) + '<h4>Prompt set for the monthly AI visibility test</h4>' + grid(['ID', 'Type', 'Buyer stage', 'Prompt'], (d.prompts ?? []).map((p: any) => [p.id, p.category, p.stage, p.prompt])) + `<p class="ev-src">${esc(d.how ?? '')}</p>`;
+}
+
+function renderLocationPages(d: Record<string, any>): string {
+  let h = '';
+  const locs = (d.locations ?? []) as Array<Record<string, any>>;
+  if (locs.length) h += '<h4>Location pages</h4>' + grid(['Location', 'Page', 'Score', 'Still missing'], locs.map((l) => [l.location, l.page, `${l.score}/100`, (l.missing ?? []).join('; ')]));
+  if ((d.withoutPage ?? []).length) h += `<p>No page on the site clearly targets: <strong>${esc(d.withoutPage.join(', '))}</strong>. Each service area needs its own page.</p>`;
+  return h || '<p class="empty">No service areas are set on the customer profile.</p>';
+}
+
 function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
@@ -480,11 +607,18 @@ function labelFor(type: string): string {
   if (type === 'mangools_linkminer') return 'Link metrics for key pages (Mangools LinkMiner)';
   if (type === 'mangools_ai_watcher') return 'AI search visibility (Mangools AI Search Watcher)';
   if (type === 'ppcblogpro_report') return 'SEO / AEO / GEO page checks';
+  if (type === 'backlink_tracker') return 'Backlink audit (tracker sheet)';
+  if (type === 'ai_prompt_tracker') return 'AI visibility prompt tracker';
+  if (type === 'location_links') return 'Location page: link outreach tracker';
+  if (type === 'location_monthly') return 'Location page: monthly ranking review';
+  if (type === 'location_checklist') return 'Location page: to-do checklist';
+  if (type === 'research_ai_prompts') return 'AI visibility prompt set';
+  if (type === 'research_location_pages') return 'Location page check';
   return EVIDENCE_RULES.find((r) => r.type === type)?.label ?? 'Tool data';
 }
 
 function toolName(tool: string): string {
-  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'gsc' ? 'Google Search Console' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : tool === 'sitescan' ? 'Openink Hub site crawl' : 'Other tool';
+  return tool === 'aitdk' ? 'AITDK SEO Extension' : tool === 'digispot' ? 'Digispot AI' : tool === 'ppcblogpro' ? 'PPCBlogPro' : tool === 'seoanalyzer' ? 'SEO Analyzer' : tool === 'seoquake' ? 'SEOquake' : tool === 'frase' ? 'Frase' : tool === 'seomator' ? 'SEOmator' : tool === 'pagespeed' ? 'Google PageSpeed' : tool === 'gsc' ? 'Google Search Console' : tool === 'mangools' ? 'Mangools' : tool === 'serpapi' ? 'Google results (SerpApi)' : tool === 'ahrefs' ? 'Ahrefs' : tool === 'moz' ? 'Moz' : tool === 'sitescan' ? 'Openink Hub site crawl' : tool === 'tracker' ? 'Openink Hub tracker sheet' : 'Other tool';
 }
 
 export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'customer', opts: { side?: 'internal' | 'external'; heading?: string } = {}): string {
@@ -510,6 +644,11 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'seoquake_audit' ? renderSeoquake(d, audience === 'admin')
         : e.evidenceType === 'mangools_siteprofiler' ? renderMangools(d)
         : e.evidenceType.startsWith('mangools_') ? renderMangoolsFn(e.evidenceType, d)
+        : e.evidenceType === 'backlink_tracker' ? renderBacklinkTracker(d)
+        : e.evidenceType === 'ai_prompt_tracker' ? renderPromptTracker(d)
+        : e.evidenceType.startsWith('location_') ? renderLocationTracker(d)
+        : e.evidenceType === 'research_ai_prompts' ? renderAiPrompts(d)
+        : e.evidenceType === 'research_location_pages' ? renderLocationPages(d)
         : e.evidenceType.startsWith('research_') ? renderResearch(e.evidenceType, d)
         : e.evidenceType.startsWith('seoanalyzer_') ? renderSeoAnalyzer(e.evidenceType, d)
         : renderAitdk(e.evidenceType, d);

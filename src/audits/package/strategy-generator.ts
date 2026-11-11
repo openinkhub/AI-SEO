@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { GoalCheck } from './goals';
 import { SCOPE_SECTIONS, SCOPE_TARGETS, scopeAsPromptText } from './service-scope';
 import { GEO_FACTS, geoKnowledgeAsPromptText } from './geo-knowledge';
+import { roadmapAsPromptText } from './ai-roadmap';
 
 const logger = new Logger('StrategyGenerator');
 
@@ -111,6 +112,9 @@ ${scopeAsPromptText(input.monthIndex ?? null)}
 
 AI-SEARCH KNOWLEDGE BASE (general industry findings from Openink Hub, NOT data about this client; use them to choose and justify AEO / GEO / AIO actions, and never present them as the client's own numbers)
 ${geoKnowledgeAsPromptText()}
+
+OPENINK HUB AI VISIBILITY ROADMAP (the order of work for AI-search visibility; place this month's actions on the right phase)
+${roadmapAsPromptText()}
 
 SEO AUDIT FINDINGS
 ${findings || '(no automated findings)'}

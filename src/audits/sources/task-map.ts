@@ -178,7 +178,7 @@ export const SOURCE_SIDE: Record<SourceKey, AuditSide> = {
 };
 
 const EXTERNAL_TOOLS = new Set(['mangools', 'serpapi', 'moz', 'ahrefs', 'frase', 'gsc']);
-const EXTERNAL_TYPE = /^(mangools_|research_|moz_|ahrefs_|frase_)/;
+const EXTERNAL_TYPE = /^(mangools_|research_|moz_|ahrefs_|frase_|backlink_tracker|ai_prompt_tracker|location_)/;
 export function evidenceSide(tool: string | null | undefined, type: string | null | undefined): 'internal' | 'external' {
   if (type && EXTERNAL_TYPE.test(type)) return 'external';
   if (tool && EXTERNAL_TOOLS.has(tool)) return 'external';

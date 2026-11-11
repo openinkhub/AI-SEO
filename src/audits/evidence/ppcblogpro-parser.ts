@@ -19,7 +19,7 @@ export interface PpcReport {
 }
 
 // RFC4180-ish parser: quoted fields, doubled quotes, CRLF/LF.
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [], field = '', q = false;
   const s = text.replace(/^﻿/, '');

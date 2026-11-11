@@ -7,6 +7,7 @@ import { AuditsService } from '../audits.service';
 import { StorageService } from '../../page-images/storage.service';
 import { looksLikeDigispot, parseDigispotReport } from './digispot-parser';
 import { looksLikePpcBlogPro, parsePpcBlogProCsv } from './ppcblogpro-parser';
+import { LocationKind, looksLikeBacklinkTracker, looksLikeLocation, looksLikePromptTracker, parseBacklinkTracker, parseLocationSheet, parsePromptTracker, verifyBacklinks } from './tracker-parsers';
 import { extractFromImage, extractorConfigured } from './evidence-extractor';
 import { KNOWN_TYPES, TOOL_SECTIONS } from './aitdk-rules';
 import { UpdateEvidenceDto } from './evidence.dto';
@@ -99,7 +100,7 @@ export class EvidenceService {
 
   private async readRow(row: AuditEvidence): Promise<void> {
     if (row.kind === 'text') {
-      this.applyText(row);
+      await this.applyText(row);
       return;
     }
     if (!row.url || !/^https?:\/\//i.test(row.url)) throw new BadRequestException('The stored file is not reachable. Upload it again.');
@@ -111,7 +112,7 @@ export class EvidenceService {
   }
 
   // Text exports are read by fixed rules, so they are trusted and approved straight away.
-  private applyText(row: AuditEvidence): void {
+  private async applyText(row: AuditEvidence): Promise<void> {
     const text = row.textContent ?? '';
     if (looksLikeDigispot(text)) {
       const parsed = parseDigispotReport(text);
@@ -126,10 +127,40 @@ export class EvidenceService {
       row.extracted = parsePpcBlogProCsv(text) as unknown as Record<string, any>;
       row.status = 'approved';
       row.error = null;
+    } else if (looksLikeBacklinkTracker(text)) {
+      const site = await this.siteOf(row);
+      let bt = parseBacklinkTracker(text, site.brand);
+      if (site.host) bt = await verifyBacklinks(bt, site.host);
+      this.setTracker(row, 'backlink_tracker', bt);
+    } else if (looksLikePromptTracker(text)) {
+      const site = await this.siteOf(row);
+      this.setTracker(row, 'ai_prompt_tracker', parsePromptTracker(text, site.host));
+    } else if (looksLikeLocation(text)) {
+      const kind = looksLikeLocation(text) as LocationKind;
+      this.setTracker(row, kind, parseLocationSheet(text, kind));
     } else {
       row.status = 'failed';
-      row.error = 'File format not recognised - supported: Digispot SEO Insights .txt and PPCBlogPro .csv exports.';
+      row.error = 'File format not recognised - supported: Digispot SEO Insights .txt, PPCBlogPro .csv, and the Backlink Audit / AI Visibility Prompt / Location Page tracker sheets exported as .csv.';
     }
+  }
+
+  private async siteOf(row: AuditEvidence): Promise<{ host: string; brand: string }> {
+    try {
+      const run = await this.audits.findOne(row.customerId, row.auditRunId);
+      const host = String(run.website ?? '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[/?#].*$/, '');
+      return { host, brand: host.split('.')[0] ?? '' };
+    } catch {
+      return { host: '', brand: '' };
+    }
+  }
+
+  // Tracker sheets are read by fixed rules, so they are trusted and approved straight away (like the text exports).
+  private setTracker(row: AuditEvidence, type: string, data: unknown): void {
+    row.tool = 'tracker';
+    row.evidenceType = type;
+    row.extracted = data as Record<string, any>;
+    row.status = 'approved';
+    row.error = null;
   }
 
   // Screenshots are read by the vision model and wait for admin approval before customers see them.
