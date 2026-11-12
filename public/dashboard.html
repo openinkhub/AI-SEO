@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -754,6 +754,71 @@
       act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l5text="' + pf + '"]').value }, b);
     }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l5mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l5mode'), mode: s.value }, s); }); });
+  }
+
+  // ---- Layer 7 - Google People Also Ask: up to 30 verified questions (SerpApi, Scrape.do fallback; no AI platforms) ----
+  var l7 = { cid: null, mid: null, data: null, timer: null };
+
+  function mountLayer7(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l7Box');
+    if (!box || !cm) return;
+    l7.cid = cust.id; l7.mid = cm.id;
+    if (l7.timer) { clearTimeout(l7.timer); l7.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 7...</p></section>';
+    loadLayer7(cust, cm, box);
+  }
+
+  function l7Base(cust) { return '/customers/' + cust.id + '/layer7'; }
+
+  function loadLayer7(cust, cm, box) {
+    api(l7Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l7Box') !== box || l7.mid !== cm.id) return;
+      l7.data = d;
+      drawLayer7(cust, cm, box);
+      if (d.status === 'running') l7.timer = setTimeout(function(){ loadLayer7(cust, cm, box); }, 4000);
+    }).catch(function(err){
+      if (document.getElementById('l7Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 7: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer7(cust, cm, box) {
+    var d = l7.data;
+    var wasOpen = !!box.querySelector('details[data-l7manual][open]');
+    var badge = d.status === 'complete' ? 'ok' : (d.status === 'failed' ? 'fail' : 'pending');
+    var label = d.status === 'running' ? 'Running...' : (d.total + '/' + d.max);
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 7 \u00b7 Day 7</span>Google People Also Ask</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.max + ' questions \u00b7 ' + escapeHtml(d.month) +
+      '. Real questions from Google\u2019s \u201cPeople also ask\u201d box, searched with this month\u2019s Layer 4 keywords and the customer\u2019s products / services + location. SerpApi first, Scrape.do as fallback; no AI platform is used. Runs automatically on its set date (Day 7). Fewer than ' + d.max + ' is allowed; the customer panel shows the table once questions are stored.</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<span class="badge ' + badge + '">' + escapeHtml(label) + '</span>' +
+      '<button class="btn" id="l7Run"' + (d.status === 'running' || !d.keyReady ? ' disabled' : '') + '>' + (d.total ? 'Re-run' : 'Run') + ' Google search now</button>' +
+      '<span class="muted">Key: ' + escapeHtml(d.keySource) + (d.keyReady ? '' : ' \u2014 add a SerpApi key') + '</span></div>' +
+      (d.message ? '<p class="muted" style="margin:0 0 12px">' + escapeHtml(d.message) + '</p>' : '') +
+      '<details data-l7manual style="margin:0 0 12px"' + (wasOpen ? ' open' : '') + '><summary style="cursor:pointer">Paste questions manually</summary>' +
+      '<p class="muted" style="margin:6px 0">One per line: question | Google search query. Replaces the stored questions.</p>' +
+      '<textarea id="l7Text" rows="6" style="width:100%">' + escapeHtml(d.records.map(function(r){ return r.question + ' | ' + r.searchQuery; }).join('\n')) + '</textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l7Save">Save questions</button></div></details>';
+    if (d.records.length) {
+      h += '<table><thead><tr><th>#</th><th>People Also Ask question</th><th>Google search query</th><th>Source URL</th><th>Via</th></tr></thead><tbody>' +
+        d.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.question) + '</td><td>' + escapeHtml(r.searchQuery) + '</td><td>' + (r.sourceUrl ? '<a href="' + escapeHtml(r.sourceUrl) + '" target="_blank" rel="noopener">' + escapeHtml(r.sourceUrl.length > 60 ? r.sourceUrl.slice(0, 60) + '...' : r.sourceUrl) + '</a>' : '-') + '</td><td>' + escapeHtml(r.provider) + '</td></tr>'; }).join('') + '</tbody></table>';
+    }
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l7Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer7(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var run = document.getElementById('l7Run');
+    if (run) run.addEventListener('click', function(){
+      if (!confirm('Search Google now for ' + cm.monthCode + '? Existing questions are replaced when new ones are found.')) return;
+      act('/run', 'POST', {}, run);
+    });
+    var save = document.getElementById('l7Save');
+    if (save) save.addEventListener('click', function(){ act('/manual', 'PUT', { text: document.getElementById('l7Text').value }, save); });
   }
 
   // ---- Layer 6 · AI Search Prompt: 9 AI platforms x 10 prompts ----
