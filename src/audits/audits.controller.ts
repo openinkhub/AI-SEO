@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Header, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditsService } from './audits.service';
 import { CreateAuditRunDto } from './dto/create-audit-run.dto';
@@ -10,9 +10,11 @@ import { CreateAuditRunDto } from './dto/create-audit-run.dto';
 export class AuditsController {
   constructor(private readonly service: AuditsService) {}
 
+  // Running an audit is admin-only; an admin is not held back by the once-per-cycle / Day-3 date rule.
   @Post()
-  create(@Param('customerId') customerId: string, @Body() dto: CreateAuditRunDto) {
-    return this.service.createRun(customerId, dto);
+  create(@Param('customerId') customerId: string, @Body() dto: CreateAuditRunDto, @Req() req: { user?: { role?: string } }) {
+    if (req.user?.role !== 'admin') throw new ForbiddenException('Only an admin can run the SEO Audit.');
+    return this.service.createRun(customerId, dto, { bypassRule: true });
   }
 
   @Get()
@@ -22,8 +24,10 @@ export class AuditsController {
 
   // Once-per-cycle rule: is the audit unlocked (Day 3+) and has this cycle's audit been run?
   @Get('rule')
-  rule(@Param('customerId') customerId: string) {
-    return this.service.ruleStatus(customerId);
+  async rule(@Param('customerId') customerId: string, @Req() req: { user?: { role?: string } }) {
+    const r = await this.service.ruleStatus(customerId);
+    if (req.user?.role === 'admin') return { ...r, canRun: true, canInstant: true, adminOnly: false, adminBypass: true, reason: `${r.reason} Admin: the date rule is bypassed.` };
+    return { ...r, canRun: false, canInstant: false, adminOnly: true, reason: 'Only an admin can run the SEO Audit.' };
   }
 
   // Push the Layer 3 page data (alias, H1, meta tags, image) into this customer's SEO reports.
@@ -35,7 +39,8 @@ export class AuditsController {
   // Re-run the research enrichment for an existing run (keyword / competitor / local sources + task write-ups).
   @Post(':runId/enrich')
   // ?mode=blocked collects only the sources that still have unfinished (blocked / waiting) tasks.
-  enrich(@Param('customerId') customerId: string, @Param('runId') runId: string, @Query('mode') mode?: string) {
+  enrich(@Param('customerId') customerId: string, @Param('runId') runId: string, @Req() req: { user?: { role?: string } }, @Query('mode') mode?: string) {
+    if (req.user?.role !== 'admin') throw new ForbiddenException('Only an admin can re-run the research.');
     return this.service.startEnrich(customerId, runId, mode === 'blocked');
   }
 

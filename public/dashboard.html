@@ -1573,7 +1573,7 @@
         var bits = [];
         if (r.monthCode) bits.push('<strong>' + escapeHtml(r.monthCode) + '</strong> ' + escapeHtml(fmtDay(r.monthStart)) + ' – ' + escapeHtml(fmtDay(r.monthEnd)));
         if (r.unlockDate) bits.push('unlocks ' + escapeHtml(fmtDay(r.unlockDate)) + ' (Day 3)');
-        box.innerHTML = '<span class="badge ' + (r.canRun ? 'ok' : 'pending') + '">' + (r.canRun ? 'can run now' : (r.runExists ? 'done this cycle' : 'locked')) + '</span> ' +
+        box.innerHTML = '<span class="badge ' + (r.canRun ? 'ok' : 'pending') + '">' + (r.canRun ? 'can run now' : (r.adminOnly ? 'admin only' : (r.runExists ? 'done this cycle' : 'locked'))) + '</span> ' +
           (bits.length ? bits.join(' · ') + '<br>' : '') + escapeHtml(r.reason || '');
       }
       if (btn) { btn.disabled = !r.canRun; btn.title = r.canRun ? '' : (r.reason || ''); }

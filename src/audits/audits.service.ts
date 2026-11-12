@@ -133,13 +133,14 @@ export class AuditsService implements OnModuleInit {
   // skills in AUTOMATED_SKILL_IDS and honest "pending data source"
   // placeholders for the rest, generates the branded report, and computes
   // (but does not yet deliver — see LayerPush) every layer-wise push.
-  async createRun(customerId: string, dto: CreateAuditRunDto): Promise<AuditRun> {
+  // opts.bypassRule: an admin may run any time (the controller only passes it for admins); the cycle / Day-3 rule is skipped.
+  async createRun(customerId: string, dto: CreateAuditRunDto, opts?: { bypassRule?: boolean }): Promise<AuditRun> {
     const customer = await this.customersService.findOne(customerId);
     const website = dto.website ?? customer.website ?? '';
     const rule = await this.ruleStatus(customerId);
     const instant = dto.instant === true;
-    if (!instant && !rule.canRun) throw new ForbiddenException(rule.reason);
-    if (instant && !rule.canInstant) throw new ForbiddenException(rule.unlockDate ? `An instant report can only be run before the scheduled day. The scheduled audit for ${rule.monthCode} unlocked on ${rule.unlockDate} (Day 3).` : 'An instant report needs an active month cycle (it can only be run before Day 3 of the cycle).');
+    if (!opts?.bypassRule && !instant && !rule.canRun) throw new ForbiddenException(rule.reason);
+    if (!opts?.bypassRule && instant && !rule.canInstant) throw new ForbiddenException(rule.unlockDate ? `An instant report can only be run before the scheduled day. The scheduled audit for ${rule.monthCode} unlocked on ${rule.unlockDate} (Day 3).` : 'An instant report needs an active month cycle (it can only be run before Day 3 of the cycle).');
 
     // One audit at a time per cycle: a second click while the first is still scanning / researching would repeat every paid API call.
     const existingRuns = await this.runRepo.find({ where: { customerId } });
