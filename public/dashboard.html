@@ -1868,6 +1868,14 @@
       b.innerHTML = '<table><thead><tr><th style="width:4%">#</th><th style="width:48%">Finding</th><th>What the strategy does with it</th></tr></thead><tbody>' +
         facts.map(function(f, i){ return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(f.fact) + '</td><td>' + escapeHtml(f.action) + '</td></tr>'; }).join('') +
         '</tbody></table>';
+      var tg = (d && d.targets) || {};
+      if ((tg.months || []).length) {
+        b.innerHTML = '<h3 style="margin:0 0 6px">DA / DR target plan (confidential)</h3><p class="muted">Internal pace used to build each month&rsquo;s strategy and to compare the measured DA (Moz) and DR (Ahrefs). Customers only see the final goal: DA ' + escapeHtml(String((tg.finalGoal || {}).da)) + ' and DR ' + escapeHtml(String((tg.finalGoal || {}).dr)) + ' by M' + escapeHtml(String((tg.finalGoal || {}).month)) + '. A target steps up in its month and is held in the months between.</p>' +
+          '<table><thead><tr><th>Month</th>' + tg.months.map(function(m){ return '<th>M' + m.month + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          '<tr><td><strong>DA target</strong></td>' + tg.months.map(function(m){ return '<td>' + (m.da == null ? 'baseline' : m.da) + '</td>'; }).join('') + '</tr>' +
+          '<tr><td><strong>DR target</strong></td>' + tg.months.map(function(m){ return '<td>' + (m.dr == null ? 'baseline' : m.dr) + '</td>'; }).join('') + '</tr></tbody></table>' +
+          '<h3 style="margin:24px 0 6px">AI-search findings</h3>' + b.innerHTML;
+      }
       var rm = (d && d.roadmap) || {};
       var li = function(arr){ return (arr || []).map(function(a){ return '&bull; ' + escapeHtml(a); }).join('<br>'); };
       b.innerHTML += '<h3 style="margin:24px 0 6px">AI Visibility Roadmap (6 months)</h3><p class="muted">The four-phase plan behind each customer’s AI-visibility work. The strategy writer places every month’s actions on the right phase.</p>' +
