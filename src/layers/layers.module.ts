@@ -23,12 +23,16 @@ import { Layer7Question, Layer7State } from './layer7.entities';
 import { Layer7Service } from './layer7.service';
 import { Layer7Controller } from './layer7.controller';
 import { WpLayer7Controller } from './wp-layer7.controller';
+import { Layer8Item, Layer8Platform } from './layer8.entities';
+import { Layer8Service } from './layer8.service';
+import { Layer8Controller } from './layer8.controller';
+import { WpLayer8Controller } from './wp-layer8.controller';
 import { LayerAutomation } from './layer-automation';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State]), CustomerApisModule],
-  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, LayerAutomation, WpApiKeyGuard],
-  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller],
-  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service],
+  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform]), CustomerApisModule],
+  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, LayerAutomation, WpApiKeyGuard],
+  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller],
+  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service],
 })
 export class LayersModule {}

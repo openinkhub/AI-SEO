@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -819,6 +819,99 @@
     });
     var save = document.getElementById('l7Save');
     if (save) save.addEventListener('click', function(){ act('/manual', 'PUT', { text: document.getElementById('l7Text').value }, save); });
+  }
+
+  // ---- Layer 8 - AI Similar Product / Service: 9 AI platforms x 10 items ----
+  var l8 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer8(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l8Box');
+    if (!box || !cm) return;
+    l8.cid = cust.id; l8.mid = cm.id;
+    if (l8.timer) { clearTimeout(l8.timer); l8.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 8...</p></section>';
+    loadLayer8(cust, cm, box);
+  }
+
+  function l8Base(cust) { return '/customers/' + cust.id + '/layer8'; }
+
+  function loadLayer8(cust, cm, box) {
+    api(l8Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l8Box') !== box || l8.mid !== cm.id) return;
+      l8.data = d;
+      drawLayer8(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l8.timer = setTimeout(function(){ loadLayer8(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l8Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 8: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer8(cust, cm, box) {
+    var d = l8.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l8.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 8 \u00b7 Day 8</span>AI Similar Product / Service</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' items \u00b7 ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete \u00b7 ' + escapeHtml(d.month) +
+      '. Each AI platform returns 10 similar, alternative, substitute or complementary products / services people look for, with Relationship Type, Search Intent and Relevance. Runs automatically on its set date (Day 8); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<button class="btn" id="l8RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Similar Product / Service, Relationship Type, Search Intent, Relevance (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l8ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l8Import">Import</button></div></details>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running...' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l8.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' \u00b7 key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l8mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l8run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        '<span class="muted" data-l8msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.item + ' | ' + r.relationshipType + ' | ' + r.searchIntent + ' | ' + r.relevance; }).join('\n');
+        h += '<textarea data-l8text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: similar product / service | Relationship Type | Search Intent | Relevance">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l8save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' items</button> <span class="muted">Relationship: Similar Product, Similar Service, Alternative Product, Alternative Service, Substitute, Complementary, Related Solution \u00b7 Intent: Informational, Commercial, Transactional, Local, Purchase, Evaluational \u00b7 Relevance: High, Medium-High, Medium</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>Similar product / service</th><th>Relationship type</th><th>Search intent</th><th>Relevance</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.item) + '</td><td>' + escapeHtml(r.relationshipType) + '</td><td>' + escapeHtml(r.searchIntent) + '</td><td>' + escapeHtml(r.relevance) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l8Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer8(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var runAll = document.getElementById('l8RunAll');
+    if (runAll) runAll.addEventListener('click', function(){
+      if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing items of those platforms are replaced.')) return;
+      act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l8Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l8ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l8Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 8 is complete (90/90).' : ''));
+        loadLayer8(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l8run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l8run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l8save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l8save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l8text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l8mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l8mode'), mode: s.value }, s); }); });
   }
 
   // ---- Layer 6 · AI Search Prompt: 9 AI platforms x 10 prompts ----
