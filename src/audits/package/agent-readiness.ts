@@ -1,5 +1,5 @@
 // Agent-readiness goals: what a website needs so AI agents can find, read, understand and use it.
-// Supplied by Openink Hub (12 Nov 2026). The same nine goals are checked in the SEO Audit (parameters 71-79, root domain),
+// Supplied by Openink Hub (12 Nov 2026). The first nine goals are checked in the SEO Audit as parameters 71-79 and the tenth (Google Preferred Source) as 80, root domain,
 // their fixes go into the SEO report, and the strategy writer uses them to plan the work.
 
 export interface AgentGoal {
@@ -19,6 +19,7 @@ export const AGENT_GOALS: AgentGoal[] = [
   { id: 77, goal: 'Serves Markdown when an agent asks for it', issue: 'The homepage returned text/html for Accept: text/markdown.', fix: 'Serve a Markdown representation when agents request it. It cuts token cost dramatically versus HTML.' },
   { id: 78, goal: 'Site exposes WebMCP tools to in-browser agents', issue: 'No WebMCP tools registered on page load.', fix: 'Call navigator.modelContext.registerTool() on page load with a name, description, inputSchema and execute callback, or annotate a form with toolname and tooldescription.' },
   { id: 79, goal: 'MCP Server Card is published', issue: '/.well-known/mcp/server-card.json returned HTML, not JSON (probably a catch-all route).', fix: 'Publish an MCP Server Card (SEP-1649) at /.well-known/mcp/server-card.json with name, version, an endpoint URL and the capabilities your server supports.' },
+  { id: 80, goal: 'Google Preferred Sources link is on the site', issue: 'No "Add as a preferred source" link or button on the homepage.', fix: 'Add a link to google.com/preferences/source?q=your-domain (header, footer, blog, newsletter). Preferred sources get a badge in Top Stories, AI Overviews and AI Mode; the site must keep publishing fresh content and be a domain or subdomain.' },
 ];
 
 // Compact text for the AI strategy prompt.

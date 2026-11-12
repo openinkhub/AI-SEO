@@ -825,7 +825,7 @@ function rebuildRoot(res: PageAuditResult, input: AuditInput, c: Ctx): void {
     const org = !!home?.deep?.schema.nodeTypes.some((t) => /^(Organization|LocalBusiness|Corporation|ProfessionalService)$/.test(t) || /Business$/.test(t));
     set(67, !org ? 'f' : (home?.deep?.schema.sameAs ?? 0) === 0 ? 'w' : 'p', org ? `Homepage Organization schema${home?.deep?.schema.sameAs ? ` with ${home.deep.schema.sameAs} sameAs link(s)` : ' without sameAs'}` : 'No Organization / LocalBusiness schema on the homepage', 'Add Organization / LocalBusiness schema on the homepage with name, url, logo, contact point and sameAs links to every official profile.');
   }
-  // Agent readiness (71-79): site-level checks, root domain only
+  // Agent readiness (71-80): site-level checks, root domain only
   {
     const A = chk.agent;
     const L = chk.llmsTxt;
@@ -846,6 +846,7 @@ function rebuildRoot(res: PageAuditResult, input: AuditInput, c: Ctx): void {
       const C = A.mcpCard;
       const cardOk = C.status === 200 && C.json && C.hasName && C.hasVersion && C.hasEndpoint;
       set(79, cardOk ? 'p' : 'w', cardOk ? 'MCP Server Card published' : C.status === 200 && !C.json ? `/.well-known/mcp/server-card.json returned ${C.contentType ?? 'something'}, not JSON (probably a catch-all route)` : C.status === 200 ? `MCP Server Card is missing: ${[!C.hasName && 'name', !C.hasVersion && 'version', !C.hasEndpoint && 'endpoint URL'].filter(Boolean).join(', ')}` : `No MCP Server Card (HTTP ${C.status ?? 'n/a'})`, 'Publish an MCP Server Card (SEP-1649) at /.well-known/mcp/server-card.json with name, version, an endpoint URL and the capabilities your server supports; make sure the URL returns application/json, not the theme\'s HTML 404 page.');
+      set(80, A.preferredSource ? 'p' : 'w', A.preferredSource ? 'Homepage links to the Google Preferred Sources page' : 'No "Add as a preferred source" link on the homepage', 'Add a button or link "Add us as a preferred source on Google" to the header, footer, blog and newsletter, pointing to https://www.google.com/preferences/source?q=YOUR-DOMAIN (Google also supplies button images in 16 languages). Preferred sources get a badge in Top Stories, AI Overviews and AI Mode, so keep publishing fresh posts; only a domain or subdomain qualifies, not a subfolder.');
     }
   }
   // JS / CSS assets

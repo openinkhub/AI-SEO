@@ -41,6 +41,7 @@ export interface AgentChecks {
   business: { found: boolean; missing: string[]; sameAs: number };
   pages: { about: 'url' | 'text' | null; contact: 'url' | 'text' | null; legal: 'url' | 'text' | null };
   llms: { hasTitle: boolean; hasSummary: boolean };
+  preferredSource: boolean; // the homepage links to Google's Preferred Sources page (google.com/preferences/source?q=domain)
 }
 
 export interface SiteChecks {
@@ -166,6 +167,7 @@ function agentChecks(base: string, home: FetchResult, robotsText: string, md: Fe
       legal: any(/^\/(privacy|privacy-policy|terms|terms-of-service|terms-and-conditions|terms-conditions|legal|cookie-policy|disclaimer|refund-policy)\/?$/, /^(privacy( policy)?|terms( of service| & conditions| and conditions)?|legal|cookie policy|disclaimer)$/),
     },
     llms: { hasTitle: /^\s*#\s+\S/.test(llmsText), hasSummary: /^\s*>\s+\S/m.test(llmsText) },
+    preferredSource: /google\.[a-z.]+\/preferences\/source|g\.co\/preferences/i.test(home.text),
   };
 }
 

@@ -102,6 +102,7 @@ export const PARAMS: Param[] = [
   P(77, 'Serves Markdown on request', 'Agent readiness', 'A request with Accept: text/markdown returns a Markdown version of the page.', 0.5),
   P(78, 'WebMCP tools exposed', 'Agent readiness', 'The page registers tools for in-browser agents (navigator.modelContext.registerTool or toolname / tooldescription form attributes).', 0.5),
   P(79, 'MCP Server Card published', 'Agent readiness', '/.well-known/mcp/server-card.json returns JSON with name, version and an endpoint URL.', 0.5),
+  P(80, 'Google Preferred Sources link', 'Agent readiness', 'The site gives readers a one-click link or button to add it as a Google Preferred Source (google.com/preferences/source?q=your-domain). Preferred sources get a badge in Top Stories, AI Overviews and AI Mode.', 0.5),
 ];
 
 export const PARAM_BY_ID = new Map(PARAMS.map((p) => [p.id, p]));

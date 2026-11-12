@@ -120,7 +120,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
         const out: Research[] = [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: crawlOnly as unknown as Record<string, any> }];
         if (pageAudit) {
           const { pages: auditPages, ...rootAudit } = pageAudit;
-          out.push({ type: 'site_root_audit', tool: 'sitescan', label: 'Root domain audit (79 parameters)', data: rootAudit as unknown as Record<string, any> });
+          out.push({ type: 'site_root_audit', tool: 'sitescan', label: 'Root domain audit (80 parameters)', data: rootAudit as unknown as Record<string, any> });
           const SIZE = 40;
           const parts = Math.max(1, Math.ceil(auditPages.length / SIZE));
           for (let i = 0; i < parts; i++) {

@@ -115,7 +115,7 @@ ${scopeAsPromptText(input.monthIndex ?? null)}
 AI-SEARCH KNOWLEDGE BASE (general industry findings from Openink Hub, NOT data about this client; use them to choose and justify AEO / GEO / AIO actions, and never present them as the client's own numbers)
 ${geoKnowledgeAsPromptText()}
 
-AGENT-READINESS GOALS (what the site needs so AI agents can read and use it; the SEO Audit checks them as parameters 71-79 and lists the fixes it found. Plan the failing ones, do not invent results)
+AGENT-READINESS GOALS (what the site needs so AI agents can read and use it; the SEO Audit checks them as parameters 71-80 and lists the fixes it found. Plan the failing ones, do not invent results)
 ${agentReadinessAsPromptText()}
 
 BLOGSEO CHECKS (free tools the admin runs each month: domain rating, keyword density, content score, competitor DR; use the benchmark to size the DA/DR gap, do not invent new figures)

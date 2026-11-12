@@ -101,7 +101,7 @@ export function pageAuditHtmlDoc(root: Record<string, any>, chunks: Array<Record
   const css = `body{font:14px/1.5 system-ui,Segoe UI,Arial,sans-serif;color:#1c2430;max-width:1200px;margin:24px auto;padding:0 16px}h1{font-size:22px}h4{margin:22px 0 6px;font-size:15px}table{border-collapse:collapse;width:100%;margin:6px 0 14px}th,td{border:1px solid #dfe3ea;padding:6px 8px;text-align:left;vertical-align:top;font-size:13px}th{background:#f4f6f9}.ev-tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap}.ev-tag.pass{background:#dff5e3;color:#14612a}.ev-tag.warn{background:#fff1cc;color:#7a5200}.ev-tag.critical{background:#fde0e0;color:#9a1c1c}.ev-tag.minor{background:#e8ecf2;color:#47556b}.ev-src{color:#5d6b82;font-size:12px}details{border:1px solid #dfe3ea;border-radius:8px;padding:8px 12px}summary{cursor:pointer}@media print{details{break-inside:avoid}}`;
   const pages = chunks.flatMap((c) => (c.pages ?? []) as PageRow[]);
   const total = pages.length;
-  const body = `<h1>SEO audit: 79 parameters (70 SEO + 9 agent-readiness), root domain and every page</h1>` +
+  const body = `<h1>SEO audit: 80 parameters (70 SEO + 10 agent-readiness), root domain and every page</h1>` +
     `<h2>Root domain</h2>${renderRootAudit(root)}` +
     `<h2>Page-wise report</h2><p>${total} pages. Lowest score first.</p>` +
     `<table><thead><tr><th>Page</th><th>Type</th><th>Score</th><th>Fix</th><th>Warnings</th></tr></thead><tbody>${pages.map((p) => `<tr><td>${esc(p.url.replace(/^https?:\/\//i, ''))}</td><td>${esc(p.type)}</td><td>${scoreTag(p.score)}</td><td>${p.fix}</td><td>${p.warn}</td></tr>`).join('')}</tbody></table>` +
