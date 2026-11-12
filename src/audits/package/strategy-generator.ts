@@ -4,6 +4,7 @@ import { SCOPE_SECTIONS, SCOPE_TARGETS, scopeAsPromptText } from './service-scop
 import { GEO_FACTS, geoKnowledgeAsPromptText } from './geo-knowledge';
 import { AGENT_GOALS, agentReadinessAsPromptText } from './agent-readiness';
 import { roadmapAsPromptText } from './ai-roadmap';
+import { blogSeoAsPromptText } from './blogseo-tools';
 
 const logger = new Logger('StrategyGenerator');
 
@@ -116,6 +117,9 @@ ${geoKnowledgeAsPromptText()}
 
 AGENT-READINESS GOALS (what the site needs so AI agents can read and use it; the SEO Audit checks them as parameters 71-79 and lists the fixes it found. Plan the failing ones, do not invent results)
 ${agentReadinessAsPromptText()}
+
+BLOGSEO CHECKS (free tools the admin runs each month: domain rating, keyword density, content score, competitor DR; use the benchmark to size the DA/DR gap, do not invent new figures)
+${blogSeoAsPromptText()}
 
 OPENINK HUB AI VISIBILITY ROADMAP (the order of work for AI-search visibility; place this month's actions on the right phase)
 ${roadmapAsPromptText()}

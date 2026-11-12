@@ -26,10 +26,12 @@ import { LibraryImage } from '../page-images/library-image.entity';
 import { LayersModule } from '../layers/layers.module';
 import { AuditAutomation } from './audit-automation';
 import { StrategyKnowledgeController } from './package/strategy-knowledge.controller';
+import { AdminCycleTask } from './cycle-task.entity';
+import { CycleTasksController } from './cycle-tasks.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage, WebsitePage, LibraryImage]),
+    TypeOrmModule.forFeature([AuditRun, AuditTask, LayerPush, Customer, AuditEvidence, Project, AuditPackage, WebsitePage, LibraryImage, AdminCycleTask]),
     CustomersModule,
     EmailModule,
     CustomerApisModule,
@@ -38,6 +40,6 @@ import { StrategyKnowledgeController } from './package/strategy-knowledge.contro
     MulterModule.register({}),
   ],
   providers: [AuditsService, EvidenceService, PackageService, WpApiKeyGuard, WpClientService, AuditAutomation],
-  controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController, StrategyKnowledgeController],
+  controllers: [AuditsController, EvidenceController, PackageController, WpAuditsController, StrategyKnowledgeController, CycleTasksController],
 })
 export class AuditsModule {}

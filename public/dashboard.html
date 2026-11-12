@@ -1551,7 +1551,7 @@
   function renderSeoAuditCard() {
     var box = document.getElementById('layer3audit');
     if (!box) return;
-    box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Day 3</span>SEO Audit</h2>' +
+    box.innerHTML = ((user && user.role === 'admin') ? '<div id="cycleTodo"></div>' : '') + '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Day 3</span>SEO Audit</h2>' +
       '<span><button id="runInstantBtn" title="Run a report right now, before Day 3. It replaces this month\u2019s scheduled report.">Instant report</button> <button class="primary" id="runAuditBtn">Run SEO Audit</button></span></div>' +
       '<p class="lead">Audits the customer’s website with the SEO skill matrix (each skill is a task). It runs once per month cycle, from Day 3. The customer sees one compiled document (SEO Report + Strategy + Deliverables + Terms &amp; Conditions) after you compile it from the Package button.</p>' +
       '<div id="auditRule" class="muted" style="margin:6px 0 10px">Checking the month cycle…</div>' +
@@ -1560,6 +1560,40 @@
     document.getElementById('runInstantBtn').addEventListener('click', runInstantReport);
     loadRule();
     loadRuns();
+    loadCycleTodo();
+  }
+
+  // Admin-only to-do list for this customer and month cycle (saved in the Engine; the list itself is fixed in code).
+  function loadCycleTodo() {
+    var box = document.getElementById('cycleTodo');
+    if (!box) return;
+    var cid = state.cid;
+    box.innerHTML = '<section class="card"><p class="muted">Loading the to-do list…</p></section>';
+    api('/customers/' + cid + '/cycle-tasks').then(function(d){
+      if (cid !== state.cid) return;
+      var group = '';
+      var rows = (d.tasks || []).map(function(t){
+        var head = '';
+        if (t.group !== group) { group = t.group; head = '<tr><td colspan="3" style="background:#f6f7f9"><strong>' + escapeHtml(group) + '</strong></td></tr>'; }
+        return head + '<tr data-key="' + escapeHtml(t.key) + '"><td style="width:3%"><input type="checkbox" class="ctDone"' + (t.done ? ' checked' : '') + '></td>' +
+          '<td style="width:52%"><strong>' + escapeHtml(t.title) + '</strong> <span class="muted">· ' + escapeHtml(t.tool) + '</span><br><span class="muted">' + escapeHtml(t.detail) + '</span>' +
+          (t.done && t.doneAt ? '<br><span class="muted">done by ' + escapeHtml(t.doneBy || '') + ' · ' + escapeHtml(String(t.doneAt).slice(0, 10)) + '</span>' : '') + '</td>' +
+          '<td><input type="text" class="ctNote" style="width:100%" placeholder="Result / note (for example DR 11 vs 35-83)" value="' + escapeHtml(t.note || '') + '"></td></tr>';
+      }).join('');
+      box.innerHTML = '<section class="card"><div class="page-head" style="margin-bottom:6px"><h2><span class="layer-tag">Layer 3 · Admin only</span>To-do for this month cycle</h2>' +
+        '<span class="badge ' + (d.doneCount === d.total ? 'ok' : 'pending') + '">' + d.doneCount + ' / ' + d.total + ' done</span></div>' +
+        '<p class="lead">Tasks the admin side does for this customer in <strong>' + escapeHtml(d.monthCode || 'the current cycle') + '</strong>' + (d.monthStart ? ' (' + escapeHtml(fmtDay(d.monthStart)) + ' – ' + escapeHtml(fmtDay(d.monthEnd)) + ')' : '') + '. Customers and the team do not see this list.</p>' +
+        '<table><tbody>' + rows + '</tbody></table></section>';
+      var save = function(tr, patch){
+        api('/customers/' + cid + '/cycle-tasks/' + tr.getAttribute('data-key'), { method: 'PUT', body: patch })
+          .then(function(){ if (patch.done !== undefined) loadCycleTodo(); })
+          .catch(function(err){ alert('Could not save: ' + err.message); });
+      };
+      Array.prototype.forEach.call(box.querySelectorAll('tr[data-key]'), function(tr){
+        tr.querySelector('.ctDone').addEventListener('change', function(e){ save(tr, { done: e.target.checked }); });
+        tr.querySelector('.ctNote').addEventListener('change', function(e){ save(tr, { note: e.target.value }); });
+      });
+    }).catch(function(err){ box.innerHTML = '<section class="card"><p class="muted">Could not load the to-do list: ' + escapeHtml(err.message) + '</p></section>'; });
   }
 
   function loadRule() {
@@ -1881,6 +1915,16 @@
         b.innerHTML += '<h3 style="margin:24px 0 6px">Agent-readiness goals (9)</h3><p class="muted">What a website needs so AI agents can find, read and use it. The SEO Audit checks each one as parameters 71&ndash;79 (root domain) and lists the fix in the SEO report; the strategy writer plans the ones that fail.</p>' +
           '<table><thead><tr><th style="width:4%">#</th><th style="width:22%">Goal</th><th style="width:30%">Issue the audit reports</th><th>Fix</th></tr></thead><tbody>' +
           ag.map(function(g, i){ return '<tr><td>' + (i + 1) + '</td><td><strong>' + escapeHtml(g.goal) + '</strong><br><span class="muted">audit parameter ' + escapeHtml(String(g.id)) + '</span></td><td>' + escapeHtml(g.issue) + '</td><td>' + escapeHtml(g.fix) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      var bs = (d && d.blogseo) || {};
+      if ((bs.tools || []).length) {
+        var sn = bs.snapshot || {};
+        b.innerHTML += '<h3 style="margin:24px 0 6px">BlogSEO checks (free tools, run monthly by admin)</h3><p class="muted">Run from the BlogSEO connector and recorded in each customer&rsquo;s Layer 3 &ldquo;To-do for this month cycle&rdquo; card. The latest benchmark below is fed to the strategy writer.</p>' +
+          '<table><thead><tr><th style="width:20%">Check</th><th style="width:32%">Use</th><th>How</th></tr></thead><tbody>' +
+          bs.tools.map(function(t){ return '<tr><td><strong>' + escapeHtml(t.tool) + '</strong></td><td>' + escapeHtml(t.use) + '</td><td>' + escapeHtml(t.how) + '</td></tr>'; }).join('') + '</tbody></table>' +
+          '<p style="margin:12px 0 4px"><strong>Benchmark (' + escapeHtml(sn.date || '') + '):</strong> ' + escapeHtml(sn.site || '') + ' DR ' + escapeHtml(String(sn.ownDr)) + ' &middot; Mangools DA ' + escapeHtml(String(sn.ownDaMangools)) + '</p>' +
+          '<table><thead><tr><th>Competitor</th><th>DR</th></tr></thead><tbody>' + (sn.competitors || []).map(function(c){ return '<tr><td>' + escapeHtml(c.domain) + '</td><td>' + escapeHtml(String(c.dr)) + '</td></tr>'; }).join('') + '</tbody></table>' +
+          '<p class="muted" style="margin-top:8px">' + (sn.notes || []).map(function(n){ return '&bull; ' + escapeHtml(n); }).join('<br>') + '</p>';
       }
       var rm = (d && d.roadmap) || {};
       var li = function(arr){ return (arr || []).map(function(a){ return '&bull; ' + escapeHtml(a); }).join('<br>'); };
