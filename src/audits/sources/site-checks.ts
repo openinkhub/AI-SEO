@@ -30,7 +30,21 @@ export interface SitemapInfo {
   declaredInRobots: boolean;
 }
 
+// "Agent readiness": can an AI agent read, understand and use the site? (robots.txt Content-Signal, real 404s, complete business
+// schema, sameAs profiles, about / contact / legal links, llms.txt format, Markdown on request, WebMCP tools, MCP Server Card.)
+export interface AgentChecks {
+  contentSignal: string | null; // the Content-Signal line from robots.txt
+  markdown: { contentType: string | null; ok: boolean };
+  mcpCard: { status: number | null; contentType: string | null; json: boolean; hasName: boolean; hasVersion: boolean; hasEndpoint: boolean };
+  webmcp: boolean;
+  webmcpScriptsRead: number;
+  business: { found: boolean; missing: string[]; sameAs: number };
+  pages: { about: 'url' | 'text' | null; contact: 'url' | 'text' | null; legal: 'url' | 'text' | null };
+  llms: { hasTitle: boolean; hasSummary: boolean };
+}
+
 export interface SiteChecks {
+  agent: AgentChecks;
   https: { usesHttps: boolean; httpRedirectsToHttps: boolean | null; hsts: boolean; wwwConsistent: boolean | null };
   robots: { exists: boolean; blocksEverything: boolean; sitemapDeclared: boolean; size: number; aiCrawlers: Array<{ agent: string; owner: string; purpose: string; allowed: boolean }> };
   sitemap: SitemapInfo;
@@ -78,6 +92,83 @@ async function readSitemaps(base: string, robots: Robots, notes: string[]): Prom
   return { found: files > 0, url: firstUrl, indexFile, files, urls, total, withLastmod, imageEntries, overLimit: total > 50000, declaredInRobots: robots.sitemaps.length > 0 };
 }
 
+// JSON-LD objects of a page (flattened, including @graph).
+function ldObjects(html: string): Array<Record<string, any>> {
+  const out: Array<Record<string, any>> = [];
+  const walk = (x: any): void => {
+    if (Array.isArray(x)) x.forEach(walk);
+    else if (x && typeof x === 'object') {
+      out.push(x);
+      if (x['@graph']) walk(x['@graph']);
+    }
+  };
+  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      walk(JSON.parse(m[1].trim()));
+    } catch {
+      /* invalid JSON-LD is reported by the schema parameters */
+    }
+  }
+  return out;
+}
+
+const has = (v: any): boolean => (Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim().length > 0 : !!v);
+
+function agentChecks(base: string, home: FetchResult, robotsText: string, md: FetchResult | null, card: FetchResult | null, scripts: string[], llmsText: string): AgentChecks {
+  const cs = /^\s*content-signal\s*:\s*(.+)$/im.exec(robotsText);
+  // business node: the Organization / LocalBusiness node with the most filled fields
+  const biz = ldObjects(home.text)
+    .filter((o) => ([] as any[]).concat(o['@type'] ?? []).some((t: string) => /^(Organization|Corporation|NGO|ProfessionalService)$/.test(t) || /Business$|Store$|Service$/.test(t)))
+    .map((o) => {
+      const phone = has(o.telephone) || ([] as any[]).concat(o.contactPoint ?? []).some((c: any) => has(c?.telephone));
+      const missing = [!has(o.name) && 'name', !has(o.url) && 'url', !has(o.logo) && !has(o.image) && 'logo', !phone && 'telephone', !has(o.address) && 'address'].filter(Boolean) as string[];
+      return { missing, sameAs: ([] as any[]).concat(o.sameAs ?? []).filter((s: any) => typeof s === 'string' && /^https?:/i.test(s)).length };
+    })
+    .sort((a, b) => a.missing.length - b.missing.length)[0];
+  const links = Array.from(home.text.matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)).map((m) => {
+    let path = m[1].toLowerCase();
+    try {
+      path = new URL(m[1].replace(/&amp;/g, '&'), `${base}/`).pathname.toLowerCase();
+    } catch {
+      /* keep the raw href */
+    }
+    return { path, text: m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase() };
+  });
+  // a real about / contact / legal link: the page path (or the link text) IS that page, not just a word somewhere in a long URL
+  // 'url' = the link goes to a clearly named page (/about/), 'text' = only the link text says so (the URL does not), null = no link
+  const any = (pathRe: RegExp, textRe: RegExp): 'url' | 'text' | null => (links.some((l) => pathRe.test(l.path)) ? 'url' : links.some((l) => l.text.length < 40 && textRe.test(l.text)) ? 'text' : null);
+  let cardJson: any = null;
+  if (card && card.status === 200 && /json/i.test(card.contentType)) {
+    try {
+      cardJson = JSON.parse(card.text);
+    } catch {
+      cardJson = null;
+    }
+  }
+  const cardText = cardJson ? JSON.stringify(cardJson) : '';
+  return {
+    contentSignal: cs ? cs[1].trim() : null,
+    markdown: { contentType: md?.contentType || null, ok: !!md && md.status === 200 && /markdown/i.test(md.contentType) },
+    mcpCard: {
+      status: card?.status ?? null,
+      contentType: card?.contentType || null,
+      json: !!cardJson && typeof cardJson === 'object',
+      hasName: !!cardJson && has(cardJson.name ?? cardJson.serverInfo?.name),
+      hasVersion: !!cardJson && has(cardJson.version ?? cardJson.serverInfo?.version),
+      hasEndpoint: /"(endpoint|url|remotes|transport)"[^]*https?:\/\//i.test(cardText),
+    },
+    webmcp: [home.text, ...scripts].some((t) => /navigator\s*\.\s*modelContext|registerTool\s*\(|\btoolname\s*=\s*["']/i.test(t)),
+    webmcpScriptsRead: scripts.length,
+    business: { found: !!biz, missing: biz?.missing ?? ['name', 'url', 'logo', 'telephone', 'address'], sameAs: biz?.sameAs ?? 0 },
+    pages: {
+      about: any(/^\/(about|about-us|who-we-are|our-story|our-company|company)\/?$/, /^(about|about us|who we are|our story|our company)$/),
+      contact: any(/^\/(contact|contact-us|get-in-touch|reach-us)\/?$/, /^(contact|contact us|get in touch|reach us)$/),
+      legal: any(/^\/(privacy|privacy-policy|terms|terms-of-service|terms-and-conditions|terms-conditions|legal|cookie-policy|disclaimer|refund-policy)\/?$/, /^(privacy( policy)?|terms( of service| & conditions| and conditions)?|legal|cookie policy|disclaimer)$/),
+    },
+    llms: { hasTitle: /^\s*#\s+\S/.test(llmsText), hasSummary: /^\s*>\s+\S/m.test(llmsText) },
+  };
+}
+
 export async function runSiteChecks(base: string, home: FetchResult): Promise<{ checks: SiteChecks; robots: Robots }> {
   const notes: string[] = [];
   const u = new URL(base);
@@ -110,7 +201,22 @@ export async function runSiteChecks(base: string, home: FetchResult): Promise<{ 
   // A made-up URL must answer 404, not 200 (a "soft 404" confuses crawlers).
   const nf = await fetchPage(`${base}/openink-audit-404-check-${Date.now().toString(36)}`, { timeout: 10000 });
   const h = home.headers;
+  // agent-readiness probes: Markdown on request, MCP Server Card, and WebMCP in the homepage's own scripts
+  const md = await fetchPage(`${base}/`, { accept: 'text/markdown, text/plain;q=0.5', timeout: 10000 });
+  const card = await fetchPage(`${base}/.well-known/mcp/server-card.json`, { accept: 'application/json', timeout: 10000 });
+  const srcs = Array.from(home.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi))
+    .map((m) => {
+      try {
+        return new URL(m[1].replace(/&amp;/g, '&'), `${base}/`).href;
+      } catch {
+        return '';
+      }
+    })
+    .filter((s) => s && hostOf(s) === hostOf(base))
+    .slice(0, 8);
+  const scriptTexts = (await Promise.all(srcs.map((s) => fetchPage(s, { accept: '*/*', timeout: 8000 })))).filter((r): r is FetchResult => !!r && r.status === 200).map((r) => r.text);
   const checks: SiteChecks = {
+    agent: agentChecks(base, home, rr && rr.status === 200 ? rr.text : '', md, card, scriptTexts, llmsOk ? llms!.text : ''),
     https: { usesHttps: u.protocol === 'https:', httpRedirectsToHttps: httpRedirects, hsts: !!h['strict-transport-security'], wwwConsistent },
     robots: { exists: robots.exists, blocksEverything, sitemapDeclared: robots.sitemaps.length > 0, size: robots.size, aiCrawlers },
     sitemap,

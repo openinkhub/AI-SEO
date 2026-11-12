@@ -710,7 +710,7 @@ function rebuildRoot(res: PageAuditResult, input: AuditInput, c: Ctx): void {
     const i = root.findIndex((r) => r.id === id);
     const prev = i >= 0 ? root[i] : ({ id } as Rule);
     const next: Rule = { ...prev, id, s, v: cut(v, 220), n: prev.n };
-    if (f && s !== 'p' && s !== 'i' && s !== 'n') next.f = cut(f, 480);
+    if (f && s !== 'p' && s !== 'i' && s !== 'n') next.f = cut(f, 700);
     else delete next.f;
     if (i >= 0) root[i] = next;
     else root.push(next);
@@ -824,6 +824,29 @@ function rebuildRoot(res: PageAuditResult, input: AuditInput, c: Ctx): void {
     const home = input.pages.find((p) => bare(p.url) === bare(input.origin));
     const org = !!home?.deep?.schema.nodeTypes.some((t) => /^(Organization|LocalBusiness|Corporation|ProfessionalService)$/.test(t) || /Business$/.test(t));
     set(67, !org ? 'f' : (home?.deep?.schema.sameAs ?? 0) === 0 ? 'w' : 'p', org ? `Homepage Organization schema${home?.deep?.schema.sameAs ? ` with ${home.deep.schema.sameAs} sameAs link(s)` : ' without sameAs'}` : 'No Organization / LocalBusiness schema on the homepage', 'Add Organization / LocalBusiness schema on the homepage with name, url, logo, contact point and sameAs links to every official profile.');
+  }
+  // Agent readiness (71-79): site-level checks, root domain only
+  {
+    const A = chk.agent;
+    const L = chk.llmsTxt;
+    if (A) {
+      set(71, A.contentSignal ? 'p' : 'w', A.contentSignal ? `Content-Signal: ${A.contentSignal}` : chk.robots.exists ? 'No Content-Signal directive in robots.txt' : 'No robots.txt, so no Content-Signal', 'Add a Content-Signal line to robots.txt under "User-agent: *", stating how your content may be used, for example "Content-Signal: search=yes, ai-input=yes, ai-train=no". WordPress: Rank Math / Yoast > Tools > File editor (or the robots.txt your host serves).');
+      set(72, chk.notFound.correct404 == null ? 'n' : chk.notFound.correct404 ? 'p' : 'f', chk.notFound.correct404 == null ? 'Not tested' : `A non-existent URL answers HTTP ${chk.notFound.status}${chk.notFound.correct404 ? '' : ' (should be 404 or 410)'}`, 'Return a real 404 for missing pages: agents treat HTTP 200 as "this page exists". WordPress: check the theme 404.php and the redirect / SEO plugin setting that sends unknown URLs to the homepage; turn off "redirect all 404s to home" and any catch-all rewrite.');
+      const miss = A.business.missing;
+      set(73, !A.business.found ? 'f' : miss.length === 0 ? 'p' : 'w', !A.business.found ? 'No Organization / LocalBusiness node on the homepage' : miss.length ? `Business schema is missing: ${miss.join(', ')}` : 'Business schema has name, url, logo, telephone and address', `Fill in the missing fields (${miss.length ? miss.join(', ') : 'name, url, logo, telephone, address'}) in the Organization / LocalBusiness schema so an agent can answer questions about the business without guessing. WordPress: Rank Math > Titles & Meta > Local SEO, or Yoast > Settings > Site representation.`);
+      set(74, A.business.sameAs >= 2 ? 'p' : 'w', A.business.sameAs ? `${A.business.sameAs} sameAs link(s) in the business schema${A.business.sameAs < 2 ? ' (add more)' : ''}` : 'No sameAs links in the structured data', 'Add sameAs links to every official profile (LinkedIn, X, Facebook, Instagram, YouTube, Google Business Profile, directories) so agents can confirm you are the same entity. WordPress: Rank Math > Titles & Meta > Local SEO > social profiles, or Yoast > Settings > Site representation > Social profiles.');
+      const names: Array<[string, 'url' | 'text' | null]> = [['about', A.pages.about], ['contact', A.pages.contact], ['legal (privacy / terms)', A.pages.legal]];
+      const noPg = names.filter(([, v]) => !v).map(([n]) => n);
+      const weak = names.filter(([, v]) => v === 'text').map(([n]) => n);
+      set(75, noPg.length === 0 && weak.length === 0 ? 'p' : noPg.length === 3 ? 'f' : 'w', [noPg.length && `No homepage link found for: ${noPg.join(', ')}`, weak.length && `Linked only by its text, not by a clear URL: ${weak.join(', ')}`].filter(Boolean).join('; ') || 'About, contact and legal pages are linked from the homepage', `${noPg.length ? `Link the missing page(s) from the homepage header or footer menu: ${noPg.join(', ')}. ` : ''}${weak.length ? `Point the ${weak.join(', ')} link to a clearly named URL (for example /about/, /contact/, /privacy-policy/) so agents can recognise the page from the address. ` : ''}WordPress: Appearance > Menus, and the page slug under Quick Edit.`);
+      const llmsOk = L.exists && A.llms.hasTitle && A.llms.hasSummary && L.links >= 3;
+      set(76, llmsOk ? 'p' : 'w', !L.exists ? 'No /llms.txt' : `llms.txt ${[!A.llms.hasTitle && 'has no "# " title', !A.llms.hasSummary && 'has no "> " summary', L.links < 3 && `has only ${L.links} markdown link(s)`].filter(Boolean).join(', ') || 'is well-formed'}`, 'Follow the llms.txt format: a "# Site name" title, a "> one-line summary", then sections ("## Services") of markdown links "- [Page title](https://...): what it covers" to your key pages.');
+      set(77, A.markdown.ok ? 'p' : 'w', A.markdown.ok ? 'Homepage returns Markdown for Accept: text/markdown' : `Homepage returned '${A.markdown.contentType ?? 'n/a'}' for Accept: text/markdown`, 'Serve a Markdown version when an agent asks for it (Accept: text/markdown): it cuts token cost dramatically versus HTML. WordPress: a Markdown-for-agents plugin, a small mu-plugin / Cloudflare rule that returns the page content as text/markdown, or the "Markdown for Agents" setting on Cloudflare.');
+      set(78, A.webmcp ? 'p' : 'w', A.webmcp ? 'WebMCP tools found on the page' : `No WebMCP tools registered on page load (homepage and ${A.webmcpScriptsRead} own script file(s) read)`, 'Call navigator.modelContext.registerTool() on page load with a name, description, inputSchema and execute callback, or annotate a form with toolname and tooldescription, so in-browser agents can use the site (search, contact, booking).');
+      const C = A.mcpCard;
+      const cardOk = C.status === 200 && C.json && C.hasName && C.hasVersion && C.hasEndpoint;
+      set(79, cardOk ? 'p' : 'w', cardOk ? 'MCP Server Card published' : C.status === 200 && !C.json ? `/.well-known/mcp/server-card.json returned ${C.contentType ?? 'something'}, not JSON (probably a catch-all route)` : C.status === 200 ? `MCP Server Card is missing: ${[!C.hasName && 'name', !C.hasVersion && 'version', !C.hasEndpoint && 'endpoint URL'].filter(Boolean).join(', ')}` : `No MCP Server Card (HTTP ${C.status ?? 'n/a'})`, 'Publish an MCP Server Card (SEP-1649) at /.well-known/mcp/server-card.json with name, version, an endpoint URL and the capabilities your server supports; make sure the URL returns application/json, not the theme\'s HTML 404 page.');
+    }
   }
   // JS / CSS assets
   {

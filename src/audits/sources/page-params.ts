@@ -92,6 +92,16 @@ export const PARAMS: Param[] = [
   P(68, 'Author Schema', 'Structured data', 'Articles identify the author as a Person in schema.'),
   P(69, 'FAQ Schema Validation', 'Structured data', 'FAQ content has valid FAQPage schema (every question has an accepted answer).'),
   P(70, 'Excerpt', 'Content & metadata', 'An excerpt / description of 70-160 characters exists for search and social previews.'),
+  // Agent readiness (site-level checks, root domain only): can an AI agent read, understand and use the site?
+  P(71, 'Content Signals declared', 'Agent readiness', 'robots.txt has a Content-Signal line saying how content may be used (for example search=yes, ai-train=no).', 0.5),
+  P(72, 'Missing pages return a real 404', 'Agent readiness', 'A URL that does not exist answers HTTP 404 or 410, never 200.', 0.5),
+  P(73, 'Business schema complete', 'Agent readiness', 'The homepage Organization / LocalBusiness schema has name, url, logo, telephone and address.'),
+  P(74, 'Entity linked via sameAs', 'Agent readiness', 'The business schema lists sameAs links to the official social and directory profiles (2 or more).'),
+  P(75, 'About, contact and legal pages linked', 'Agent readiness', 'The homepage links to an about page, a contact page and a legal page (privacy / terms).'),
+  P(76, 'llms.txt well-formed', 'Agent readiness', 'llms.txt starts with "# Title", has a "> summary" line, then sections of markdown links to the key pages.', 0.5),
+  P(77, 'Serves Markdown on request', 'Agent readiness', 'A request with Accept: text/markdown returns a Markdown version of the page.', 0.5),
+  P(78, 'WebMCP tools exposed', 'Agent readiness', 'The page registers tools for in-browser agents (navigator.modelContext.registerTool or toolname / tooldescription form attributes).', 0.5),
+  P(79, 'MCP Server Card published', 'Agent readiness', '/.well-known/mcp/server-card.json returns JSON with name, version and an endpoint URL.', 0.5),
 ];
 
 export const PARAM_BY_ID = new Map(PARAMS.map((p) => [p.id, p]));

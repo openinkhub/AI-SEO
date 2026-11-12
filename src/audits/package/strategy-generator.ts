@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { GoalCheck } from './goals';
 import { SCOPE_SECTIONS, SCOPE_TARGETS, scopeAsPromptText } from './service-scope';
 import { GEO_FACTS, geoKnowledgeAsPromptText } from './geo-knowledge';
+import { AGENT_GOALS, agentReadinessAsPromptText } from './agent-readiness';
 import { roadmapAsPromptText } from './ai-roadmap';
 
 const logger = new Logger('StrategyGenerator');
@@ -113,6 +114,9 @@ ${scopeAsPromptText(input.monthIndex ?? null)}
 AI-SEARCH KNOWLEDGE BASE (general industry findings from Openink Hub, NOT data about this client; use them to choose and justify AEO / GEO / AIO actions, and never present them as the client's own numbers)
 ${geoKnowledgeAsPromptText()}
 
+AGENT-READINESS GOALS (what the site needs so AI agents can read and use it; the SEO Audit checks them as parameters 71-79 and lists the fixes it found. Plan the failing ones, do not invent results)
+${agentReadinessAsPromptText()}
+
 OPENINK HUB AI VISIBILITY ROADMAP (the order of work for AI-search visibility; place this month's actions on the right phase)
 ${roadmapAsPromptText()}
 
@@ -217,6 +221,13 @@ export function ruleBasedStrategy(input: StrategyInput): Strategy {
     title: 'Make the site easy for AI search to read and cite',
     why: 'AI assistants and Google AI Overviews cite pages that are easy to crawl, clearly structured and backed by named sources.',
     actions: GEO_FACTS.filter((g) => ['crawlers', 'llms', 'sameas', 'overviews', 'passage', 'statistics', 'bing'].includes(g.key)).map((g) => g.action),
+    when: 'Week 2-4',
+  });
+  priorities.push({
+    area: 'Advanced Search Optimization (AEO, GEO, AIO & CXO)',
+    title: 'Make the website agent-ready',
+    why: 'AI agents need clear signals about what they may use, a real 404 for missing pages, a complete business entity and machine-readable entry points.',
+    actions: AGENT_GOALS.map((g) => g.fix),
     when: 'Week 2-4',
   });
   return {

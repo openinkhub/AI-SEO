@@ -1876,6 +1876,12 @@
           '<tr><td><strong>DR target</strong></td>' + tg.months.map(function(m){ return '<td>' + (m.dr == null ? 'baseline' : m.dr) + '</td>'; }).join('') + '</tr></tbody></table>' +
           '<h3 style="margin:24px 0 6px">AI-search findings</h3>' + b.innerHTML;
       }
+      var ag = (d && d.agentGoals) || [];
+      if (ag.length) {
+        b.innerHTML += '<h3 style="margin:24px 0 6px">Agent-readiness goals (9)</h3><p class="muted">What a website needs so AI agents can find, read and use it. The SEO Audit checks each one as parameters 71&ndash;79 (root domain) and lists the fix in the SEO report; the strategy writer plans the ones that fail.</p>' +
+          '<table><thead><tr><th style="width:4%">#</th><th style="width:22%">Goal</th><th style="width:30%">Issue the audit reports</th><th>Fix</th></tr></thead><tbody>' +
+          ag.map(function(g, i){ return '<tr><td>' + (i + 1) + '</td><td><strong>' + escapeHtml(g.goal) + '</strong><br><span class="muted">audit parameter ' + escapeHtml(String(g.id)) + '</span></td><td>' + escapeHtml(g.issue) + '</td><td>' + escapeHtml(g.fix) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
       var rm = (d && d.roadmap) || {};
       var li = function(arr){ return (arr || []).map(function(a){ return '&bull; ' + escapeHtml(a); }).join('<br>'); };
       b.innerHTML += '<h3 style="margin:24px 0 6px">AI Visibility Roadmap (6 months)</h3><p class="muted">The four-phase plan behind each customer’s AI-visibility work. The strategy writer places every month’s actions on the right phase.</p>' +
