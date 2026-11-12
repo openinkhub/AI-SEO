@@ -27,12 +27,16 @@ import { Layer8Item, Layer8Platform } from './layer8.entities';
 import { Layer8Service } from './layer8.service';
 import { Layer8Controller } from './layer8.controller';
 import { WpLayer8Controller } from './wp-layer8.controller';
+import { Layer9Faq, Layer9Platform } from './layer9.entities';
+import { Layer9Service } from './layer9.service';
+import { Layer9Controller } from './layer9.controller';
+import { WpLayer9Controller } from './wp-layer9.controller';
 import { LayerAutomation } from './layer-automation';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform]), CustomerApisModule],
-  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, LayerAutomation, WpApiKeyGuard],
-  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller],
-  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service],
+  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform, Layer9Faq, Layer9Platform]), CustomerApisModule],
+  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, LayerAutomation, WpApiKeyGuard],
+  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller, Layer9Controller, WpLayer9Controller],
+  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service],
 })
 export class LayersModule {}

@@ -5,9 +5,10 @@ import { Layer5Service } from './layer5.service';
 import { Layer6Service } from './layer6.service';
 import { Layer7Service } from './layer7.service';
 import { Layer8Service } from './layer8.service';
+import { Layer9Service } from './layer9.service';
 
 // AUTOMATION RULE (decided 2026-10-28): a Layer that is automated runs on its SET DATE only - the scheduled date
-// of its row in the customer's Month Cycle (Layer 4 = Day 4, Layer 5 = Day 5, Layer 6 = Day 6, Layer 7 = Day 7, Layer 8 = Day 8 of the month, M0..M12). It does not run early and does
+// of its row in the customer's Month Cycle (Layer 4 = Day 4, Layer 5 = Day 5, Layer 6 = Day 6, Layer 7 = Day 7, Layer 8 = Day 8, Layer 9 = Day 9 of the month, M0..M12). It does not run early and does
 // not back-fill missed days (a deploy must never trigger a burst of paid API calls for past dates).
 //  - Window: from LAYER_AUTOMATION_START_HOUR (default 01:00, APP_TIMEZONE) until the end of that day, checked every 10 minutes.
 //  - Order: platform by platform (ChatGPT, Gemini, Perplexity, Claude, Grok, DeepSeek, Meta AI, Google AI), every due
@@ -15,7 +16,7 @@ import { Layer8Service } from './layer8.service';
 //  - Skipped: Manual platforms (Copilot), platforms already holding 10 keywords, platforms already attempted today.
 //  - Result: the Layer row becomes "done" when all 9 platforms hold 10 keywords, otherwise "in progress".
 //  - Switch off with LAYER_AUTOMATION=off.
-export const AUTOMATED_LAYERS: number[] = [4, 5, 6, 7, 8];
+export const AUTOMATED_LAYERS: number[] = [4, 5, 6, 7, 8, 9];
 
 const tick_ms = 10 * 60 * 1000;
 const tz = () => process.env.APP_TIMEZONE || 'Asia/Kolkata';
@@ -29,7 +30,7 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
   private first: NodeJS.Timeout | null = null;
   private busy = false;
 
-  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service) {}
+  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service) {}
 
   onModuleInit() {
     if ((process.env.LAYER_AUTOMATION || '').toLowerCase() === 'off') {
@@ -69,6 +70,9 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
         } else if (layerNo === 8) {
           const out = await this.layer8.runDay(due.map((r) => ({ customerId: r.customerId, monthIndex: r.monthIndex })));
           this.log.log(`Layer 8 (${todayStr()}): ${out}`);
+        } else if (layerNo === 9) {
+          const out = await this.layer9.runDay(due.map((r) => ({ customerId: r.customerId, monthIndex: r.monthIndex })));
+          this.log.log(`Layer 9 (${todayStr()}): ${out}`);
         }
       }
     } catch (err) {

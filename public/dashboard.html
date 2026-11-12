@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -820,6 +820,100 @@
     var save = document.getElementById('l7Save');
     if (save) save.addEventListener('click', function(){ act('/manual', 'PUT', { text: document.getElementById('l7Text').value }, save); });
   }
+
+  // ---- Layer 9 - AI FAQ Discovery: 9 AI platforms x 10 items ----
+  var l9 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer9(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l9Box');
+    if (!box || !cm) return;
+    l9.cid = cust.id; l9.mid = cm.id;
+    if (l9.timer) { clearTimeout(l9.timer); l9.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 9...</p></section>';
+    loadLayer9(cust, cm, box);
+  }
+
+  function l9Base(cust) { return '/customers/' + cust.id + '/layer9'; }
+
+  function loadLayer9(cust, cm, box) {
+    api(l9Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l9Box') !== box || l9.mid !== cm.id) return;
+      l9.data = d;
+      drawLayer9(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l9.timer = setTimeout(function(){ loadLayer9(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l9Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 9: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer9(cust, cm, box) {
+    var d = l9.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l9.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 9 \u00b7 Day 9</span>AI FAQ Discovery</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' questions \u00b7 ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete \u00b7 ' + escapeHtml(d.month) +
+      '. Each AI platform returns 10 questions customers ask about the business (discovery only, no answers; Google People Also Ask questions from Layer 7 are excluded), with FAQ Type, Search Intent, Customer Journey and Relevance. Runs automatically on its set date (Day 9); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<button class="btn" id="l9RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Question, FAQ Type, Search Intent, Customer Journey, Relevance (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l9ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l9Import">Import</button></div></details>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running...' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l9.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' \u00b7 key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l9mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l9run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        '<span class="muted" data-l9msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.question + ' | ' + r.faqType + ' | ' + r.searchIntent + ' | ' + r.customerJourney + ' | ' + r.relevance; }).join('\n');
+        h += '<textarea data-l9text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: question | FAQ Type | Search Intent | Customer Journey | Relevance">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l9save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' questions</button> <span class="muted">FAQ Type: Product / Service, Information, Process, Cost / Pricing, Availability, Location, Comparison, Eligibility, Purchase, Usage, Support, Problem / Concern, Post-Purchase \u00b7 Intent: Informational, Commercial, Transactional, Local, Evaluational, Navigational \u00b7 Journey: Awareness, Consideration, Decision, Purchase, Post-Purchase \u00b7 Relevance: High, Medium-High, Medium</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>FAQ question</th><th>FAQ type</th><th>Search intent</th><th>Customer journey</th><th>Relevance</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.question) + '</td><td>' + escapeHtml(r.faqType) + '</td><td>' + escapeHtml(r.searchIntent) + '</td><td>' + escapeHtml(r.customerJourney) + '</td><td>' + escapeHtml(r.relevance) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l9Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer9(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var runAll = document.getElementById('l9RunAll');
+    if (runAll) runAll.addEventListener('click', function(){
+      if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing questions of those platforms are replaced.')) return;
+      act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l9Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l9ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l9Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 9 is complete (90/90).' : ''));
+        loadLayer9(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l9run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l9run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l9save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l9save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l9text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l9mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l9mode'), mode: s.value }, s); }); });
+  }
+
 
   // ---- Layer 8 - AI Similar Product / Service: 9 AI platforms x 10 items ----
   var l8 = { cid: null, mid: null, data: null, timer: null, open: {} };
