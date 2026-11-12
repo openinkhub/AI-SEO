@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -820,6 +820,101 @@
     var save = document.getElementById('l7Save');
     if (save) save.addEventListener('click', function(){ act('/manual', 'PUT', { text: document.getElementById('l7Text').value }, save); });
   }
+
+  // ---- Layer 10 - AI Quora Q&amp;A: 9 AI platforms x 10 items ----
+  var l10 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer10(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l10Box');
+    if (!box || !cm) return;
+    l10.cid = cust.id; l10.mid = cm.id;
+    if (l10.timer) { clearTimeout(l10.timer); l10.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 10...</p></section>';
+    loadLayer10(cust, cm, box);
+  }
+
+  function l10Base(cust) { return '/customers/' + cust.id + '/layer10'; }
+
+  function loadLayer10(cust, cm, box) {
+    api(l10Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l10Box') !== box || l10.mid !== cm.id) return;
+      l10.data = d;
+      drawLayer10(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l10.timer = setTimeout(function(){ loadLayer10(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l10Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 10: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer10(cust, cm, box) {
+    var d = l10.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l10.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 10 \u00b7 Day 10</span>AI Quora Q&amp;A</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' Quora questions (up to ' + d.expected + ') \u00b7 ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete \u00b7 ' + escapeHtml(d.month) +
+      '. Each AI platform returns up to 10 verified Quora questions about the business (Quora only; fewer than 10 is allowed and nothing is invented), with Topic, Primary Keyword, Search Intent, Relevance and the quora.com URL. Only platforms that can search the web (Perplexity, Google AI) normally find real Quora pages; the Google AI run is grounded on a real site:quora.com Google search. Records without a valid https quora.com URL are rejected. Runs automatically on its set date (Day 10); the customer panel shows the table once every API platform has finished its run.</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<button class="btn" id="l10RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Quora Question, Topic, Primary Keyword, Search Intent, Relevance, Quora URL (tab or | separated; a https quora.com URL is required). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l10ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l10Import">Import</button></div></details>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running...' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l10.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' \u00b7 key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l10mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l10run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        '<span class="muted" data-l10msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.question + ' | ' + r.topic + ' | ' + r.primaryKeyword + ' | ' + r.searchIntent + ' | ' + r.relevance + ' | ' + r.quoraUrl; }).join('\n');
+        h += '<textarea data-l10text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: question | topic | primary keyword | search intent | relevance | https://www.quora.com/...">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l10save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' Quora questions</button> <span class="muted">Intent: Informational, Commercial, Transactional, Navigational, Comparison, Local \u00b7 the quora.com URL is required on every line</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>Quora question</th><th>Topic</th><th>Primary keyword</th><th>Search intent</th><th>Relevance</th><th>Quora URL</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.question) + '</td><td>' + escapeHtml(r.topic) + '</td><td>' + escapeHtml(r.primaryKeyword) + '</td><td>' + escapeHtml(r.searchIntent) + '</td><td>' + escapeHtml(r.relevance) + '</td><td><a href="' + escapeHtml(r.quoraUrl) + '" target="_blank" rel="noopener">' + escapeHtml(r.quoraUrl.length > 48 ? r.quoraUrl.slice(0, 48) + '...' : r.quoraUrl) + '</a>' + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l10Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer10(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var runAll = document.getElementById('l10RunAll');
+    if (runAll) runAll.addEventListener('click', function(){
+      if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing Quora questions of those platforms are replaced.')) return;
+      act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l10Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l10ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l10Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 10 is done.' : ''));
+        loadLayer10(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l10run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l10run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l10save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l10save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l10text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l10mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l10mode'), mode: s.value }, s); }); });
+  }
+
+
 
   // ---- Layer 9 - AI FAQ Discovery: 9 AI platforms x 10 items ----
   var l9 = { cid: null, mid: null, data: null, timer: null, open: {} };

@@ -13,6 +13,7 @@ import { Layer6Service } from '../layers/layer6.service';
 import { Layer7Service } from '../layers/layer7.service';
 import { Layer8Service } from '../layers/layer8.service';
 import { Layer9Service } from '../layers/layer9.service';
+import { Layer10Service } from '../layers/layer10.service';
 
 @Injectable()
 export class ProjectsService {
@@ -28,6 +29,7 @@ export class ProjectsService {
     private readonly layer7: Layer7Service,
     private readonly layer8: Layer8Service,
     private readonly layer9: Layer9Service,
+    private readonly layer10: Layer10Service,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -80,6 +82,7 @@ export class ProjectsService {
     await this.layer7.removeByCustomer(customerId);
     await this.layer8.removeByCustomer(customerId);
     await this.layer9.removeByCustomer(customerId);
+    await this.layer10.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }
 
