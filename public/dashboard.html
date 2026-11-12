@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -755,6 +755,102 @@
     }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l5mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l5mode'), mode: s.value }, s); }); });
   }
+
+  // ---- Layer 6 · AI Search Prompt: 9 AI platforms x 10 prompts ----
+  var l6 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer5(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l6Box');
+    if (!box || !cm) return;
+    l6.cid = cust.id; l6.mid = cm.id;
+    if (l6.timer) { clearTimeout(l6.timer); l6.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 6…</p></section>';
+    loadLayer5(cust, cm, box);
+  }
+
+  function l6Base(cust) { return '/customers/' + cust.id + '/layer6'; }
+
+  function loadLayer5(cust, cm, box) {
+    api(l6Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l6Box') !== box || l6.mid !== cm.id) return;
+      l6.data = d;
+      drawLayer5(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l6.timer = setTimeout(function(){ loadLayer5(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l6Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 6: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer5(cust, cm, box) {
+    var d = l6.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l6.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 6 · Day 6</span>AI Search Long Tail Keyword</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' keywords · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
+      '. Each AI platform returns 10 long-tail search queries (3+ words) with Intent, Demand and an estimated monthly volume; the Keyword Type is worked out from the keyword. It researches from the business profile only. Runs automatically on its set date (Day 6); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<button class="btn" id="l6RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Keyword, Intent, Demand, Est Volume (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l6ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l6Import">Import</button></div></details>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running…' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l6.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' · key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l6mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l6run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        (p.mode === 'api' && p.count && p.records.some(function(r){ return r.estVolume == null; }) ? '<button class="btn" data-l6vol="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>Get volumes</button>' : '') +
+        '<span class="muted" data-l6msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.keyword + ' | ' + r.intent + ' | ' + r.demand + ' | ' + (r.estVolume == null ? '' : r.estVolume); }).join('\n');
+        h += '<textarea data-l6text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: keyword | Intent | Demand | est. monthly volume">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l6save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' keywords</button> <span class="muted">Intent: Informational, Navigational, Commercial, Transactional, Local, Purchase, Evaluational, Compliance · Demand: High, Medium-High, Medium, Low</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>Long-tail keyword</th><th>Primary intent</th><th>Keyword type</th><th>Demand</th><th>Est. volume</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.keyword) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.keywordType) + '</td><td>' + escapeHtml(r.demand) + '</td><td>' + (r.estVolume == null ? '—' : Number(r.estVolume).toLocaleString('en-US')) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l6Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer5(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var runAll = document.getElementById('l6RunAll');
+    if (runAll) runAll.addEventListener('click', function(){
+      if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing keywords of those platforms are replaced.')) return;
+      act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l6Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l6ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l6Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 6 is complete (90/90).' : ''));
+        loadLayer5(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l6run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l6run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l6vol]'), function(b){ b.addEventListener('click', function(){ act('/volumes', 'POST', { platform: b.getAttribute('data-l6vol') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l6save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l6save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l6text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l6mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l6mode'), mode: s.value }, s); }); });
+  }
+
 
   // ---- placeholder pages -------------------------------------------
 

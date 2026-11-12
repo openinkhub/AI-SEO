@@ -9,6 +9,7 @@ import { MONTH_COUNT, cycleDates, statusForCycle, todayInTz } from './month-cycl
 import { LayersService } from '../layers/layers.service';
 import { Layer4Service } from '../layers/layer4.service';
 import { Layer5Service } from '../layers/layer5.service';
+import { Layer6Service } from '../layers/layer6.service';
 
 @Injectable()
 export class ProjectsService {
@@ -20,6 +21,7 @@ export class ProjectsService {
     private readonly layers: LayersService,
     private readonly layer4: Layer4Service,
     private readonly layer5: Layer5Service,
+    private readonly layer6: Layer6Service,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -68,6 +70,7 @@ export class ProjectsService {
     await this.layers.removeByCustomer(customerId);
     await this.layer4.removeByCustomer(customerId);
     await this.layer5.removeByCustomer(customerId);
+    await this.layer6.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }
 
