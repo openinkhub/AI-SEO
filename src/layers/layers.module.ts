@@ -11,12 +11,16 @@ import { Layer4Keyword, Layer4Platform } from './layer4.entities';
 import { Layer4Service } from './layer4.service';
 import { Layer4Controller } from './layer4.controller';
 import { WpLayer4Controller } from './wp-layer4.controller';
+import { Layer5Platform, Layer5Prompt } from './layer5.entities';
+import { Layer5Service } from './layer5.service';
+import { Layer5Controller } from './layer5.controller';
+import { WpLayer5Controller } from './wp-layer5.controller';
 import { LayerAutomation } from './layer-automation';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform]), CustomerApisModule],
-  providers: [LayersService, Layer4Service, LayerAutomation, WpApiKeyGuard],
-  controllers: [LayersController, Layer4Controller, WpLayer4Controller],
-  exports: [LayersService, Layer4Service],
+  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform]), CustomerApisModule],
+  providers: [LayersService, Layer4Service, Layer5Service, LayerAutomation, WpApiKeyGuard],
+  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller],
+  exports: [LayersService, Layer4Service, Layer5Service],
 })
 export class LayersModule {}

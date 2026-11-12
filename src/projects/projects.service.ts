@@ -8,6 +8,7 @@ import { Customer } from '../customers/customer.entity';
 import { MONTH_COUNT, cycleDates, statusForCycle, todayInTz } from './month-cycle';
 import { LayersService } from '../layers/layers.service';
 import { Layer4Service } from '../layers/layer4.service';
+import { Layer5Service } from '../layers/layer5.service';
 
 @Injectable()
 export class ProjectsService {
@@ -18,6 +19,7 @@ export class ProjectsService {
     private readonly customerRepo: Repository<Customer>,
     private readonly layers: LayersService,
     private readonly layer4: Layer4Service,
+    private readonly layer5: Layer5Service,
   ) {}
 
   findAllForCustomer(customerId: string): Promise<Project[]> {
@@ -65,6 +67,7 @@ export class ProjectsService {
     const projects = await this.findAllForCustomer(customerId);
     await this.layers.removeByCustomer(customerId);
     await this.layer4.removeByCustomer(customerId);
+    await this.layer5.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }
 

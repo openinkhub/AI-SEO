@@ -560,10 +560,10 @@
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) mountLayer4(cust);
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -659,6 +659,99 @@
       act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l4text="' + pf + '"]').value }, b);
     }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l4mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l4mode'), mode: s.value }, s); }); });
+  }
+
+  // ---- Layer 5 · AI Search Prompt: 9 AI platforms x 10 prompts ----
+  var l5 = { cid: null, mid: null, data: null, timer: null, open: {} };
+
+  function mountLayer5(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l5Box');
+    if (!box || !cm) return;
+    l5.cid = cust.id; l5.mid = cm.id;
+    if (l5.timer) { clearTimeout(l5.timer); l5.timer = null; }
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 5…</p></section>';
+    loadLayer5(cust, cm, box);
+  }
+
+  function l5Base(cust) { return '/customers/' + cust.id + '/layer5'; }
+
+  function loadLayer5(cust, cm, box) {
+    api(l5Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l5Box') !== box || l5.mid !== cm.id) return;
+      l5.data = d;
+      drawLayer5(cust, cm, box);
+      if (d.platforms.some(function(p){ return p.status === 'running'; })) {
+        l5.timer = setTimeout(function(){ loadLayer5(cust, cm, box); }, 4000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l5Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 5: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer5(cust, cm, box) {
+    var d = l5.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l5.open[x.getAttribute('data-pf')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 5 · Day 5</span>AI Search Prompt</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' prompts · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
+      '. Each AI platform returns 10 natural prompts buyers type into it, with Intent, Prompt Type and Demand. It researches from the business profile only, not from the Layer 4 keywords. Runs automatically on its set date (Day 5); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
+      '<button class="btn" id="l5RunAll">Run all API platforms now</button></div>' +
+      '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Prompt, Intent, Prompt Type, Demand (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<textarea id="l5ImportText" rows="8" style="width:100%"></textarea>' +
+      '<div style="margin:6px 0"><button class="btn" id="l5Import">Import</button></div></details>';
+    d.platforms.forEach(function(p){
+      var badge = p.status === 'complete' ? 'ok' : (p.status === 'failed' ? 'fail' : 'pending');
+      var label = p.status === 'running' ? 'Running…' : (p.count + '/' + p.expected);
+      h += '<details data-pf="' + p.platform + '"' + (l5.open[p.platform] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary style="cursor:pointer"><strong>' + escapeHtml(p.label) + '</strong> <span class="badge ' + badge + '">' + escapeHtml(label) + '</span> ' +
+        '<span class="muted">' + (p.mode === 'manual' ? 'Manual' : 'API') + (p.mode === 'api' && !p.keyReady ? ' · key missing' : '') + '</span></summary>';
+      h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select data-l5mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
+        (p.mode === 'api' ? '<button class="btn" data-l5run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        '<span class="muted" data-l5msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
+      if (p.mode === 'manual') {
+        var cur = p.records.map(function(r){ return r.prompt + ' | ' + r.intent + ' | ' + r.promptType + ' | ' + r.demand; }).join('\n');
+        h += '<textarea data-l5text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: prompt | Intent | Prompt Type | Demand">' + escapeHtml(cur) + '</textarea>' +
+          '<div style="margin:6px 0"><button class="btn" data-l5save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' prompts</button> <span class="muted">Intent: Informational, Navigational, Commercial, Transactional, Local, Purchase, Evaluational, Compliance · Prompt Type: Discovery, Research, Comparison, Evaluation, Recommendation, Problem-Solution, Purchase, Local, Compliance · Demand: High, Medium-High, Medium, Low</span></div>';
+      } else if (p.records.length) {
+        h += '<table><thead><tr><th>#</th><th>AI search prompt</th><th>Intent</th><th>Prompt type</th><th>Demand</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.prompt) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.promptType) + '</td><td>' + escapeHtml(r.demand) + '</td></tr>'; }).join('') + '</tbody></table>';
+      }
+      h += '</details>';
+    });
+    h += '</section>';
+    box.innerHTML = h;
+    var act = function(path, method, body, el) {
+      if (el) el.disabled = true;
+      return api(l5Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
+        loadLayer5(cust, cm, box);
+      }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
+    };
+    var runAll = document.getElementById('l5RunAll');
+    if (runAll) runAll.addEventListener('click', function(){
+      if (!confirm('Run every API platform for ' + cm.monthCode + ' now? Existing prompts of those platforms are replaced.')) return;
+      act('/run-all', 'POST', {}, runAll);
+    });
+    var impBtn = document.getElementById('l5Import');
+    if (impBtn) impBtn.addEventListener('click', function(){
+      var t = document.getElementById('l5ImportText').value;
+      if (!t.trim()) return;
+      impBtn.disabled = true;
+      api(l5Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
+        var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
+        alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 5 is complete (90/90).' : ''));
+        loadLayer5(cust, cm, box);
+      }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l5run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l5run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l5save]'), function(b){ b.addEventListener('click', function(){
+      var pf = b.getAttribute('data-l5save');
+      act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l5text="' + pf + '"]').value }, b);
+    }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l5mode]'), function(s){ s.addEventListener('change', function(){ act('/mode', 'PUT', { platform: s.getAttribute('data-l5mode'), mode: s.value }, s); }); });
   }
 
   // ---- placeholder pages -------------------------------------------
