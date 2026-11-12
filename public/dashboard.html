@@ -759,25 +759,25 @@
   // ---- Layer 6 · AI Search Prompt: 9 AI platforms x 10 prompts ----
   var l6 = { cid: null, mid: null, data: null, timer: null, open: {} };
 
-  function mountLayer5(cust) {
+  function mountLayer6(cust) {
     var cm = currentMonth();
     var box = document.getElementById('l6Box');
     if (!box || !cm) return;
     l6.cid = cust.id; l6.mid = cm.id;
     if (l6.timer) { clearTimeout(l6.timer); l6.timer = null; }
     box.innerHTML = '<section class="card"><p class="muted">Loading Layer 6…</p></section>';
-    loadLayer5(cust, cm, box);
+    loadLayer6(cust, cm, box);
   }
 
   function l6Base(cust) { return '/customers/' + cust.id + '/layer6'; }
 
-  function loadLayer5(cust, cm, box) {
+  function loadLayer6(cust, cm, box) {
     api(l6Base(cust) + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
       if (document.getElementById('l6Box') !== box || l6.mid !== cm.id) return;
       l6.data = d;
-      drawLayer5(cust, cm, box);
+      drawLayer6(cust, cm, box);
       if (d.platforms.some(function(p){ return p.status === 'running'; })) {
-        l6.timer = setTimeout(function(){ loadLayer5(cust, cm, box); }, 4000);
+        l6.timer = setTimeout(function(){ loadLayer6(cust, cm, box); }, 4000);
       }
     }).catch(function(err){
       if (document.getElementById('l6Box') !== box) return;
@@ -785,7 +785,7 @@
     });
   }
 
-  function drawLayer5(cust, cm, box) {
+  function drawLayer6(cust, cm, box) {
     var d = l6.data;
     Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l6.open[x.getAttribute('data-pf')] = x.open; });
     var h = '<section class="card"><h2><span class="layer-tag">Layer 6 · Day 6</span>AI Search Long Tail Keyword</h2>' +
@@ -823,7 +823,7 @@
     var act = function(path, method, body, el) {
       if (el) el.disabled = true;
       return api(l6Base(cust) + path, { method: method, body: Object.assign({ month: cm.monthCode }, body) }).then(function(){
-        loadLayer5(cust, cm, box);
+        loadLayer6(cust, cm, box);
       }).catch(function(err){ alert(err.message); if (el) el.disabled = false; });
     };
     var runAll = document.getElementById('l6RunAll');
@@ -839,7 +839,7 @@
       api(l6Base(cust) + '/import', { method: 'POST', body: { month: cm.monthCode, text: t } }).then(function(r){
         var parts = Object.keys(r.imported).map(function(k){ return k + ': ' + r.imported[k]; }).join(', ');
         alert('Imported - ' + parts + (r.skipped.length ? '\nSkipped ' + r.skipped.length + ' line(s).' : '') + (r.complete ? '\nLayer 6 is complete (90/90).' : ''));
-        loadLayer5(cust, cm, box);
+        loadLayer6(cust, cm, box);
       }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l6run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l6run') }, b); }); });
