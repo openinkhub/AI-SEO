@@ -168,7 +168,7 @@ export function buildExtractionPrompt(tool?: string | null): string {
   ].join('\n');
 }
 
-export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['digispot_report', 'ppcblogpro_report', 'pagespeed_report', 'backlink_tracker', 'ai_prompt_tracker', 'location_links', 'location_monthly', 'location_checklist', 'unknown']));
+export const KNOWN_TYPES = new Set(EVIDENCE_RULES.map((r) => r.type).concat(['digispot_report', 'ppcblogpro_report', 'pagespeed_report', 'site_root_audit', 'site_page_audit', 'backlink_tracker', 'ai_prompt_tracker', 'location_links', 'location_monthly', 'location_checklist', 'unknown']));
 
 // Upload sections shown in the admin panel (one box per tool). Add a line here when a new tool arrives.
 export const TOOL_SECTIONS: Array<{ key: string; label: string; accepts: string; hint: string }> = [

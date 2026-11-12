@@ -38,3 +38,36 @@ export async function runPageSpeed(url: string, apiKey: string, timeoutMs = 6000
     opportunities: opps,
   };
 }
+
+// Numeric detail for one page (the per-page audit): the Core Web Vitals and speed numbers behind parameters 45-50.
+export interface PageSpeedDetail {
+  url: string;
+  perf: number | null;
+  lcpMs: number | null;
+  fcpMs: number | null;
+  cls: number | null;
+  tbtMs: number | null;
+  inpMs: number | null; // real-user (field) data, only when Google has enough visits for this URL
+  ttfbMs: number | null;
+}
+
+export async function runPageSpeedDetail(url: string, apiKey: string, timeoutMs = 60000): Promise<PageSpeedDetail> {
+  const q = new URLSearchParams({ url, key: apiKey, strategy: 'mobile', category: 'performance' });
+  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q.toString()}`, { signal: AbortSignal.timeout(timeoutMs) });
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error?.message || `PageSpeed API returned HTTP ${res.status}`);
+  const lh = body.lighthouseResult ?? {};
+  const a = lh.audits ?? {};
+  const num = (id: string): number | null => (typeof a[id]?.numericValue === 'number' ? Math.round(a[id].numericValue * 1000) / 1000 : null);
+  const field = body.loadingExperience?.metrics?.INTERACTION_TO_NEXT_PAINT?.percentile;
+  return {
+    url,
+    perf: lh.categories?.performance?.score != null ? Math.round(lh.categories.performance.score * 100) : null,
+    lcpMs: num('largest-contentful-paint'),
+    fcpMs: num('first-contentful-paint'),
+    cls: num('cumulative-layout-shift'),
+    tbtMs: num('total-blocking-time'),
+    inpMs: typeof field === 'number' ? field : null,
+    ttfbMs: num('server-response-time'),
+  };
+}

@@ -18,6 +18,8 @@ const FOLDER = 'audit-evidence';
 // Never send the stored text export back in list responses (it can be large).
 function publicView(e: AuditEvidence): Omit<AuditEvidence, 'textContent'> & { hasText: boolean } {
   const { textContent, ...rest } = e;
+  // The page-wise audit is stored in chunks of pages: the list only shows the count (the report and the export read the rows directly).
+  if (e.evidenceType === 'site_page_audit' && e.extracted) return { ...rest, extracted: { part: e.extracted.part, parts: e.extracted.parts, pages: (e.extracted.pages ?? []).length, note: 'Open the page-wise report or the CSV export to see every page.' }, hasText: !!textContent };
   return { ...rest, hasText: !!textContent };
 }
 
@@ -31,6 +33,16 @@ export class EvidenceService {
 
   status() {
     return { readerConfigured: extractorConfigured(), storage: this.storage.backend(), sections: TOOL_SECTIONS };
+  }
+
+  // Everything the page-wise exports need: the root domain row and the page chunks in order.
+  async pageAudit(customerId: string, runId: string): Promise<{ root: Record<string, any>; chunks: Array<Record<string, any>> }> {
+    await this.audits.findOne(customerId, runId);
+    const rows = await this.repo.find({ where: { customerId, auditRunId: runId } });
+    const root = rows.find((r) => r.evidenceType === 'site_root_audit')?.extracted;
+    if (!root) throw new NotFoundException('No page-wise audit for this run yet. Run the research (website crawl) first.');
+    const chunks = rows.filter((r) => r.evidenceType === 'site_page_audit' && r.extracted).map((r) => r.extracted as Record<string, any>).sort((a, b) => (a.part ?? 0) - (b.part ?? 0));
+    return { root: root as Record<string, any>, chunks };
   }
 
   async list(customerId: string, runId: string) {

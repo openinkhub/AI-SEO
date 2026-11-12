@@ -1636,6 +1636,10 @@
     state.runs.forEach(function(r){
       var reportBtn = document.getElementById('report-' + r.id);
       if (reportBtn) reportBtn.addEventListener('click', function(){ viewReport(r.id); });
+      var pageRepBtn = document.getElementById('pagerep-' + r.id);
+      if (pageRepBtn) pageRepBtn.addEventListener('click', function(){ pageAuditOpen(r.id, 'html'); });
+      var pageCsvBtn = document.getElementById('pagecsv-' + r.id);
+      if (pageCsvBtn) pageCsvBtn.addEventListener('click', function(){ pageAuditOpen(r.id, 'csv'); });
       var tasksBtn = document.getElementById('tasks-' + r.id);
       if (tasksBtn) tasksBtn.addEventListener('click', function(){ togglePanel(r.id, 'tasks'); });
       var pushesBtn = document.getElementById('pushes-' + r.id);
@@ -1685,6 +1689,8 @@
     html += '<div class="row-actions">';
     html += '<button id="refresh-' + r.id + '">Refresh</button>';
     html += '<button id="report-' + r.id + '"' + (r.status !== 'completed' ? ' disabled' : '') + '>View report</button>';
+    html += '<button id="pagerep-' + r.id + '" title="Root domain + every page against the 70 SEO parameters, with the fixes"' + (r.status !== 'completed' ? ' disabled' : '') + '>Page-wise report</button>';
+    html += '<button id="pagecsv-' + r.id + '" title="One row per page and parameter (Excel / Sheets)"' + (r.status !== 'completed' ? ' disabled' : '') + '>Page-wise CSV</button>';
     html += '<button id="tasks-' + r.id + '">' + (panel === 'tasks' ? 'Hide tasks' : 'View tasks') + '</button>';
     html += '<button id="pushes-' + r.id + '">' + (panel === 'pushes' ? 'Hide pushes' : 'View pushes') + '</button>';
     html += '<button id="evidence-' + r.id + '">' + (panel === 'evidence' ? 'Hide evidence' : 'Evidence') + '</button>';
@@ -2265,6 +2271,23 @@
     });
     var sign = document.getElementById('pkgSign-' + runId);
     if (sign) sign.addEventListener('change', function(){ pkgAct(runId, '/signoff', 'POST', { signedOff: sign.checked }, 'Saving sign-off…'); });
+  }
+
+  // The page-wise audit (70 parameters): opens the full HTML report in a new tab or downloads the CSV.
+  function pageAuditOpen(runId, kind) {
+    fetch('/api/v1/customers/' + state.cid + '/audits/' + runId + '/page-audit.' + kind, { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function(res){
+        if (!res.ok) return res.text().then(function(t){ var m = t; try { m = JSON.parse(t).message || t; } catch (e) {} throw new Error(m); });
+        return res.blob();
+      })
+      .then(function(blob){
+        var url = URL.createObjectURL(blob);
+        if (kind === 'html') { window.open(url, '_blank'); return; }
+        var a = document.createElement('a');
+        a.href = url; a.download = 'seo-audit-page-wise.csv';
+        document.body.appendChild(a); a.click(); a.remove();
+      })
+      .catch(function(err){ alert('Could not load the page-wise audit: ' + err.message); });
   }
 
   function viewReport(runId) {

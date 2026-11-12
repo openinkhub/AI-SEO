@@ -5,8 +5,9 @@
 import { FetchResult, fetchPage, hostOf, pool, robotsAllows, withProto } from './crawl-http';
 import { analysePage, PageRecord } from './page-analysis';
 import { runSiteChecks, SiteChecks } from './site-checks';
+import { auditPages, PageAuditResult } from './page-rules';
 
-export type CrawledPage = Omit<PageRecord, 'links'>;
+export type CrawledPage = Omit<PageRecord, 'links' | 'deep'>;
 
 export interface CrawlIssue {
   key: string;
@@ -65,6 +66,7 @@ export interface SiteCrawl {
   brokenLinks: Array<{ url: string; status: number | string; foundOn: string }>;
   notes: string[];
   pages: CrawledPage[]; // last on purpose: the task write-up keeps only the start of this object
+  pageAudit?: PageAuditResult; // the 70-parameter audit (stored as its own evidence rows, not inside the crawl)
 }
 
 const SKIP_URL = /(\/wp-admin|\/wp-login|\/wp-json|\/xmlrpc|\/feed\/?$|[?&](replytocom|s|utm_[a-z]+|fbclid|gclid)=)/i;
@@ -290,6 +292,27 @@ export async function crawlSite(website: string): Promise<SiteCrawl> {
   const order = { critical: 0, warning: 1, notice: 2 } as const;
   issues.sort((a, b) => order[a.severity] - order[b.severity] || b.count - a.count);
 
+  // ---- the 70-parameter audit: every page and the root domain ------------------------------------------------------
+  const assetStatus = new Map<string, number>();
+  if (Date.now() < deadline + 25000) {
+    const assets = [...new Set(pages.flatMap((p) => p.deep?.assets ?? []))].slice(0, 60);
+    await pool(assets, 6, async (u) => {
+      const r = await fetchPage(u, { method: 'HEAD', timeout: 8000 });
+      if (r && (r.status === 404 || r.status === 410 || r.status >= 500)) assetStatus.set(u, r.status);
+    });
+  }
+  const pageAudit = auditPages({
+    origin,
+    pages,
+    checks,
+    robots,
+    brokenLinks: broken,
+    assetStatus,
+    complete,
+    crawl: { limit: maxPages, seconds: Math.round((Date.now() - started) / 1000), stoppedEarly, discoveredNotCrawled, blockedByRobots },
+    issues: issues.map((i) => ({ severity: i.severity, area: i.area, title: i.title, fix: i.fix, count: i.count, examples: i.examples })),
+  });
+
   // ---- scores -----------------------------------------------------------------------------------------------
   const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) : 0);
   const n = ok.length;
@@ -355,7 +378,8 @@ export async function crawlSite(website: string): Promise<SiteCrawl> {
     linksChecked: extList.length + pages.length,
     brokenLinks: broken.slice(0, 40),
     notes: [...notes, ...checks.notes],
-    pages: pages.map(({ links, ...rest }) => rest),
+    pages: pages.map(({ links, deep, ...rest }) => rest),
   };
+  result.pageAudit = pageAudit;
   return result;
 }

@@ -8,6 +8,7 @@ export interface Research {
   tool: string; // 'mangools' | 'serpapi'
   label: string;
   data: Record<string, any>;
+  key?: string; // several rows of one type (the page-wise audit is stored in chunks)
 }
 
 export interface ResearchInput {

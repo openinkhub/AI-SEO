@@ -7,6 +7,7 @@ import { crawlSite } from './site-crawl';
 import { Research, ResearchInput, runCompetitorResearch, runFetchResearch, runGscResearch, runKeywordResearch, runLocalResearch } from './runners';
 import { writeTasks } from './task-writer';
 import { auditLocationPages } from './location-pages';
+import { PARAM_BY_ID } from './page-params';
 import { buildPromptSet } from '../package/ai-roadmap';
 import { collectMetrics, metricsSummary } from '../evidence/metrics';
 
@@ -14,7 +15,7 @@ import { collectMetrics, metricsSummary } from '../evidence/metrics';
 // Approved screenshots / exports uploaded by the admin feed the same tasks as the matching API data; a task fed by
 // both sees both (each labelled by its evidence type) and reports each source's own numbers.
 const FEEDS: Partial<Record<SourceKey, string[]>> = {
-  site_ai: ['site_crawl', 'pagespeed_report', 'aitdk_meta', 'aitdk_technical', 'aitdk_density', 'aitdk_social', 'aitdk_structured_data', 'seoquake_audit', 'seoanalyzer_summary', 'seoanalyzer_tab', 'ppcblogpro_summary', 'ppcblogpro_report', 'digispot_dashboard', 'digispot_report', 'seomator_geo_audit'],
+  site_ai: ['site_crawl', 'site_root_audit', 'pagespeed_report', 'aitdk_meta', 'aitdk_technical', 'aitdk_density', 'aitdk_social', 'aitdk_structured_data', 'seoquake_audit', 'seoanalyzer_summary', 'seoanalyzer_tab', 'ppcblogpro_summary', 'ppcblogpro_report', 'digispot_dashboard', 'digispot_report', 'seomator_geo_audit'],
   keywords: ['research_keywords', 'aitdk_density', 'aitdk_serp'],
   competitors: ['research_competitors', 'mangools_sp_competitors', 'ahrefs_domain_rating', 'moz_authority', 'mangools_siteprofiler'],
   backlinks: ['backlink_tracker', 'moz_authority', 'ahrefs_domain_rating', 'mangools_sp_overview', 'mangools_sp_backlinks', 'mangools_sp_top_content', 'mangools_linkminer', 'mangools_siteprofiler', 'aitdk_backlinks', 'aitdk_traffic'],
@@ -31,7 +32,8 @@ export interface EnrichDeps {
 }
 
 async function saveResearch(deps: EnrichDeps, customerId: string, runId: string, r: Research): Promise<void> {
-  const sha = createHash('sha256').update(`${r.type}:${runId}`).digest('hex');
+  const sha = createHash('sha256').update(r.key ? `${r.type}:${r.key}:${runId}` : `${r.type}:${runId}`).digest('hex');
+  if (r.type === 'site_page_audit' && r.key === 'part-1') await deps.evidenceRepo.delete({ auditRunId: runId, evidenceType: 'site_page_audit' }); // drop chunks of an earlier crawl
   await deps.evidenceRepo.delete({ auditRunId: runId, sha256: sha });
   await deps.evidenceRepo.save(
     deps.evidenceRepo.create({
@@ -74,6 +76,16 @@ function promptSetResearch(i: ResearchInput): Research[] {
 
 // The write-up needs the crawl's summary, scores, issues and site checks, not 500 page rows (cost and size).
 function forWriter(type: string, d: any): any {
+  if (type === 'site_root_audit' && d && Array.isArray(d.root)) {
+    return {
+      scores: d.scores,
+      pagesAudited: d.pagesAudited,
+      failingParameters: d.root
+        .filter((r: any) => r.s === 'f' || r.s === 'w')
+        .slice(0, 28)
+        .map((r: any) => ({ id: r.id, name: PARAM_BY_ID.get(r.id)?.name, status: r.s, found: String(r.v).slice(0, 140), fix: String(r.f ?? '').slice(0, 160), pages: r.n ? r.n.f + r.n.w : undefined, examples: (r.ex ?? []).slice(0, 2) })),
+    };
+  }
   if (type !== 'site_crawl' || !d || !Array.isArray(d.issues)) return d;
   return { ...d, pages: undefined, brokenLinks: (d.brokenLinks ?? []).slice(0, 10), issues: d.issues.slice(0, 25).map((i: any) => ({ ...i, examples: (i.examples ?? []).slice(0, 2) })) };
 }
@@ -104,7 +116,18 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
       'site_ai',
       async () => {
         const crawl = await crawlSite(site);
-        const out: Research[] = [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: crawl as unknown as Record<string, any> }];
+        const { pageAudit, ...crawlOnly } = crawl;
+        const out: Research[] = [{ type: 'site_crawl', tool: 'sitescan', label: 'Website crawl', data: crawlOnly as unknown as Record<string, any> }];
+        if (pageAudit) {
+          const { pages: auditPages, ...rootAudit } = pageAudit;
+          out.push({ type: 'site_root_audit', tool: 'sitescan', label: 'Root domain audit (70 parameters)', data: rootAudit as unknown as Record<string, any> });
+          const SIZE = 40;
+          const parts = Math.max(1, Math.ceil(auditPages.length / SIZE));
+          for (let i = 0; i < parts; i++) {
+            const slice = auditPages.slice(i * SIZE, (i + 1) * SIZE);
+            out.push({ type: 'site_page_audit', key: `part-${i + 1}`, tool: 'sitescan', label: `Page-wise audit ${i + 1} of ${parts}`, data: { part: i + 1, parts, from: i * SIZE + 1, to: i * SIZE + slice.length, total: auditPages.length, site: pageAudit.site, pages: slice } });
+          }
+        }
         const locs = locationsOf(input);
         if (locs.length) out.push({ type: 'research_location_pages', tool: 'sitescan', label: 'Location pages', data: auditLocationPages(crawl.pages, locs) as unknown as Record<string, any> });
         return out;
@@ -167,7 +190,7 @@ export async function enrichRun(deps: EnrichDeps, customerId: string, runId: str
     }
     try {
       const written = await withTimeout(
-        writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : src === 'site_ai' ? { maxChars: 16000 } : {}),
+        writeTasks(SOURCE_LABEL[src], data, group.map((t) => ({ id: t.id, skill: t.skillId, finds: t.finds, actionOutput: t.actionOutput })), site, isAi ? { maxChars: 16000, planning: true } : src === 'site_ai' ? { maxChars: 22000 } : {}),
         `${SOURCE_LABEL[src]} write-up`,
         15 * 60 * 1000,
       );

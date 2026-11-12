@@ -3,6 +3,7 @@
 // the structured-data, social-card and AI-search (AEO / GEO) signals.
 import { createHash } from 'crypto';
 import { hostOf } from './crawl-http';
+import { deepPage, PageDeep } from './page-content';
 
 export interface PageRecord {
   url: string;
@@ -55,6 +56,7 @@ export interface PageRecord {
   hash: string; // fingerprint of the visible text (duplicate content)
   ai: AiSignals;
   verification: { google: boolean; bing: boolean };
+  deep: PageDeep | null; // detailed content analysis for the 70-parameter page audit (not stored in the crawl evidence)
   // not stored in the evidence: used while crawling
   links?: { internal: string[]; external: string[] };
 }
@@ -317,6 +319,7 @@ export function analysePage(a: { url: string; finalUrl: string; status: number; 
     hash: createHash('sha1').update(normalised).digest('hex').slice(0, 16),
     ai: aiSignals(html, text, schema.types, l.external.length, schema.types.some((t) => t === 'Organization' || LOCAL_TYPES.test(t)) && schema.orgHasSameAs),
     verification: { google: !!metaContent(html, 'name', 'google-site-verification'), bing: !!metaContent(html, 'name', 'msvalidate.01') },
+    deep: a.status === 200 && html ? deepPage(html, a.finalUrl, { title, meta, h1: h1s, internal: l.internal, external: l.external, lang: null }) : null,
     links: { internal: l.internal, external: l.external },
   };
 }

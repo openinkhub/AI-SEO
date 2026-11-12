@@ -34,7 +34,7 @@ export interface SiteChecks {
   https: { usesHttps: boolean; httpRedirectsToHttps: boolean | null; hsts: boolean; wwwConsistent: boolean | null };
   robots: { exists: boolean; blocksEverything: boolean; sitemapDeclared: boolean; size: number; aiCrawlers: Array<{ agent: string; owner: string; purpose: string; allowed: boolean }> };
   sitemap: SitemapInfo;
-  llmsTxt: { exists: boolean; wellFormed: boolean; links: number; size: number; fullVersion: boolean };
+  llmsTxt: { exists: boolean; wellFormed: boolean; links: number; size: number; fullVersion: boolean; urls: string[] };
   notFound: { correct404: boolean | null; status: number | null };
   headers: { compression: string | null; cacheControl: boolean; xContentTypeOptions: boolean; frameProtection: boolean; referrerPolicy: boolean; csp: boolean; server: string | null; ttfbMs: number };
   favicon: boolean;
@@ -114,7 +114,7 @@ export async function runSiteChecks(base: string, home: FetchResult): Promise<{ 
     https: { usesHttps: u.protocol === 'https:', httpRedirectsToHttps: httpRedirects, hsts: !!h['strict-transport-security'], wwwConsistent },
     robots: { exists: robots.exists, blocksEverything, sitemapDeclared: robots.sitemaps.length > 0, size: robots.size, aiCrawlers },
     sitemap,
-    llmsTxt: { exists: llmsOk, wellFormed: llmsOk && /^#\s+\S/m.test(llms!.text), links: llmsLinks, size: llmsOk ? llms!.text.length : 0, fullVersion: !!llmsFull && llmsFull.status === 200 && !/<html/i.test(llmsFull.text.slice(0, 300)) && llmsFull.text.trim().length > 0 },
+    llmsTxt: { exists: llmsOk, wellFormed: llmsOk && /^\s*#\s+\S/.test(llms!.text), links: llmsLinks, size: llmsOk ? llms!.text.length : 0, fullVersion: !!llmsFull && llmsFull.status === 200 && !/<html/i.test(llmsFull.text.slice(0, 300)) && llmsFull.text.trim().length > 0, urls: llmsOk ? Array.from(llms!.text.matchAll(/https?:\/\/[^\s)\]>"']+/g)).map((m) => m[0]).slice(0, 1000) : [] },
     notFound: { correct404: nf ? nf.status === 404 || nf.status === 410 : null, status: nf?.status ?? null },
     headers: {
       compression: h['content-encoding'] ?? null,

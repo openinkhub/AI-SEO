@@ -1,4 +1,5 @@
 import { evidenceSide } from '../sources/task-map';
+import { renderPageAuditChunk, renderRootAudit } from './page-audit-render';
 import { AuditEvidence } from './audit-evidence.entity';
 import { EVIDENCE_RULES } from './aitdk-rules';
 import type { PpcReport } from './ppcblogpro-parser';
@@ -594,6 +595,8 @@ function labelFor(type: string): string {
   if (type === 'digispot_report') return 'Digispot SEO Insights report';
   if (type === 'pagespeed_report') return 'Page speed (Google PageSpeed Insights)';
   if (type === 'site_crawl') return 'Website crawl (your own pages)';
+  if (type === 'site_root_audit') return 'Root domain audit (70 SEO parameters)';
+  if (type === 'site_page_audit') return 'Page-wise audit (70 SEO parameters per page)';
   if (type === 'gsc_performance') return 'Google Search Console (search performance and indexing)';
   if (type === 'moz_authority') return 'Domain Authority (Moz)';
   if (type === 'ahrefs_domain_rating') return 'Domain Rating (Ahrefs)';
@@ -638,6 +641,8 @@ export function renderEvidenceHtml(all: AuditEvidence[], audience: 'admin' | 'cu
         : e.evidenceType === 'seomator_geo_audit' ? renderSeomator(d, audience === 'admin')
         : e.evidenceType === 'frase_ai_visibility' ? renderFrase(d)
         : e.evidenceType === 'site_crawl' ? renderCrawl(d)
+        : e.evidenceType === 'site_root_audit' ? renderRootAudit(d)
+        : e.evidenceType === 'site_page_audit' ? renderPageAuditChunk(d)
         : e.evidenceType === 'gsc_performance' ? renderGsc(d)
         : e.evidenceType === 'moz_authority' ? renderMoz(d)
         : e.evidenceType === 'ahrefs_domain_rating' ? renderAhrefsDr(d)

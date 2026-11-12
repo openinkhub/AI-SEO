@@ -19,7 +19,8 @@ import { GlobalApisService } from '../customer-apis/global-apis.service';
 import { mozAuthority } from '../customer-apis/moz';
 import { ahrefsDomainRating } from '../customer-apis/ahrefs';
 import { runMangools } from '../customer-apis/mangools/run';
-import { runPageSpeed } from '../customer-apis/pagespeed';
+import { PageSpeedDetail, runPageSpeed, runPageSpeedDetail } from '../customer-apis/pagespeed';
+import { applyPageSpeed, PageAuditResult } from './sources/page-rules';
 import { Project } from '../projects/project.entity';
 import { todayInTz } from '../projects/month-cycle';
 import { AuditPackage } from './package/audit-package.entity';
@@ -336,6 +337,12 @@ export class AuditsService implements OnModuleInit {
         },
         { blockedOnly },
       );
+      try {
+        const sp = await this.speedTestPages(runId);
+        if (sp) skipped.push(sp);
+      } catch (e) {
+        skipped.push(`Page speed test: ${e instanceof Error ? e.message : 'failed'}`.slice(0, 200));
+      }
       if (!keys.screenshotone?.apiKey) skipped.push('ScreenshotOne: no key set for this customer (no screenshots taken)');
       const all = [...skipped, ...notes];
       note = all.length ? all.join(' | ').slice(0, 900) : null;
@@ -473,6 +480,44 @@ export class AuditsService implements OnModuleInit {
         return !!a && !!b && a <= d && d <= b;
       });
     return { monthCode: p?.monthCode ?? run.monthCode ?? null, monthIndex: p ? p.monthIndex : null };
+  }
+
+  // Per-page Google PageSpeed for the 70-parameter audit: the homepage and the best-linked pages (PAGESPEED_PAGES, default 8).
+  // The numbers are written back into the page-wise audit rows and the root domain row. Returns a note when something was skipped.
+  private async speedTestPages(runId: string): Promise<string | null> {
+    const rootRow = await this.evidenceRepo.findOne({ where: { auditRunId: runId, evidenceType: 'site_root_audit' } });
+    const root = rootRow?.extracted as (Omit<PageAuditResult, 'pages'> & { speedSample?: string[] }) | null | undefined;
+    if (!rootRow || !root) return null;
+    if (root.psi?.tested) return null; // already measured for this crawl
+    let key: string | undefined;
+    try {
+      key = (await this.globals.getKeys()).pagespeed?.apiKey;
+    } catch {
+      key = undefined;
+    }
+    if (!key) return 'Page speed (per page): no PageSpeed key in the global API settings - Core Web Vitals are marked not measured';
+    const urls = (root.speedSample ?? []).slice(0, Number(process.env.PAGESPEED_PAGES) || 8);
+    if (!urls.length) return null;
+    const details: PageSpeedDetail[] = [];
+    const started = Date.now();
+    for (let i = 0; i < urls.length && Date.now() - started < 4 * 60 * 1000; i += 3) {
+      const got = await Promise.all(urls.slice(i, i + 3).map((u) => runPageSpeedDetail(u, key as string, 70000).catch(() => null)));
+      got.forEach((g) => g && details.push(g));
+    }
+    if (!details.length) return 'Page speed (per page): PageSpeed returned no result';
+    const chunks = (await this.evidenceRepo.find({ where: { auditRunId: runId, evidenceType: 'site_page_audit' } })).sort((a, b) => (a.extracted?.part ?? 0) - (b.extracted?.part ?? 0));
+    const merged = applyPageSpeed({ ...(root as Omit<PageAuditResult, 'pages'>), pages: chunks.flatMap((c) => (c.extracted?.pages ?? []) as PageAuditResult['pages']) } as PageAuditResult, details);
+    const { pages, ...rootOnly } = merged;
+    rootRow.extracted = rootOnly as unknown as Record<string, any>;
+    await this.evidenceRepo.save(rootRow);
+    let at = 0;
+    for (const c of chunks) {
+      const n = (c.extracted?.pages ?? []).length;
+      c.extracted = { ...(c.extracted as Record<string, any>), pages: pages.slice(at, at + n) };
+      at += n;
+      await this.evidenceRepo.save(c);
+    }
+    return null;
   }
 
   // Uses the customer's own API settings (Layer 2 > API settings in the admin panel). Today only
