@@ -695,11 +695,11 @@
     Array.prototype.forEach.call(box.querySelectorAll('details[data-pf]'), function(x){ l5.open[x.getAttribute('data-pf')] = x.open; });
     var h = '<section class="card"><h2><span class="layer-tag">Layer 5 · Day 5</span>AI Search Prompt</h2>' +
       '<p class="muted" style="margin:4px 0 12px">' + d.total + ' / ' + d.expected + ' prompts · ' + d.completePlatforms + ' of ' + d.platforms.length + ' platforms complete · ' + escapeHtml(d.month) +
-      '. Each AI platform returns 10 natural prompts buyers type into it, with Intent, Prompt Type and Demand. It researches from the business profile only, not from the Layer 4 keywords. Runs automatically on its set date (Day 5); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
+      '. Each AI platform returns 10 natural prompts buyers type into it, with Intent, Prompt Type, Demand and the estimated monthly searches of the prompt\u2019s search keyword. It researches from the business profile only, not from the Layer 4 keywords. Runs automatically on its set date (Day 5); the customer panel shows the table only when it is complete (' + d.total + ' / ' + d.expected + ').</p>' +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px">' +
       '<button class="btn" id="l5RunAll">Run all API platforms now</button></div>' +
       '<details style="margin:0 0 12px"><summary style="cursor:pointer">Import a finished table (paste)</summary>' +
-      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Prompt, Intent, Prompt Type, Demand (tab or | separated). Replaces only the platforms pasted.</p>' +
+      '<p class="muted" style="margin:6px 0">One row per line: Platform, Rank, Prompt, Intent, Prompt Type, Demand, Est Volume (tab or | separated). Replaces only the platforms pasted.</p>' +
       '<textarea id="l5ImportText" rows="8" style="width:100%"></textarea>' +
       '<div style="margin:6px 0"><button class="btn" id="l5Import">Import</button></div></details>';
     d.platforms.forEach(function(p){
@@ -711,14 +711,15 @@
       h += '<div style="margin:10px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
         '<select data-l5mode="' + p.platform + '"><option value="api"' + (p.mode === 'api' ? ' selected' : '') + '>API</option><option value="manual"' + (p.mode === 'manual' ? ' selected' : '') + '>Manual</option></select>' +
         (p.mode === 'api' ? '<button class="btn" data-l5run="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>' + (p.count ? 'Re-run ' : 'Run ') + escapeHtml(p.label) + '</button>' : '') +
+        (p.mode === 'api' && p.count && p.records.some(function(r){ return r.estVolume == null; }) ? '<button class="btn" data-l5vol="' + p.platform + '"' + (p.status === 'running' || !p.keyReady ? ' disabled' : '') + '>Get volumes</button>' : '') +
         '<span class="muted" data-l5msg="' + p.platform + '">' + escapeHtml(p.message || '') + '</span></div>';
       if (p.mode === 'manual') {
-        var cur = p.records.map(function(r){ return r.prompt + ' | ' + r.intent + ' | ' + r.promptType + ' | ' + r.demand; }).join('\n');
-        h += '<textarea data-l5text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: prompt | Intent | Prompt Type | Demand">' + escapeHtml(cur) + '</textarea>' +
+        var cur = p.records.map(function(r){ return r.prompt + ' | ' + r.intent + ' | ' + r.promptType + ' | ' + r.demand + ' | ' + (r.estVolume == null ? '' : r.estVolume); }).join('\n');
+        h += '<textarea data-l5text="' + p.platform + '" rows="6" style="width:100%" placeholder="One per line: prompt | Intent | Prompt Type | Demand | est. monthly volume">' + escapeHtml(cur) + '</textarea>' +
           '<div style="margin:6px 0"><button class="btn" data-l5save="' + p.platform + '">Save ' + escapeHtml(p.label) + ' prompts</button> <span class="muted">Intent: Informational, Navigational, Commercial, Transactional, Local, Purchase, Evaluational, Compliance · Prompt Type: Discovery, Research, Comparison, Evaluation, Recommendation, Problem-Solution, Purchase, Local, Compliance · Demand: High, Medium-High, Medium, Low</span></div>';
       } else if (p.records.length) {
-        h += '<table><thead><tr><th>#</th><th>AI search prompt</th><th>Intent</th><th>Prompt type</th><th>Demand</th></tr></thead><tbody>' +
-          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.prompt) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.promptType) + '</td><td>' + escapeHtml(r.demand) + '</td></tr>'; }).join('') + '</tbody></table>';
+        h += '<table><thead><tr><th>#</th><th>AI search prompt</th><th>Intent</th><th>Prompt type</th><th>Demand</th><th>Search keyword</th><th>Est. volume</th></tr></thead><tbody>' +
+          p.records.map(function(r){ return '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.prompt) + '</td><td>' + escapeHtml(r.intent) + '</td><td>' + escapeHtml(r.promptType) + '</td><td>' + escapeHtml(r.demand) + '</td><td>' + escapeHtml(r.volumeQuery || '—') + '</td><td>' + (r.estVolume == null ? '—' : Number(r.estVolume).toLocaleString('en-US')) + '</td></tr>'; }).join('') + '</tbody></table>';
       }
       h += '</details>';
     });
@@ -747,6 +748,7 @@
       }).catch(function(err){ alert(err.message); impBtn.disabled = false; });
     });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l5run]'), function(b){ b.addEventListener('click', function(){ act('/run', 'POST', { platform: b.getAttribute('data-l5run') }, b); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-l5vol]'), function(b){ b.addEventListener('click', function(){ act('/volumes', 'POST', { platform: b.getAttribute('data-l5vol') }, b); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-l5save]'), function(b){ b.addEventListener('click', function(){
       var pf = b.getAttribute('data-l5save');
       act('/manual', 'PUT', { platform: pf, text: box.querySelector('[data-l5text="' + pf + '"]').value }, b);

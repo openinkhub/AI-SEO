@@ -57,7 +57,27 @@ export function layer5Prompt(c: Customer, platformKey: string): string {
   );
 }
 
-export interface PromptRow { prompt: string; intent: string; promptType: string; demand: string }
+const vol = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(String(v).replace(/[,\s]/g, ''));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+};
+
+const STOP = new Set('what which who where when why how is are can could should would do does did the a an of for to in on at and or with from my our your best top find recommend compare comparison help please me i we need looking searching service services'.split(' '));
+
+// Port of the plugin's layer5_volume_query: the search keyword a prompt stands for. Up to two of the customer's products /
+// services found in the prompt plus the location found in it; if none match, the prompt's meaningful words (max 8).
+export function volumeQueryFor(c: Customer, prompt: string): string {
+  const p = (c.profile || {}) as Record<string, any>;
+  const hay = norm(prompt);
+  if (!hay) return '';
+  const parts = list(p.products_services).filter((x) => norm(x) && hay.includes(norm(x)));
+  const loc = [...list(p.locations), ...list(p.areas_served)].find((x) => norm(x) && hay.includes(norm(x))) || '';
+  if (parts.length) return (Array.from(new Set(parts)).slice(0, 2).join(' ') + (loc ? ' ' + loc : '')).trim().slice(0, 255);
+  return hay.split(' ').filter((t) => t.length >= 2 && !STOP.has(t)).slice(0, 8).join(' ').slice(0, 255);
+}
+
+export interface PromptRow { prompt: string; intent: string; promptType: string; demand: string; estVolume?: number | null }
 
 // Reads the JSON array out of a model reply and keeps only valid, de-duplicated rows (max 10), same rules as the plugin's validator.
 export function parseLayer5Reply(text: string): PromptRow[] {
@@ -79,13 +99,13 @@ export function parseLayer5Reply(text: string): PromptRow[] {
     if (!n || seen.has(n) || seenRank.has(r.rank)) continue;
     seen.add(n);
     seenRank.add(r.rank);
-    out.push({ prompt: r.prompt.slice(0, 600), intent: r.intent as string, promptType: r.promptType as string, demand: r.demand as string });
+    out.push({ prompt: r.prompt.slice(0, 600), intent: r.intent as string, promptType: r.promptType as string, demand: r.demand as string, estVolume: null });
     if (out.length >= L5_PER_PLATFORM) break;
   }
   return out;
 }
 
-// Manual entry: one per line, "prompt | Intent | Prompt Type | Demand" (all but the prompt optional).
+// Manual entry: one per line, "prompt | Intent | Prompt Type | Demand | est. volume" (all but the prompt optional).
 export function parseManualLines(text: string): PromptRow[] {
   const seen = new Set<string>();
   const out: PromptRow[] = [];
@@ -95,8 +115,36 @@ export function parseManualLines(text: string): PromptRow[] {
     const n = norm(parts[0]);
     if (!n || seen.has(n)) continue;
     seen.add(n);
-    out.push({ prompt: parts[0].slice(0, 600), intent: pick(parts[1] || '', L5_INTENTS) || 'Informational', promptType: pick(parts[2] || '', L5_TYPES) || 'Research', demand: pick(parts[3] || '', L5_DEMANDS) || 'Medium' });
+    out.push({ prompt: parts[0].slice(0, 600), intent: pick(parts[1] || '', L5_INTENTS) || 'Informational', promptType: pick(parts[2] || '', L5_TYPES) || 'Research', demand: pick(parts[3] || '', L5_DEMANDS) || 'Medium', estVolume: vol(parts[4]) });
     if (out.length >= L5_PER_PLATFORM) break;
+  }
+  return out;
+}
+
+// Second, small call per platform: the platform's own estimate of monthly searches for each prompt's search keyword.
+export function layer5VolumePrompt(c: Customer, items: Array<{ rank: number; query: string }>): string {
+  const p = (c.profile || {}) as Record<string, any>;
+  const where = list(p.locations).join(', ') || list(p.areas_served).join(', ') || 'the target country';
+  return (
+    'You are a keyword research expert.\n\n' +
+    `For each search query below, estimate its average monthly searches in the Target Location / Country as a whole number (never leave it out; use your best estimate, 0 only if the query is not searched). Use your own platform knowledge.\n\nTarget Location: ${where}\n\nQUERIES\n` +
+    JSON.stringify(items) +
+    '\n\nReturn ONLY a valid JSON array with exactly these keys per record: rank, est_volume. One record per query, using the same rank. No markdown or commentary.'
+  );
+}
+
+export function parseVolumeReply(text: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const s = text.indexOf('[');
+  const e = text.lastIndexOf(']');
+  if (s < 0 || e <= s) return out;
+  let arr: any;
+  try { arr = JSON.parse(text.slice(s, e + 1)); } catch { return out; }
+  if (!Array.isArray(arr)) return out;
+  for (const x of arr) {
+    const rank = Number(x?.rank);
+    const v = vol(x?.est_volume ?? x?.estimated_volume ?? x?.volume);
+    if (rank >= 1 && v !== null) out.set(rank, v);
   }
   return out;
 }
@@ -139,7 +187,7 @@ export class Layer5Service {
     ]);
     const platforms = AI_PLATFORMS.map((p) => {
       const st = states.find((s) => s.platform === p.key);
-      const records = rows.filter((r) => r.platform === p.key).map((r) => ({ rank: r.rank, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand, source: r.source }));
+      const records = rows.filter((r) => r.platform === p.key).map((r) => ({ rank: r.rank, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand, volumeQuery: r.volumeQuery, estVolume: r.estVolume, source: r.source }));
       const mode = st?.mode || p.defaultMode;
       let status = st?.status || 'idle';
       if (status === 'running' && st?.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() > STALE_RUN_MS) status = 'failed';
@@ -174,11 +222,70 @@ export class Layer5Service {
     return this.view(customerId, month);
   }
 
-  private async replaceRows(project: Project, platform: string, rows: PromptRow[], source: string) {
+  private async customerOf(customerId: string): Promise<Customer> {
+    const c = await this.customers.findOne({ where: { id: customerId } });
+    if (!c) throw new NotFoundException('Customer not found.');
+    return c;
+  }
+
+  private async replaceRows(project: Project, platform: string, rows: PromptRow[], source: string, customer?: Customer) {
+    const c = customer || (await this.customerOf(project.customerId));
     await this.pr.delete({ projectId: project.id, platform });
     if (rows.length) {
-      await this.pr.save(rows.map((r, i) => this.pr.create({ customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, platform, rank: i + 1, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand, source })));
+      await this.pr.save(rows.map((r, i) => this.pr.create({ customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, platform, rank: i + 1, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand, volumeQuery: volumeQueryFor(c, r.prompt) || null, estVolume: r.estVolume ?? null, source })));
     }
+  }
+
+  // Asks the platform for the estimated monthly searches of each stored prompt's search keyword and saves them.
+  // Returns how many prompts got a volume. Never throws: a failure leaves the prompts as they are.
+  async fillVolumes(project: Project, customer: Customer, platform: string, vals: Record<string, string>): Promise<number> {
+    const def = this.platform(platform);
+    const rows = await this.pr.find({ where: { projectId: project.id, platform }, order: { rank: 'ASC' } });
+    const missing = rows.filter((r) => r.estVolume === null && r.volumeQuery);
+    if (!missing.length) return 0;
+    try {
+      await this.pace(def.keyProvider || platform);
+      const prompt = layer5VolumePrompt(customer, missing.map((r) => ({ rank: r.rank, query: r.volumeQuery as string })));
+      const reply = platform === 'google_ai' ? await askGoogleAi(vals.apiKey, prompt) : await askPlatform(platform, vals, prompt);
+      const got = parseVolumeReply(reply);
+      let n = 0;
+      for (const r of missing) {
+        const v = got.get(r.rank);
+        if (v === undefined) continue;
+        r.estVolume = v;
+        await this.pr.save(r);
+        n++;
+      }
+      return n;
+    } catch (err) {
+      this.log.warn(`Layer 5 volumes ${platform}: ${err instanceof Error ? err.message : err}`);
+      return 0;
+    }
+  }
+
+  // Background run of fillVolumes for one platform (button on the page; also for Manual / imported prompts on an API platform).
+  async startVolumes(customerId: string, month: string, platform: string) {
+    const def = this.platform(platform);
+    const project = await this.monthOf(customerId, month);
+    const customer = await this.customerOf(customerId);
+    const vals = await this.keysFor(platform);
+    const st = await this.state(project, platform);
+    if (st.status === 'running' && st.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() < STALE_RUN_MS) throw new BadRequestException(`${def.label} is already running.`);
+    const before = st.status;
+    st.status = 'running';
+    st.message = 'Getting volumes from ' + def.label + '…';
+    st.lastRunAt = new Date();
+    await this.pf.save(st);
+    void (async () => {
+      const n = await this.fillVolumes(project, customer, platform, vals);
+      const s2 = await this.state(project, platform);
+      const count = await this.pr.count({ where: { projectId: project.id, platform } });
+      s2.status = count >= L5_PER_PLATFORM ? 'complete' : count ? 'partial' : before === 'running' ? 'idle' : before;
+      s2.message = n ? `Volumes saved for ${n} prompt(s).` : 'No volumes returned - try again.';
+      s2.lastRunAt = new Date();
+      await this.pf.save(s2);
+    })().catch((err) => this.log.error(`Layer 5 volumes ${platform}: ${err?.message || err}`));
+    return this.view(customerId, month);
   }
 
   // Keeps the Layer 5 row in the Layer schedule in step with the table: done when all 9 platforms hold 10 prompts.
@@ -192,7 +299,7 @@ export class Layer5Service {
   async saveManual(customerId: string, month: string, platform: string, text: string) {
     this.platform(platform);
     const rows = parseManualLines(String(text || ''));
-    if (!rows.length) throw new BadRequestException('Add at least one prompt, one per line: prompt | Intent | Prompt Type | Demand.');
+    if (!rows.length) throw new BadRequestException('Add at least one prompt, one per line: prompt | Intent | Prompt Type | Demand | est. volume.');
     const project = await this.monthOf(customerId, month);
     await this.replaceRows(project, platform, rows, 'manual');
     const st = await this.state(project, platform);
@@ -206,7 +313,7 @@ export class Layer5Service {
   }
 
   // Bulk import of a whole month's table (all platforms at once). One row per line, tab or | separated:
-  // Platform, Rank, Prompt, Intent, Prompt Type, Demand. A header line is ignored. Replaces only the platforms present.
+  // Platform, Rank, Prompt, Intent, Prompt Type, Demand, Est Volume (blank or "-" = none). A header line is ignored. Replaces only the platforms present.
   async importTable(customerId: string, month: string, text: string) {
     const alias: Record<string, string> = {
       chatgpt: 'openai', openai: 'openai', gemini: 'gemini', perplexity: 'perplexity', claude: 'anthropic', anthropic: 'anthropic',
@@ -222,10 +329,10 @@ export class Layer5Service {
       if (!key) { if (!/^platform$/i.test(parts[0] || '')) skipped.push(line.slice(0, 60)); continue; }
       const prompt = (parts[2] || '').slice(0, 600);
       if (!prompt) { skipped.push(line.slice(0, 60)); continue; }
-      const row: PromptRow = { prompt, intent: pick(parts[3] || '', L5_INTENTS) || 'Informational', promptType: pick(parts[4] || '', L5_TYPES) || 'Research', demand: pick(parts[5] || '', L5_DEMANDS) || 'Medium' };
+      const row: PromptRow = { prompt, intent: pick(parts[3] || '', L5_INTENTS) || 'Informational', promptType: pick(parts[4] || '', L5_TYPES) || 'Research', demand: pick(parts[5] || '', L5_DEMANDS) || 'Medium', estVolume: vol(parts[6]) };
       groups.set(key, [...(groups.get(key) || []), { rank: Number(parts[1]) || (groups.get(key)?.length || 0) + 1, row }]);
     }
-    if (!groups.size) throw new BadRequestException('No rows recognised. Use: Platform, Rank, Prompt, Intent, Prompt Type, Demand (tab or | separated).');
+    if (!groups.size) throw new BadRequestException('No rows recognised. Use: Platform, Rank, Prompt, Intent, Prompt Type, Demand, Est Volume (tab or | separated).');
     const project = await this.monthOf(customerId, month);
     const summary: Record<string, number> = {};
     for (const [key, list] of groups) {
@@ -283,10 +390,14 @@ export class Layer5Service {
       const prompt = layer5Prompt(customer, platform);
       const reply = platform === 'google_ai' ? await askGoogleAi(vals.apiKey, prompt) : await askPlatform(platform, vals, prompt);
       const rows = parseLayer5Reply(reply);
-      if (rows.length) await this.replaceRows(project, platform, rows, 'api');
+      let withVol = 0;
+      if (rows.length) {
+        await this.replaceRows(project, platform, rows, 'api', customer);
+        withVol = await this.fillVolumes(project, customer, platform, vals);
+      }
       st.status = rows.length >= L5_PER_PLATFORM ? 'complete' : rows.length ? 'partial' : 'failed';
       st.message = rows.length
-        ? rows.length >= L5_PER_PLATFORM ? `${rows.length}/${L5_PER_PLATFORM} valid prompts stored.` : `${def.label} returned ${rows.length}/${L5_PER_PLATFORM} valid prompts.`
+        ? (rows.length >= L5_PER_PLATFORM ? `${rows.length}/${L5_PER_PLATFORM} valid prompts stored` : `${def.label} returned ${rows.length}/${L5_PER_PLATFORM} valid prompts`) + (withVol ? `; volume for ${withVol}.` : '; no volumes returned (use Get volumes).')
         : `${def.label} returned no valid prompt records (needs a JSON array with rank, prompt, intent, prompt_type, demand). Existing prompts were kept.`;
     } catch (err) {
       st.status = 'failed';
@@ -355,12 +466,12 @@ export class Layer5Service {
     const shown = platforms.map((p) => ({
       platform: p.platform,
       label: p.label,
-      records: p.records.map((r) => ({ rank: r.rank, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand })),
+      records: p.records.map((r) => ({ rank: r.rank, prompt: r.prompt, intent: r.intent, promptType: r.promptType, demand: r.demand, keyword: r.volumeQuery ?? null, volume: r.estVolume ?? null })),
     }));
     const body = shown
-      .flatMap((p) => p.records.map((r) => `<tr><td>${esc(p.label)}</td><td>${r.rank}</td><td>${esc(r.prompt)}</td><td>${esc(r.intent)}</td><td>${esc(r.promptType)}</td><td>${esc(r.demand)}</td></tr>`))
+      .flatMap((p) => p.records.map((r) => `<tr><td>${esc(p.label)}</td><td>${r.rank}</td><td>${esc(r.prompt)}</td><td>${esc(r.intent)}</td><td>${esc(r.promptType)}</td><td>${esc(r.demand)}</td><td>${esc(r.keyword || '—')}</td><td>${r.volume == null ? '—' : r.volume.toLocaleString('en-US')}</td></tr>`))
       .join('');
-    const html = `<table class="kp21-l5"><thead><tr><th>AI platform</th><th>#</th><th>AI search prompt</th><th>Intent</th><th>Prompt type</th><th>Demand</th></tr></thead><tbody>${body}</tbody></table>`;
+    const html = `<table class="kp21-l5"><thead><tr><th>AI platform</th><th>#</th><th>AI search prompt</th><th>Intent</th><th>Prompt type</th><th>Demand</th><th>Search keyword</th><th>Est. monthly searches</th></tr></thead><tbody>${body}</tbody></table>`;
     return { layer: 5, complete: true, month: project.monthCode, total: rows.length, expected, html, platforms: shown };
   }
 

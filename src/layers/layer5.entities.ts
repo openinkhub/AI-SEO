@@ -39,6 +39,14 @@ export class Layer5Prompt {
   @Column({ type: 'varchar', length: 20 })
   demand: string;
 
+  // The search keyword this prompt maps to (product / service + location from the profile), used to look up volume.
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  volumeQuery: string | null;
+
+  // Average monthly searches for volumeQuery (the AI platform's own estimate, or typed / imported).
+  @Column({ type: 'int', nullable: true })
+  estVolume: number | null;
+
   // 'api' | 'manual' | 'import'
   @Column({ type: 'varchar', length: 10, default: 'api' })
   source: string;

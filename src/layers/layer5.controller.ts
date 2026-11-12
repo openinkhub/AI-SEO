@@ -26,6 +26,12 @@ export class Layer5Controller {
     return this.service.view(customerId, body?.month);
   }
 
+  // Gets the estimated monthly searches for the prompts that have none yet (background).
+  @Post('volumes')
+  volumes(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string }) {
+    return this.service.startVolumes(customerId, body?.month, body?.platform);
+  }
+
   @Put('manual')
   manual(@Param('customerId') customerId: string, @Body() body: { month: string; platform: string; text: string }) {
     return this.service.saveManual(customerId, body?.month, body?.platform, body?.text);
