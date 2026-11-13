@@ -21,7 +21,7 @@ export interface LayerDef {
 export const SECTION_LABELS: Record<string, string> = {"profile": "Profile", "on-page": "On Page SEO", "off-page": "Off Page SEO", "technical": "Technical SEO", "local": "Local SEO", "social": "Social Media", "international": "International SEO"};
 
 // Layers built in the Engine so far (built numerically: Layer 1, then 2, 3, ...).
-export const BUILT_LAYERS: number[] = [1, 2, 3, 4];
+export const BUILT_LAYERS: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 
 const R = (layer: number, key: string, name: string, visibility: 'customer' | 'admin', expected: number, section: string, subsection: string, day: number | null, dayLabel: string, fromMonth: number, toMonth: number, note: string, internalStorage = false): LayerDef => ({ layer, key, name, visibility, expected, section, subsection, day, dayLabel, fromMonth, toMonth, note, internalStorage });
 

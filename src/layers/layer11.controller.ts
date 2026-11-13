@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Customer } from '../customers/customer.entity';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { Layer11Service } from './layer11.service';
+import { Layer11MasterService } from './layer11master.service';
 
 // Layer 11 - Keyword Analysis (On Page SEO > Keyword Planner), admin side.
 @UseGuards(JwtAuthGuard)
@@ -30,6 +31,7 @@ export class Layer11Controller {
 export class WpLayer11Controller {
   constructor(
     private readonly service: Layer11Service,
+    private readonly master: Layer11MasterService,
     @InjectRepository(Customer) private readonly customers: Repository<Customer>,
   ) {}
 
@@ -37,6 +39,12 @@ export class WpLayer11Controller {
   async table(@Param('wpUserId') wpUserId: string, @Query('month') month?: string) {
     const c = await this.customers.findOne({ where: { wpUserId } });
     if (!c) throw new NotFoundException(`No customer synced for WP user ${wpUserId}`);
-    return this.service.customerTable(c.id, month);
+    const t = await this.service.customerTable(c.id, month);
+    // 11-AAA: the master keyword list (Layer 4-A + Layer 11) is shown under the Layer 11 table once Layer 11 is complete.
+    if (t.complete) {
+      const m = await this.master.htmlByMonth(c.id, t.month);
+      if (m) t.html += '<h4 class="kp21-l11-master-title">11-AAA Master Keywords (Layer 4-A + Layer 11)</h4>' + m;
+    }
+    return t;
   }
 }

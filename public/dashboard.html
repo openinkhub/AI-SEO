@@ -667,14 +667,107 @@
       }).catch(function(err){ btn.disabled = false; var m = document.getElementById('l11Msg'); if (m) m.textContent = err.message; });
     };
   }
+
+  // ---- Layers 12, 13, 14 (+ the 11-AAA master list): market validation, opportunity analysis, final keyword selection ----
+  var kw = { mid: null, timer: null, data: {} };
+  var KW_STAR = function(n){ return new Array((n || 1) + 1).join('★'); };
+  var KW_NUM = function(v){ return v == null ? '' : Number(v).toLocaleString('en-US'); };
+  var KW_CFG = {
+    12: { path: 'layer12', tag: 'Layer 12 · Day 12', name: 'Keyword Market Validation', run: 'Run Layer 12 now',
+      desc: 'The 11-AAA master keywords (Layer 4-A + Layer 11, max 80) are validated with Mangools (volume, KD, CPC), SerpApi (which competitor sites rank) and Geekflare (facts of the best competitor page, optional). Runs on Day 12, or now with the button. The customer sees the table only when Mangools and SerpApi have finished.',
+      head: ['#', 'Keyword', 'Intent', 'Volume', 'KD', 'CPC', 'Competitors', 'Best pos.', 'Strength', 'Page str.', 'Weightage', 'Stars'],
+      row: function(r){ return [r.rank, r.keyword, r.intent, KW_NUM(r.searchVolume), r.kd, r.cpc, r.competitorCount == null ? '' : r.competitorCount + (r.competitorDomains.length ? ' (' + r.competitorDomains.join(', ') + ')' : ''), r.bestPosition, r.competitorStrength, r.pageStrength, r.weightage, KW_STAR(r.star)]; } },
+    13: { path: 'layer13', tag: 'Layer 13 · Day 13', name: 'Intent & Opportunity Analysis', run: 'Rebuild Layer 13',
+      desc: 'Built automatically right after Layer 12 (no API call): the Layer 12 evidence plus an Opportunity Score.',
+      head: ['#', 'Keyword', 'Intent', 'Demand', 'Volume', 'KD', 'Competitors', 'Comp. opportunity', 'Opportunity', 'L12 weight', 'Stars'],
+      row: function(r){ return [r.rank, r.keyword, r.intent, r.demand, KW_NUM(r.searchVolume), r.kd, r.competitorCount, r.competitorStrength == null ? '' : Math.round((100 - r.competitorStrength) * 100) / 100, r.opportunity, r.layer12Weightage, KW_STAR(r.star)]; } },
+    14: { path: 'layer14', tag: 'Layer 14 · Day 14', name: 'Keyword Weighted Selection', run: 'Rebuild Layer 14',
+      desc: 'Built automatically right after Layer 13 (no API call): the final ranking. Rank 1 is the H1 keyword, every other keyword is an H2 (max 80).',
+      head: ['#', 'Keyword', 'H', 'Intent', 'Demand', 'Volume', 'KD', 'Opportunity', 'Weightage', 'Stars'],
+      row: function(r){ return [r.rank, r.keyword, r.hierarchy, r.intent, r.demand, KW_NUM(r.searchVolume), r.kd, r.opportunity, r.weightage, KW_STAR(r.star)]; } }
+  };
+
+  function mountKw(cust) {
+    var cm = currentMonth();
+    if (!cm) return;
+    kw.mid = cm.id;
+    [12, 13, 14].forEach(function(n){
+      var box = document.getElementById('l' + n + 'Box');
+      if (!box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Loading Layer ' + n + '...</p></section>';
+      loadKw(cust, cm, n, box);
+    });
+  }
+
+  function loadKw(cust, cm, n, box) {
+    var cfg = KW_CFG[n];
+    api('/customers/' + cust.id + '/' + cfg.path + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l' + n + 'Box') !== box || kw.mid !== cm.id) return;
+      kw.data[n] = d;
+      if (n === 12) {
+        api('/customers/' + cust.id + '/layer11/master?month=' + encodeURIComponent(cm.monthCode)).then(function(m){ kw.data.master = m; drawKw(cust, cm, n, box); }).catch(function(){ drawKw(cust, cm, n, box); });
+      } else drawKw(cust, cm, n, box);
+      if (n === 12) {
+        if (kw.timer) { clearTimeout(kw.timer); kw.timer = null; }
+        if (d.status === 'running') kw.timer = setTimeout(function(){ if (document.getElementById('l12Box') === box) { loadKw(cust, cm, 12, box); ['13','14'].forEach(function(k){ var b = document.getElementById('l' + k + 'Box'); if (b) loadKw(cust, cm, Number(k), b); }); } }, 5000);
+      }
+    }).catch(function(err){
+      if (document.getElementById('l' + n + 'Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + n + ': ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawKw(cust, cm, n, box) {
+    var cfg = KW_CFG[n], d = kw.data[n];
+    var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2>' +
+      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + (n === 12 ? ' · status: <b>' + escapeHtml(d.status) + '</b>' + (d.message ? ' · ' + escapeHtml(d.message) : '') : ' · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built, waiting for Layer 12 to be complete' : 'not built yet'))) + '</p>';
+    if (n === 12) {
+      var st = d.stages;
+      h += '<p class="muted" style="margin:0 0 8px">Mangools: ' + (d.keys.mangools ? 'key saved' : 'no key') + ' (' + st.mangools.completed + ' done) · SerpApi: ' + (d.keys.serpapi ? 'key saved' : 'no key') + ' (' + st.serpapi.completed + ' done) · Geekflare: ' + (d.keys.geekflare ? 'key saved' : 'no key') + ' (' + st.geekflare.completed + ' pages) · ' + d.masterKeywords + ' master keyword(s)</p>';
+    }
+    h += '<p class="muted" style="margin:0 0 8px">' + escapeHtml(cfg.desc) + '</p>';
+    if (n === 12 && d.warnings && d.warnings.length) h += '<ul class="muted" style="margin:0 0 8px 18px">' + d.warnings.map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join('') + '</ul>';
+    var running = n === 12 && d.status === 'running';
+    h += '<div style="margin-bottom:10px"><button class="btn" id="kwRun' + n + '"' + (running ? ' disabled' : '') + '>' + (running ? 'Running...' : cfg.run) + '</button>' +
+      (n === 12 ? ' <label class="muted"><input type="checkbox" id="kwForce12"> start over from a fresh master list</label>' : '') + ' <span class="muted" id="kwMsg' + n + '"></span></div>';
+    if (n === 12 && kw.data.master) {
+      var m = kw.data.master;
+      h += '<details style="margin-bottom:10px"><summary><b>11-AAA master keywords</b> (' + m.total + ') — Layer 4-A + Layer 11</summary>';
+      if (!m.records.length) h += '<p class="muted">Not built yet: it is built when Layer 11 is done, or when Layer 12 starts.</p>';
+      else {
+        h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Keyword</th><th>Intent</th><th>Demand</th><th>Sources</th><th>Est. vol.</th><th>Volume</th><th>Weightage</th><th>Stars</th></tr></thead><tbody>';
+        m.records.forEach(function(r){ h += '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.keyword) + '</td><td>' + escapeHtml(r.intent || '') + '</td><td>' + escapeHtml(r.demand || '') + '</td><td>' + escapeHtml(r.sources.join(' + ')) + '</td><td>' + KW_NUM(r.estVolume) + '</td><td>' + KW_NUM(r.volume) + '</td><td>' + r.weightage + '</td><td>' + KW_STAR(r.star) + '</td></tr>'; });
+        h += '</tbody></table></div>';
+      }
+      h += '</details>';
+    }
+    if (!d.records.length) h += '<p class="muted">No records yet.</p>';
+    else {
+      h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr>' + cfg.head.map(function(c){ return '<th>' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
+      d.records.forEach(function(r){ h += '<tr>' + cfg.row(r).map(function(c){ return '<td>' + escapeHtml(c == null ? '' : String(c)) + '</td>'; }).join('') + '</tr>'; });
+      h += '</tbody></table></div>';
+    }
+    box.innerHTML = h + '</section>';
+    var btn = document.getElementById('kwRun' + n);
+    if (btn) btn.onclick = function(){
+      btn.disabled = true;
+      var body = { month: cm.monthCode };
+      if (n === 12) { var f = document.getElementById('kwForce12'); body.force = !!(f && f.checked); }
+      api('/customers/' + cust.id + '/' + cfg.path + '/' + (n === 12 ? 'run' : 'rebuild'), { method: 'POST', body: body }).then(function(r){
+        kw.data[n] = r;
+        if (n === 12) { drawKw(cust, cm, 12, box); kw.timer = setTimeout(function(){ if (document.getElementById('l12Box') === box) loadKw(cust, cm, 12, box); }, 5000); }
+        else drawKw(cust, cm, n, box);
+      }).catch(function(err){ btn.disabled = false; var mm = document.getElementById('kwMsg' + n); if (mm) mm.textContent = err.message; });
+    };
+  }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
