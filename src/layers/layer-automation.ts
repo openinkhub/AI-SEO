@@ -7,6 +7,7 @@ import { Layer7Service } from './layer7.service';
 import { Layer8Service } from './layer8.service';
 import { Layer9Service } from './layer9.service';
 import { Layer10Service } from './layer10.service';
+import { Layer11Service } from './layer11.service';
 
 // AUTOMATION RULE (decided 2026-10-28): a Layer that is automated runs on its SET DATE only - the scheduled date
 // of its row in the customer's Month Cycle (Layer 4 = Day 4, Layer 5 = Day 5, Layer 6 = Day 6, Layer 7 = Day 7, Layer 8 = Day 8, Layer 9 = Day 9, Layer 10 = Day 10 of the month, M0..M12). It does not run early and does
@@ -31,7 +32,7 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
   private first: NodeJS.Timeout | null = null;
   private busy = false;
 
-  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service) {}
+  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service, private readonly layer11: Layer11Service) {}
 
   onModuleInit() {
     if ((process.env.LAYER_AUTOMATION || '').toLowerCase() === 'off') {
@@ -49,6 +50,13 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
 
   async tick() {
     if (this.busy) return;
+    // Layer 11: consolidate any Layer 4-10 table that is complete but not yet consolidated (free, local, any hour).
+    try {
+      const built = await this.layer11.sweep();
+      if (built) this.log.log('Layer 11: consolidated ' + built + ' block(s).');
+    } catch (err) {
+      this.log.error('Layer 11 sweep: ' + (err instanceof Error ? err.message : err));
+    }
     const start = parseInt(process.env.LAYER_AUTOMATION_START_HOUR || '1', 10);
     if (hourNow() < (isNaN(start) ? 1 : start)) return;
     this.busy = true;

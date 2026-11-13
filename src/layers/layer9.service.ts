@@ -222,7 +222,7 @@ export class Layer9Service {
   async syncLayerStatus(project: Project) {
     const rows = await this.it.find({ where: { projectId: project.id }, select: ['platform'] });
     const complete = AI_PLATFORMS.every((p) => rows.filter((r) => r.platform === p.key).length >= L9_PER_PLATFORM);
-    await this.layers.setByMonth(project.customerId, project.monthIndex, 8, complete ? 'done' : rows.length ? 'in_progress' : 'pending');
+    await this.layers.setByMonth(project.customerId, project.monthIndex, 9, complete ? 'done' : rows.length ? 'in_progress' : 'pending');
     return complete;
   }
 
@@ -384,11 +384,11 @@ export class Layer9Service {
       project = all.find((p) => p.monthStartDate && p.monthEndDate && p.monthStartDate <= today && today <= p.monthEndDate) || all[0] || null;
     }
     const expected = AI_PLATFORMS.length * L9_PER_PLATFORM;
-    if (!project) return { layer: 8, complete: false, month: null, total: 0, expected, html: '', platforms: [] };
+    if (!project) return { layer: 9, complete: false, month: null, total: 0, expected, html: '', platforms: [] };
     const rows = await this.it.find({ where: { projectId: project.id }, order: { rank: 'ASC' } });
     const platforms = AI_PLATFORMS.map((p) => ({ platform: p.key, label: p.label, records: rows.filter((r) => r.platform === p.key) }));
     const complete = platforms.every((p) => p.records.length >= L9_PER_PLATFORM);
-    if (!complete) return { layer: 8, complete: false, month: project.monthCode, total: rows.length, expected, html: '', platforms: [] };
+    if (!complete) return { layer: 9, complete: false, month: project.monthCode, total: rows.length, expected, html: '', platforms: [] };
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
     const shown = platforms.map((p) => ({
       platform: p.platform,
@@ -399,7 +399,7 @@ export class Layer9Service {
       .flatMap((p) => p.records.map((r) => `<tr><td>${esc(p.label)}</td><td>${r.rank}</td><td>${esc(r.question)}</td><td>${esc(r.faqType)}</td><td>${esc(r.searchIntent)}</td><td>${esc(r.customerJourney)}</td><td>${esc(r.relevance)}</td></tr>`))
       .join('');
     const html = `<table class="kp21-l8"><thead><tr><th>AI platform</th><th>#</th><th>FAQ question</th><th>FAQ type</th><th>Search intent</th><th>Customer journey</th><th>Relevance</th></tr></thead><tbody>${body}</tbody></table>`;
-    return { layer: 8, complete: true, month: project.monthCode, total: rows.length, expected, html, platforms: shown };
+    return { layer: 9, complete: true, month: project.monthCode, total: rows.length, expected, html, platforms: shown };
   }
 
   async removeByCustomer(customerId: string) {

@@ -558,14 +558,68 @@
     mountLayers(cust, { section: '', sub: null, showSection: true });
   }
 
+  // ---- Layer 11 - Keyword Analysis: one consolidated block per source Layer (Layer 4 .. Layer 10), built automatically ----
+  var l11 = { mid: null, data: null, open: {} };
+
+  function mountLayer11(cust) {
+    var cm = currentMonth();
+    var box = document.getElementById('l11Box');
+    if (!box || !cm) return;
+    l11.mid = cm.id;
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 11...</p></section>';
+    loadLayer11(cust, cm, box);
+  }
+
+  function loadLayer11(cust, cm, box) {
+    api('/customers/' + cust.id + '/layer11?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l11Box') !== box || l11.mid !== cm.id) return;
+      l11.data = d;
+      drawLayer11(cust, cm, box);
+    }).catch(function(err){
+      if (document.getElementById('l11Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 11: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+
+  function drawLayer11(cust, cm, box) {
+    var d = l11.data;
+    Array.prototype.forEach.call(box.querySelectorAll('details[data-b]'), function(x){ l11.open[x.getAttribute('data-b')] = x.open; });
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 11 \u00b7 Day 11</span>Keyword Analysis</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + d.completeBlocks + ' of ' + d.totalBlocks + ' blocks ready \u00b7 ' + escapeHtml(d.month) +
+      '. Each block is built automatically right after its own Layer is complete, and is numbered by that Layer. Duplicates are merged, then every record is weighted (0-100) and star rated. Still to build (need Keywords Everywhere / Mangools): ' + escapeHtml(d.pending.join('; ')) + '.</p>' +
+      '<div style="margin-bottom:10px"><button class="btn" id="l11Rebuild">Rebuild now</button> <span class="muted" id="l11Msg"></span></div>';
+    d.blocks.forEach(function(b){
+      h += '<details data-b="' + b.block + '"' + (l11.open[b.block] ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px">' +
+        '<summary><b>' + escapeHtml(b.label) + '</b> <span class="muted">\u00b7 ' + (b.complete ? b.count + ' rows ready' : 'waiting for Layer ' + b.sourceLayer + ' (' + escapeHtml(b.sourceStatus) + ')') + '</span></summary>';
+      if (!b.records.length) {
+        h += '<p class="muted">Nothing consolidated yet.</p>';
+      } else {
+        h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Record</th><th>Intent</th><th>Demand</th><th>Est. volume</th><th>Weightage</th><th>Stars</th><th>Merged</th></tr></thead><tbody>';
+        b.records.forEach(function(r){
+          h += '<tr><td>' + r.rank + '</td><td>' + escapeHtml(r.record) + '</td><td>' + escapeHtml(r.intent || '') + '</td><td>' + escapeHtml(r.demand || '') + '</td><td>' +
+            (r.estVolume == null ? '' : r.estVolume.toLocaleString('en-US')) + '</td><td>' + r.weightage + '</td><td>' + new Array(r.star + 1).join('\u2605') + '</td><td>' + r.occurrences + '</td></tr>';
+        });
+        h += '</tbody></table></div>';
+      }
+      h += '</details>';
+    });
+    box.innerHTML = h + '</section>';
+    var btn = document.getElementById('l11Rebuild');
+    if (btn) btn.onclick = function(){
+      btn.disabled = true;
+      api('/customers/' + cust.id + '/layer11/rebuild', { method: 'POST', body: { month: cm.monthCode } }).then(function(r){
+        l11.data = r; drawLayer11(cust, cm, box);
+      }).catch(function(err){ btn.disabled = false; var m = document.getElementById('l11Msg'); if (m) m.textContent = err.message; });
+    };
+  }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="l11Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountLayer11(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 

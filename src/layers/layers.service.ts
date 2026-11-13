@@ -161,12 +161,34 @@ export class LayersService {
     return this.repo.find({ where: { layerNo, scheduledDate: date, status: In(['pending', 'in_progress']) } });
   }
 
+  // Callbacks run whenever a Layer row is set to done from code (used by Layer 11 to consolidate right after Layers 4-10).
+  private readonly doneHooks: Array<(customerId: string, monthIndex: number, layerNo: number) => Promise<void>> = [];
+  onDone(fn: (customerId: string, monthIndex: number, layerNo: number) => Promise<void>) {
+    this.doneHooks.push(fn);
+  }
+
   // Sets one Layer row of a month from code (e.g. Layer 4 -> done when its table is complete).
+  // A 'done' call also runs the done hooks every time (the table may have been edited since), after the row is saved.
   async setByMonth(customerId: string, monthIndex: number, layerNo: number, status: string) {
     const row = await this.repo.findOne({ where: { customerId, monthIndex, layerNo } });
-    if (!row || row.status === 'not_applicable' || row.status === status) return;
-    row.status = status;
-    row.completedAt = status === 'done' ? new Date() : null;
+    if (!row || row.status === 'not_applicable') return;
+    if (row.status !== status) {
+      row.status = status;
+      row.completedAt = status === 'done' ? new Date() : null;
+      await this.repo.save(row);
+    }
+    if (status === 'done') {
+      for (const fn of this.doneHooks) {
+        try { await fn(customerId, monthIndex, layerNo); } catch { /* a hook never blocks the Layer itself */ }
+      }
+    }
+  }
+
+  // Pending -> in progress only (never overwrites a status a person or the Layer itself already set).
+  async markInProgress(customerId: string, monthIndex: number, layerNo: number) {
+    const row = await this.repo.findOne({ where: { customerId, monthIndex, layerNo } });
+    if (!row || row.status !== 'pending') return;
+    row.status = 'in_progress';
     await this.repo.save(row);
   }
 
