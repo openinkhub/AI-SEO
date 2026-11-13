@@ -7,18 +7,15 @@ import { CustomerApisService } from '../customer-apis/customer-apis.service';
 import { mangoolsGet, mangoolsPost } from '../customer-apis/mangools/client';
 import { todayInTz } from '../projects/month-cycle';
 import { LayersService } from './layers.service';
-import { Layer10Quora } from './layer10.entities';
 import { Layer11Keyword, Layer11State } from './layer11.entities';
 
-// Layer 11 - Keyword Analysis (port of the plugin's 11-AA): the customer's seed keywords and the Layer 10 Quora primary
-// keywords, validated with Mangools / KWFinder, plus competitor keywords from Keywords Everywhere. Runs on its set date
+// Layer 11 - Keyword Analysis (port of the plugin's 11-AA): the customer's seed keywords,
+// validated with Mangools / KWFinder, plus competitor keywords from Keywords Everywhere. Runs on its set date
 // (Day 11) or on demand; every step that has no API key is skipped with a warning and the Layer stays "in progress".
 export const L11_SEED_MAX = 20;
 export const L11_COMPETITOR_MAX = 5;
 export const L11_COMPETITOR_KEYWORDS = 10;
-export const L11_QUORA_MAX = 40;
 export const SRC_SEED = 'Customer Seed Keyword';
-export const SRC_QUORA = 'Quora Primary Keyword';
 export const SRC_MANGOOLS = 'Mangools / KWFinder Seed Validation';
 export const SRC_KE = 'Keywords Everywhere Competitor Keyword';
 const STALE_RUN_MS = 15 * 60 * 1000;
@@ -37,12 +34,6 @@ export const starOf = (w: number): number => Math.max(1, Math.min(5, Math.ceil(M
 export const seedWeight = (sv: number | null): number => (sv !== null && sv > 0 ? Math.min(100, 55 + Math.min(20, Math.log10(sv + 1) * 6)) : 55);
 // Competitor keyword: 45 plus a volume bonus of up to 25 (plugin layer11_apply_ke_domain).
 export const competitorWeight = (sv: number): number => Math.min(100, 45 + Math.min(25, Math.log10(Math.max(1, sv) + 1) * 7));
-// Quora primary keyword, weighted by the Layer 10 relevance of its question.
-export const quoraWeight = (rel: string | null | undefined): number => {
-  const r = String(rel || '').toLowerCase().trim();
-  return r === 'high' || r === 'very high' ? 85 : r === 'medium-high' ? 75 : r === 'medium' ? 65 : r === 'low' ? 50 : 60;
-};
-
 export interface Cand { keyword: string; volume: number | null; cpc: number | null; competition: string | null }
 
 // Port of the plugin's external_keyword_candidates: walks any Mangools / Keywords Everywhere response and collects every
@@ -111,7 +102,6 @@ export class Layer11Service {
   constructor(
     @InjectRepository(Layer11Keyword) private readonly kr: Repository<Layer11Keyword>,
     @InjectRepository(Layer11State) private readonly sr: Repository<Layer11State>,
-    @InjectRepository(Layer10Quora) private readonly l10: Repository<Layer10Quora>,
     @InjectRepository(Project) private readonly projects: Repository<Project>,
     @InjectRepository(Customer) private readonly customers: Repository<Customer>,
     private readonly customerApis: CustomerApisService,
@@ -147,10 +137,12 @@ export class Layer11Service {
     return this.sr.create({ customerId: project.customerId, projectId: project.id, status: 'idle', message: null, warnings: null, locationId: null, lastRunAt: null });
   }
 
-  // Step 1 (free): the customer's seed keywords and the Layer 10 Quora primary keywords become rows that are
+  // Step 1 (free): the customer's seed keywords become rows that are
   // "pending validation". Existing rows are kept as they are (validated data is never overwritten).
   private async bootstrap(project: Project, customer: Customer): Promise<void> {
     const profile = (customer.profile || {}) as Record<string, any>;
+    // Layer 11 holds seed and competitor keywords only: drop any Quora-sourced rows saved by an earlier version.
+    await this.kr.delete({ projectId: project.id, source: 'Quora Primary Keyword' });
     const rows = await this.kr.find({ where: { projectId: project.id } });
     const byNorm = new Map(rows.map((r) => [r.keyNorm, r]));
     const add = (keyword: string, source: string, isSeed: boolean, weight: number) => {
@@ -170,17 +162,6 @@ export class Layer11Service {
       byNorm.set(n, row);
     };
     list(profile.seed_keywords).slice(0, L11_SEED_MAX).forEach((k) => add(k, SRC_SEED, true, 55));
-    const quora = await this.l10.find({ where: { projectId: project.id }, order: { rank: 'ASC' } });
-    const best = new Map<string, { kw: string; w: number }>();
-    for (const q of quora) {
-      const kw = str(q.primaryKeyword);
-      const n = normKw(kw);
-      if (!n) continue;
-      const w = quoraWeight(q.relevance);
-      const cur = best.get(n);
-      if (!cur || w > cur.w) best.set(n, { kw, w });
-    }
-    [...best.values()].sort((a, b) => b.w - a.w).slice(0, L11_QUORA_MAX).forEach((b) => add(b.kw, SRC_QUORA, false, b.w));
     const all = [...byNorm.values()];
     for (let i = 0; i < all.length; i += 100) await this.kr.save(all.slice(i, i + 100));
   }
@@ -322,7 +303,7 @@ export class Layer11Service {
       st.warnings = warn;
       st.status = total === 0 ? 'failed' : mOk && kOk ? 'complete' : 'partial';
       st.message = total === 0
-        ? 'No keywords: add seed keywords to the customer profile (or complete Layer 10) first.'
+        ? 'No keywords: add seed keywords to the customer profile first.'
         : `${total} keyword(s), ${withVolume} with search volume.` + (st.status === 'partial' ? ' Some steps were skipped - see warnings.' : '');
     } catch (err) {
       st.status = 'failed';

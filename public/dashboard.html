@@ -613,7 +613,7 @@
     };
   }
 
-  // ---- Layer 11 - Keyword Analysis: seed + Quora keywords validated with Mangools, plus competitor keywords (Keywords Everywhere) ----
+  // ---- Layer 11 - Keyword Analysis: seed keywords validated with Mangools, plus competitor keywords (Keywords Everywhere) ----
   var l11 = { mid: null, data: null, timer: null };
 
   function mountLayer11(cust) {
@@ -644,7 +644,7 @@
       ' · ' + d.profile.seedKeywords + ' seed keyword(s), ' + d.profile.competitors + ' competitor site(s) in the profile';
     var h = '<section class="card"><h2><span class="layer-tag">Layer 11 · Day 11</span>Keyword Analysis</h2>' +
       '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · status: <b>' + escapeHtml(d.status) + '</b>' + (d.message ? ' · ' + escapeHtml(d.message) : '') + '</p>' +
-      '<p class="muted" style="margin:0 0 8px">' + escapeHtml(keyTxt) + '. Seed keywords and the Layer 10 Quora keywords are checked with Mangools; up to 5 competitor sites add their best keywords through Keywords Everywhere. Runs on Day 11, or now with the button. The customer sees the table only when every step has finished.</p>';
+      '<p class="muted" style="margin:0 0 8px">' + escapeHtml(keyTxt) + '. The customer’s seed keywords are checked with Mangools; up to 5 competitor sites add their best keywords through Keywords Everywhere. Runs on Day 11, or now with the button. The customer sees the table only when every step has finished.</p>';
     if (d.warnings && d.warnings.length) h += '<ul class="muted" style="margin:0 0 8px 18px">' + d.warnings.map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join('') + '</ul>';
     h += '<div style="margin-bottom:10px"><button class="btn" id="l11Run"' + (d.status === 'running' ? ' disabled' : '') + '>' + (d.status === 'running' ? 'Running...' : 'Run Layer 11 now') + '</button> <span class="muted" id="l11Msg"></span></div>';
     if (!d.records.length) {
