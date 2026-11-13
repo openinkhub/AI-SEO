@@ -35,15 +35,18 @@ import { Layer10Platform, Layer10Quora } from './layer10.entities';
 import { Layer10Service } from './layer10.service';
 import { Layer10Controller } from './layer10.controller';
 import { WpLayer10Controller } from './wp-layer10.controller';
-import { Layer11Record } from './layer11.entities';
+import { ConsolidatedRecord } from './consolidation.entities';
+import { Layer11Keyword, Layer11State } from './layer11.entities';
 import { Layer11Service } from './layer11.service';
 import { Layer11Controller, WpLayer11Controller } from './layer11.controller';
+import { ConsolidationService } from './consolidation.service';
+import { ConsolidationController, WpConsolidationController } from './consolidation.controller';
 import { LayerAutomation } from './layer-automation';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform, Layer9Faq, Layer9Platform, Layer10Quora, Layer10Platform, Layer11Record]), CustomerApisModule],
-  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, Layer11Service, LayerAutomation, WpApiKeyGuard],
-  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller, Layer9Controller, WpLayer9Controller, Layer10Controller, WpLayer10Controller, Layer11Controller, WpLayer11Controller],
-  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, Layer11Service],
+  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform, Layer9Faq, Layer9Platform, Layer10Quora, Layer10Platform, ConsolidatedRecord, Layer11Keyword, Layer11State]), CustomerApisModule],
+  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service, LayerAutomation, WpApiKeyGuard],
+  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller, Layer9Controller, WpLayer9Controller, Layer10Controller, WpLayer10Controller, ConsolidationController, WpConsolidationController, Layer11Controller, WpLayer11Controller],
+  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service],
 })
 export class LayersModule {}

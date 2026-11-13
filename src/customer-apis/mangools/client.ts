@@ -11,18 +11,18 @@ export class MangoolsError extends Error {
 const chains = new Map<string, Promise<unknown>>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function once(apiKey: string, path: string, params: Record<string, string | number>, timeoutMs: number): Promise<{ res: Response; body: any }> {
+async function once(apiKey: string, path: string, params: Record<string, string | number>, timeoutMs: number, post?: unknown): Promise<{ res: Response; body: any }> {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => q.set(k, String(v)));
   const url = `${BASE}${path.replace(/^\//, '')}${q.toString() ? `?${q}` : ''}`;
-  const res = await fetch(url, { headers: { 'x-access-token': apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) });
+  const res = await fetch(url, post === undefined ? { headers: { 'x-access-token': apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) } : { method: 'POST', headers: { 'x-access-token': apiKey, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(post), signal: AbortSignal.timeout(timeoutMs) });
   const body: any = await res.json().catch(() => ({}));
   return { res, body };
 }
 
-async function run(apiKey: string, path: string, params: Record<string, string | number>, timeoutMs: number): Promise<any> {
+async function run(apiKey: string, path: string, params: Record<string, string | number>, timeoutMs: number, post?: unknown): Promise<any> {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const { res, body } = await once(apiKey, path, params, timeoutMs);
+    const { res, body } = await once(apiKey, path, params, timeoutMs, post);
     if (res.ok) return body;
     const err = body?.error ?? {};
     const msg = String(err.message ?? body?.message ?? `HTTP ${res.status}`);
@@ -41,12 +41,17 @@ async function run(apiKey: string, path: string, params: Record<string, string |
   throw new MangoolsError('Mangools kept rate-limiting the request.', 429, 'RateLimit');
 }
 
-export function mangoolsGet(apiKey: string, path: string, params: Record<string, string | number> = {}, timeoutMs = 40000): Promise<any> {
+export function mangoolsGet(apiKey: string, path: string, params: Record<string, string | number> = {}, timeoutMs = 40000, post?: unknown): Promise<any> {
   const prev = chains.get(apiKey) ?? Promise.resolve();
   const next = prev.catch(() => undefined).then(async () => {
     await sleep(350);
-    return run(apiKey, path, params, timeoutMs);
+    return run(apiKey, path, params, timeoutMs, post);
   });
   chains.set(apiKey, next.catch(() => undefined));
   return next;
+}
+
+// POST with a JSON body (same one-at-a-time queue, same 429 handling), e.g. kwfinder/keyword-imports.
+export function mangoolsPost(apiKey: string, path: string, body: unknown, timeoutMs = 60000): Promise<any> {
+  return mangoolsGet(apiKey, path, {}, timeoutMs, body);
 }

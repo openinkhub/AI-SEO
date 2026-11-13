@@ -7,6 +7,7 @@ import { Layer7Service } from './layer7.service';
 import { Layer8Service } from './layer8.service';
 import { Layer9Service } from './layer9.service';
 import { Layer10Service } from './layer10.service';
+import { ConsolidationService } from './consolidation.service';
 import { Layer11Service } from './layer11.service';
 
 // AUTOMATION RULE (decided 2026-10-28): a Layer that is automated runs on its SET DATE only - the scheduled date
@@ -18,7 +19,7 @@ import { Layer11Service } from './layer11.service';
 //  - Skipped: Manual platforms (Copilot), platforms already holding 10 keywords, platforms already attempted today.
 //  - Result: the Layer row becomes "done" when all 9 platforms hold 10 keywords, otherwise "in progress".
 //  - Switch off with LAYER_AUTOMATION=off.
-export const AUTOMATED_LAYERS: number[] = [4, 5, 6, 7, 8, 9, 10];
+export const AUTOMATED_LAYERS: number[] = [4, 5, 6, 7, 8, 9, 10, 11];
 
 const tick_ms = 10 * 60 * 1000;
 const tz = () => process.env.APP_TIMEZONE || 'Asia/Kolkata';
@@ -32,7 +33,7 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
   private first: NodeJS.Timeout | null = null;
   private busy = false;
 
-  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service, private readonly layer11: Layer11Service) {}
+  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service, private readonly consolidation: ConsolidationService, private readonly layer11: Layer11Service) {}
 
   onModuleInit() {
     if ((process.env.LAYER_AUTOMATION || '').toLowerCase() === 'off') {
@@ -50,12 +51,12 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
 
   async tick() {
     if (this.busy) return;
-    // Layer 11: consolidate any Layer 4-10 table that is complete but not yet consolidated (free, local, any hour).
+    // Consolidation: consolidate any Layer 4-10 table that is complete but not yet consolidated (free, local, any hour).
     try {
-      const built = await this.layer11.sweep();
-      if (built) this.log.log('Layer 11: consolidated ' + built + ' block(s).');
+      const built = await this.consolidation.sweep();
+      if (built) this.log.log('Consolidation: ' + built + ' block(s).');
     } catch (err) {
-      this.log.error('Layer 11 sweep: ' + (err instanceof Error ? err.message : err));
+      this.log.error('Consolidation sweep: ' + (err instanceof Error ? err.message : err));
     }
     const start = parseInt(process.env.LAYER_AUTOMATION_START_HOUR || '1', 10);
     if (hourNow() < (isNaN(start) ? 1 : start)) return;
@@ -85,6 +86,9 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
         } else if (layerNo === 10) {
           const out = await this.layer10.runDay(due.map((r) => ({ customerId: r.customerId, monthIndex: r.monthIndex })));
           this.log.log(`Layer 10 (${todayStr()}): ${out}`);
+        } else if (layerNo === 11) {
+          const out = await this.layer11.runDay(due.map((r) => ({ customerId: r.customerId, monthIndex: r.monthIndex })));
+          this.log.log(`Layer 11 (${todayStr()}): ${out}`);
         }
       }
     } catch (err) {

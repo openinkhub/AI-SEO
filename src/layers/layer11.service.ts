@@ -1,294 +1,424 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { Customer } from '../customers/customer.entity';
 import { Project } from '../projects/project.entity';
+import { CustomerApisService } from '../customer-apis/customer-apis.service';
+import { mangoolsGet, mangoolsPost } from '../customer-apis/mangools/client';
 import { todayInTz } from '../projects/month-cycle';
-import { AI_PLATFORMS } from './ai-platforms';
 import { LayersService } from './layers.service';
-import { ProjectLayer } from './project-layer.entity';
-import { Layer4Keyword } from './layer4.entities';
-import { Layer5Prompt } from './layer5.entities';
-import { Layer6Keyword } from './layer6.entities';
-import { Layer7Question } from './layer7.entities';
-import { Layer8Item } from './layer8.entities';
-import { Layer9Faq } from './layer9.entities';
 import { Layer10Quora } from './layer10.entities';
-import { Layer11Record } from './layer11.entities';
+import { Layer11Keyword, Layer11State } from './layer11.entities';
 
-// Layer 11 - Keyword Analysis: one consolidated block per source Layer, numbered by the ORIGINAL Layer (Layer 4 .. Layer 10). Port of the plugin's layer11_consolidate_source.
-// Each block is built automatically right after its source Layer is complete (the Layer 4 block right after Layer 4, the Layer 5 block after Layer 5, ...).
-// 11-AA (seed + competitor + Quora keywords) and 11-AAA (master keywords) need Keywords Everywhere / Mangools and are not built yet.
-export interface BlockDef { block: string; layer: number; label: string; max: number }
-const PER = AI_PLATFORMS.length * 10;
-export const L11_BLOCKS: BlockDef[] = [
-  { block: 'L4', layer: 4, label: 'Layer 4 - AI Search Keywords', max: PER },
-  { block: 'L5', layer: 5, label: 'Layer 5 - AI Search Prompts', max: PER },
-  { block: 'L6', layer: 6, label: 'Layer 6 - Long-Tail Keywords', max: PER },
-  { block: 'L7', layer: 7, label: 'Layer 7 - Google People Also Ask', max: 30 },
-  { block: 'L8', layer: 8, label: 'Layer 8 - Similar Products / Services', max: PER },
-  { block: 'L9', layer: 9, label: 'Layer 9 - FAQ & Answers', max: PER },
-  { block: 'L10', layer: 10, label: 'Layer 10 - Quora Q&A Insights', max: PER },
-];
-export const L11_SOURCE_LAYERS = L11_BLOCKS.map((b) => b.layer);
-
-export interface SrcRow { platform: string; value: string; intent: string; demand: string; est: number | null; extra: Record<string, any> }
-export interface Consolidated { rank: number; record: string; intent: string; demand: string; weightage: number; star: number; occurrences: number; platforms: string[]; est: number | null; extra: Record<string, any>; overview: string }
-
-const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9À-ɏ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// Layer 11 - Keyword Analysis (port of the plugin's 11-AA): the customer's seed keywords and the Layer 10 Quora primary
+// keywords, validated with Mangools / KWFinder, plus competitor keywords from Keywords Everywhere. Runs on its set date
+// (Day 11) or on demand; every step that has no API key is skipped with a warning and the Layer stays "in progress".
+export const L11_SEED_MAX = 20;
+export const L11_COMPETITOR_MAX = 5;
+export const L11_COMPETITOR_KEYWORDS = 10;
+export const L11_QUORA_MAX = 40;
+export const SRC_SEED = 'Customer Seed Keyword';
+export const SRC_QUORA = 'Quora Primary Keyword';
+export const SRC_MANGOOLS = 'Mangools / KWFinder Seed Validation';
+export const SRC_KE = 'Keywords Everywhere Competitor Keyword';
+const STALE_RUN_MS = 15 * 60 * 1000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const dateInTz = (d: Date): string => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' }).format(new Date(d));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
-const REL: Record<string, number> = { High: 100, 'Very High': 100, 'Medium-High': 85, Medium: 70, Low: 45 };
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+const list = (v: unknown): string[] =>
+  Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : typeof v === 'string' && v.trim() ? v.split(/\r?\n|,/).map((x) => x.trim()).filter(Boolean) : [];
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
-// Weighted mean over the metrics that have a value (same as the plugin's weighted_available).
-function weighted(metrics: Record<string, [number | null, number]>): number | null {
-  let sum = 0;
-  let w = 0;
-  for (const [v, wt] of Object.values(metrics)) {
-    if (v === null || !Number.isFinite(v) || wt <= 0) continue;
-    sum += Math.max(0, Math.min(100, v)) * wt;
-    w += wt;
-  }
-  return w ? round2(sum / w) : null;
-}
-export const starFromWeightage = (w: number): number => Math.max(1, Math.min(5, Math.ceil(Math.max(1, Math.max(0, Math.min(100, w))) / 20)));
-
-// Pure consolidation of one source Layer's rows: de-duplicate, score, sort, rank. `l4` is only used for Layer 7
-// (a People Also Ask question takes the intent/demand of the Layer 4 keyword it was searched for).
-export function consolidateRows(layer: number, rows: SrcRow[], l4: Array<{ keyword: string; intent: string; demand: string }>): Consolidated[] {
-  const max = L11_BLOCKS.find((b) => b.layer === layer)?.max ?? PER;
-  const map = new Map<string, { record: string; intents: Map<string, number>; demands: Map<string, number>; platforms: Set<string>; occ: number; est: number[]; first: SrcRow }>();
-  for (const r of rows) {
-    const v = (r.value || '').trim();
-    const n = norm(v);
-    if (!v || !n) continue;
-    let x = map.get(n);
-    if (!x) { x = { record: v, intents: new Map(), demands: new Map(), platforms: new Set(), occ: 0, est: [], first: r }; map.set(n, x); }
-    x.occ++;
-    if (r.platform) x.platforms.add(r.platform);
-    if (r.intent) x.intents.set(r.intent, (x.intents.get(r.intent) || 0) + 1);
-    if (r.demand) x.demands.set(r.demand, (x.demands.get(r.demand) || 0) + 1);
-    if ([4, 5, 6].includes(layer) && r.est !== null && Number.isFinite(r.est)) x.est.push(Math.max(0, r.est));
-  }
-  const byCount = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
-  const out: Array<Omit<Consolidated, 'rank'>> = [];
-  for (const x of map.values()) {
-    const pc = x.platforms.size;
-    const app = layer === 7 || layer === 10 ? 1 : AI_PLATFORMS.length;
-    const coverage = Math.min(100, (100 * Math.max(1, pc)) / app);
-    const est = x.est.length ? Math.round(x.est.reduce((a, b) => a + b, 0) / x.est.length) : null;
-    const f = x.first;
-    let intent = byCount(x.intents).join(' / ') || f.intent || '';
-    let demand = byCount(x.demands).slice(0, 2).join(' / ') || f.demand || '';
-    const extra: Record<string, any> = { ...f.extra };
-    if (layer === 7) {
-      const q = String(extra.search_query || '').trim().toLowerCase();
-      const m = q ? l4.find((k) => k.keyword.trim().toLowerCase() === q) : undefined;
-      if (m) { intent = m.intent; demand = m.demand; }
-    }
-    if ([8, 9, 10].includes(layer)) { intent = String(extra.search_intent || intent); demand = String(extra.relevance || demand); }
-    const rel = REL[demand] ?? null;
-    let metrics: Record<string, [number | null, number]> = { source_coverage: [coverage, 50] };
-    if ([4, 5, 6].includes(layer)) metrics.est_volume = [est !== null ? Math.min(100, Math.log10(Math.max(1, est) + 1) * 28) : null, 50];
-    else if (layer === 8 || layer === 9) metrics.relevance = [rel, 50];
-    else if (layer === 10) metrics = { relevance: [rel, 35], primary_keyword: [extra.primary_keyword ? 100 : null, 25], search_intent: [extra.search_intent ? 85 : null, 20], topic: [extra.topic ? 80 : null, 10], provenance: [extra.quora_url ? 100 : null, 10] };
-    else if (layer === 7) metrics = { intent: [intent !== '' ? 80 : null, 50], demand: [rel, 50] };
-    const w = weighted(metrics);
-    // No usable metric: a Layer 7 question with no matching Layer 4 keyword gets a neutral 60 (coverage is always 100 for it and would rank it first).
-    const weight = w !== null ? w : layer === 7 ? 60 : coverage;
-    out.push({ record: x.record, intent, demand, weightage: round2(weight), star: starFromWeightage(weight), occurrences: x.occ, platforms: [...x.platforms], est, extra, overview: `Consolidated from ${x.occ} source record(s); duplicate/near-identical evidence merged.` });
-  }
-  out.sort((a, b) => (b.weightage - a.weightage) || (a.record < b.record ? -1 : a.record > b.record ? 1 : 0));
-  return out.slice(0, max).map((o, i) => ({ ...o, rank: i + 1 }));
-}
-
-const platformIdx = (p: string): number => {
-  const i = AI_PLATFORMS.findIndex((x) => x.key === p);
-  return i < 0 ? 99 : i;
+export const normKw = (s: string): string => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+export const demandOf = (sv: number | null): string => (sv === null ? 'Pending Market Evidence' : sv >= 1000 ? 'High' : sv >= 250 ? 'Medium-High' : sv >= 50 ? 'Medium' : 'Low');
+export const starOf = (w: number): number => Math.max(1, Math.min(5, Math.ceil(Math.max(1, w) / 20)));
+// Seed: base 55 plus a volume bonus of up to 20 (plugin layer11_apply_mangools_seed).
+export const seedWeight = (sv: number | null): number => (sv !== null && sv > 0 ? Math.min(100, 55 + Math.min(20, Math.log10(sv + 1) * 6)) : 55);
+// Competitor keyword: 45 plus a volume bonus of up to 25 (plugin layer11_apply_ke_domain).
+export const competitorWeight = (sv: number): number => Math.min(100, 45 + Math.min(25, Math.log10(Math.max(1, sv) + 1) * 7));
+// Quora primary keyword, weighted by the Layer 10 relevance of its question.
+export const quoraWeight = (rel: string | null | undefined): number => {
+  const r = String(rel || '').toLowerCase().trim();
+  return r === 'high' || r === 'very high' ? 85 : r === 'medium-high' ? 75 : r === 'medium' ? 65 : r === 'low' ? 50 : 60;
 };
 
+export interface Cand { keyword: string; volume: number | null; cpc: number | null; competition: string | null }
+
+// Port of the plugin's external_keyword_candidates: walks any Mangools / Keywords Everywhere response and collects every
+// object that carries a keyword (keyword | kw | query) with its volume (search_volume | sv | vol | volume), CPC and competition.
+export function parseCandidates(node: any): Cand[] {
+  const out: Cand[] = [];
+  const seen = new Set<string>();
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(String(v).replace(/,/g, ''));
+    return isFinite(n) ? n : null;
+  };
+  const walk = (x: any, depth: number) => {
+    if (!x || typeof x !== 'object' || depth > 8) return;
+    if (!Array.isArray(x)) {
+      const kw = String(x.keyword ?? x.kw ?? x.query ?? '').trim();
+      if (kw) {
+        const info = x.keyword_info && typeof x.keyword_info === 'object' ? x.keyword_info : {};
+        const cpcRaw = info.cpc ?? (x.cpc && typeof x.cpc === 'object' ? x.cpc.value : x.cpc);
+        const comp = info.competition ?? x.competition ?? x.ppc ?? info.competition_level ?? x.competition_level ?? null;
+        const n = normKw(kw);
+        if (n && !seen.has(n)) {
+          seen.add(n);
+          out.push({ keyword: kw.slice(0, 500), volume: num(info.search_volume ?? x.search_volume ?? x.sv ?? x.vol ?? x.volume), cpc: num(cpcRaw), competition: comp === null || typeof comp === 'object' ? null : String(comp).slice(0, 40) });
+        }
+      }
+    }
+    for (const v of Object.values(x)) if (v && typeof v === 'object') walk(v, depth + 1);
+  };
+  walk(node, 0);
+  return out;
+}
+
+const SKIP_HOSTS = /(^|\.)(apps\.apple\.com|play\.google\.com|facebook\.com|instagram\.com|linkedin\.com|youtube\.com|twitter\.com|x\.com|wikipedia\.org|quora\.com|reddit\.com|pinterest\.com|medium\.com)$/;
+export function hostOf(u: string): string {
+  const s = u.trim();
+  if (!s) return '';
+  try {
+    return new URL(/^https?:\/\//i.test(s) ? s : 'https://' + s).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+// Distinct competitor domains of the profile (social networks, app stores and the like are not competitor sites).
+export function competitorHosts(profile: Record<string, any>, max = L11_COMPETITOR_MAX): string[] {
+  const out: string[] = [];
+  for (const raw of list(profile.competitors)) {
+    const h = hostOf(raw);
+    if (!h || !h.includes('.') || SKIP_HOSTS.test(h) || out.includes(h)) continue;
+    out.push(h);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+export function locationQuery(profile: Record<string, any>): string {
+  return list(profile.locations)[0] || list(profile.areas_served)[0] || str(profile.service_area) || str(profile.town) || str(profile.state) || 'India';
+}
+
+interface Keys { mangools: string; locationId: number; languageId: number; ke: string }
+
 @Injectable()
-export class Layer11Service implements OnModuleInit {
+export class Layer11Service {
   private readonly log = new Logger('Layer11');
-  private readonly chain = new Map<string, Promise<unknown>>();
+  private readonly running = new Set<string>();
 
   constructor(
-    @InjectRepository(Layer11Record) private readonly rec: Repository<Layer11Record>,
-    @InjectRepository(ProjectLayer) private readonly pl: Repository<ProjectLayer>,
-    @InjectRepository(Project) private readonly projects: Repository<Project>,
-    @InjectRepository(Layer4Keyword) private readonly l4: Repository<Layer4Keyword>,
-    @InjectRepository(Layer5Prompt) private readonly l5: Repository<Layer5Prompt>,
-    @InjectRepository(Layer6Keyword) private readonly l6: Repository<Layer6Keyword>,
-    @InjectRepository(Layer7Question) private readonly l7: Repository<Layer7Question>,
-    @InjectRepository(Layer8Item) private readonly l8: Repository<Layer8Item>,
-    @InjectRepository(Layer9Faq) private readonly l9: Repository<Layer9Faq>,
+    @InjectRepository(Layer11Keyword) private readonly kr: Repository<Layer11Keyword>,
+    @InjectRepository(Layer11State) private readonly sr: Repository<Layer11State>,
     @InjectRepository(Layer10Quora) private readonly l10: Repository<Layer10Quora>,
+    @InjectRepository(Project) private readonly projects: Repository<Project>,
+    @InjectRepository(Customer) private readonly customers: Repository<Customer>,
+    private readonly customerApis: CustomerApisService,
     private readonly layers: LayersService,
   ) {}
 
-  onModuleInit() {
-    // "Just after its original Layer is completed": LayersService calls this whenever a Layer 4-10 row is set to done.
-    this.layers.onDone(async (customerId, monthIndex, layerNo) => {
-      if (!L11_SOURCE_LAYERS.includes(layerNo)) return;
-      await this.onSourceDone(customerId, monthIndex, layerNo);
-    });
-  }
-
-  async monthOf(customerId: string, month?: string): Promise<Project> {
-    if (month) {
-      const idx = parseInt(String(month).replace(/^m/i, ''), 10);
-      if (isNaN(idx)) throw new BadRequestException('month is required, e.g. M3.');
-      const p = await this.projects.findOne({ where: { customerId, monthIndex: idx } });
-      if (!p) throw new NotFoundException(`Month M${idx} does not exist for this customer.`);
-      return p;
-    }
-    const today = todayInTz();
-    const all = await this.projects.find({ where: { customerId }, order: { monthIndex: 'ASC' } });
-    const p = all.find((x) => x.monthStartDate && x.monthEndDate && x.monthStartDate <= today && today <= x.monthEndDate) || all[0];
-    if (!p) throw new NotFoundException('This customer has no months yet.');
+  async monthOf(customerId: string, month: string): Promise<Project> {
+    const idx = parseInt(String(month || '').replace(/^m/i, ''), 10);
+    if (isNaN(idx)) throw new BadRequestException('month is required, e.g. M3.');
+    const p = await this.projects.findOne({ where: { customerId, monthIndex: idx } });
+    if (!p) throw new NotFoundException(`Month M${idx} does not exist for this customer.`);
     return p;
   }
 
-  // Source rows of one Layer, in platform order then rank, as plain SrcRow objects.
-  private async load(project: Project, layer: number): Promise<SrcRow[]> {
-    const where = { projectId: project.id };
-    const order = { rank: 'ASC' as const };
-    const sort = (a: SrcRow & { rank: number }, b: SrcRow & { rank: number }) => platformIdx(a.platform) - platformIdx(b.platform) || a.rank - b.rank;
-    let rows: Array<SrcRow & { rank: number }> = [];
-    if (layer === 4) rows = (await this.l4.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.keyword, intent: r.intent, demand: r.demand, est: r.estVolume, extra: {} }));
-    else if (layer === 5) rows = (await this.l5.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.prompt, intent: r.intent, demand: r.demand, est: r.estVolume, extra: { volume_query: r.volumeQuery || '', prompt_type: r.promptType } }));
-    else if (layer === 6) rows = (await this.l6.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.keyword, intent: r.intent, demand: r.demand, est: r.estVolume, extra: { keyword_type: r.keywordType } }));
-    else if (layer === 7) rows = (await this.l7.find({ where, order })).map((r) => ({ platform: '', rank: r.rank, value: r.question, intent: '', demand: '', est: null, extra: { search_query: r.searchQuery, source: r.source || 'Google People Also Ask', source_url: r.sourceUrl || '' } }));
-    else if (layer === 8) rows = (await this.l8.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.item, intent: r.searchIntent, demand: r.relevance, est: null, extra: { relationship_type: r.relationshipType, search_intent: r.searchIntent, relevance: r.relevance } }));
-    else if (layer === 9) rows = (await this.l9.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.question, intent: r.searchIntent, demand: r.relevance, est: null, extra: { faq_type: r.faqType, search_intent: r.searchIntent, customer_journey: r.customerJourney, relevance: r.relevance } }));
-    else if (layer === 10) rows = (await this.l10.find({ where, order })).map((r) => ({ platform: r.platform, rank: r.rank, value: r.question, intent: r.searchIntent, demand: r.relevance, est: null, extra: { topic: r.topic, primary_keyword: r.primaryKeyword, search_intent: r.searchIntent, relevance: r.relevance, quora_url: r.quoraUrl } }));
-    return rows.sort(sort);
+  private async customerOf(customerId: string): Promise<Customer> {
+    const c = await this.customers.findOne({ where: { id: customerId } });
+    if (!c) throw new NotFoundException('Customer not found.');
+    return c;
   }
 
-  // Builds (replaces) one block from its source Layer. Serialised per month+block so overlapping triggers cannot collide.
-  build(project: Project, layer: number): Promise<number> {
-    const def = L11_BLOCKS.find((b) => b.layer === layer);
-    if (!def) return Promise.reject(new BadRequestException('Layer ' + layer + ' has no Layer 11 block.'));
-    const key = project.id + ':' + def.block;
-    const run = (this.chain.get(key) || Promise.resolve()).catch(() => undefined).then(async () => {
-      const src = await this.load(project, layer);
-      const l4 = layer === 7 ? (await this.l4.find({ where: { projectId: project.id }, order: { rank: 'ASC' } })).map((k) => ({ keyword: k.keyword, intent: k.intent, demand: k.demand })) : [];
-      const out = consolidateRows(layer, src, l4);
-      await this.rec.delete({ projectId: project.id, block: def.block });
-      if (out.length) {
-        await this.rec.save(out.map((o) => this.rec.create({ customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, block: def.block, rank: o.rank, record: o.record.slice(0, 500), intent: o.intent ? o.intent.slice(0, 255) : null, demand: o.demand ? o.demand.slice(0, 120) : null, weightage: o.weightage, starRating: o.star, occurrences: o.occurrences, platforms: o.platforms, estVolume: o.est, extra: o.extra, overview: o.overview })));
+  private async keys(customerId: string): Promise<Keys> {
+    const k: any = await this.customerApis.getKeys(customerId);
+    const num = (v: unknown) => {
+      const n = parseInt(String(v ?? ''), 10);
+      return isNaN(n) || n <= 0 ? 0 : n;
+    };
+    return { mangools: String(k['mangools']?.apiKey || ''), locationId: num(k['mangools']?.locationId), languageId: num(k['mangools']?.languageId) || 1000, ke: String(k['keywords_everywhere']?.apiKey || '') };
+  }
+
+  private async state(project: Project): Promise<Layer11State> {
+    const existing = await this.sr.findOne({ where: { projectId: project.id } });
+    if (existing) return existing;
+    return this.sr.create({ customerId: project.customerId, projectId: project.id, status: 'idle', message: null, warnings: null, locationId: null, lastRunAt: null });
+  }
+
+  // Step 1 (free): the customer's seed keywords and the Layer 10 Quora primary keywords become rows that are
+  // "pending validation". Existing rows are kept as they are (validated data is never overwritten).
+  private async bootstrap(project: Project, customer: Customer): Promise<void> {
+    const profile = (customer.profile || {}) as Record<string, any>;
+    const rows = await this.kr.find({ where: { projectId: project.id } });
+    const byNorm = new Map(rows.map((r) => [r.keyNorm, r]));
+    const add = (keyword: string, source: string, isSeed: boolean, weight: number) => {
+      const n = normKw(keyword);
+      if (!n) return;
+      const have = byNorm.get(n);
+      if (have) {
+        if (isSeed && !have.isSeed && !have.validated) {
+          have.isSeed = true;
+          have.source = SRC_SEED;
+          have.weightage = Math.max(have.weightage, weight);
+          have.starRating = starOf(have.weightage);
+        }
+        return;
       }
-      return out.length;
-    });
-    this.chain.set(key, run);
-    return run;
+      const row = this.kr.create({ customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, rank: 0, keyword: keyword.slice(0, 500), keyNorm: n, source, isSeed, competitorDomain: null, volume: null, cpc: null, competition: null, demand: 'Pending Market Evidence', weightage: weight, starRating: starOf(weight), validated: false, note: 'Pending API validation' });
+      byNorm.set(n, row);
+    };
+    list(profile.seed_keywords).slice(0, L11_SEED_MAX).forEach((k) => add(k, SRC_SEED, true, 55));
+    const quora = await this.l10.find({ where: { projectId: project.id }, order: { rank: 'ASC' } });
+    const best = new Map<string, { kw: string; w: number }>();
+    for (const q of quora) {
+      const kw = str(q.primaryKeyword);
+      const n = normKw(kw);
+      if (!n) continue;
+      const w = quoraWeight(q.relevance);
+      const cur = best.get(n);
+      if (!cur || w > cur.w) best.set(n, { kw, w });
+    }
+    [...best.values()].sort((a, b) => b.w - a.w).slice(0, L11_QUORA_MAX).forEach((b) => add(b.kw, SRC_QUORA, false, b.w));
+    const all = [...byNorm.values()];
+    for (let i = 0; i < all.length; i += 100) await this.kr.save(all.slice(i, i + 100));
   }
 
-  async onSourceDone(customerId: string, monthIndex: number, layerNo: number) {
+  // Step 2: Mangools / KWFinder - resolve the location once, then validate the seed keywords in one bulk request.
+  private async mangoolsPhase(project: Project, customer: Customer, keys: Keys, st: Layer11State, warn: string[]): Promise<boolean> {
+    const seeds = await this.kr.find({ where: { projectId: project.id, isSeed: true, validated: false } });
+    if (!seeds.length) return true;
+    if (!keys.mangools) {
+      warn.push('Mangools seed validation skipped: no Mangools key is saved for this customer.');
+      return false;
+    }
+    let loc = keys.locationId || st.locationId || 0;
+    if (!loc) {
+      const query = locationQuery((customer.profile || {}) as Record<string, any>);
+      try {
+        const r = await mangoolsGet(keys.mangools, 'mangools/locations', { query });
+        const items: any[] = Array.isArray(r) ? r : Array.isArray(r?.locations) ? r.locations : Array.isArray(r?.items) ? r.items : [];
+        const hit = items.find((i) => i && i.active && Number(i._id) > 0);
+        loc = hit ? Number(hit._id) : 0;
+      } catch (e) {
+        warn.push('Mangools location lookup failed: ' + errMsg(e));
+        return false;
+      }
+      if (!loc) {
+        warn.push(`Mangools returned no active location for "${query}". Save a KWFinder location ID in the customer's Mangools settings.`);
+        return false;
+      }
+      st.locationId = loc;
+    }
     try {
-      const project = await this.projects.findOne({ where: { customerId, monthIndex } });
-      if (!project) return;
-      const n = await this.build(project, layerNo);
-      if (n) await this.layers.markInProgress(customerId, monthIndex, 11);
-      this.log.log(`Layer 11 block ${L11_BLOCKS.find((b) => b.layer === layerNo)?.block} built for ${project.monthCode}: ${n} row(s)`);
+      const r = await mangoolsPost(keys.mangools, 'kwfinder/keyword-imports', { keywords: seeds.map((s) => s.keyword).slice(0, 700), location_id: loc, language_id: keys.languageId });
+      const byNorm = new Map(parseCandidates(r).map((c) => [normKw(c.keyword), c]));
+      let matched = 0;
+      const hits = seeds.filter((s) => byNorm.has(s.keyNorm)).length;
+      for (const s of seeds) {
+        const c = byNorm.get(s.keyNorm);
+        if (!c) {
+          // Mangools answered but has no data for this one: it counts as checked (so it is not paid for again).
+          if (hits > 0) { s.validated = true; s.note = 'No Mangools volume available for this keyword'; }
+          continue;
+        }
+        matched++;
+        s.volume = c.volume;
+        s.cpc = c.cpc;
+        s.competition = c.competition;
+        s.demand = demandOf(c.volume);
+        s.weightage = round2(seedWeight(c.volume));
+        s.starRating = starOf(s.weightage);
+        s.validated = true;
+        s.source = SRC_MANGOOLS;
+        s.note = null;
+      }
+      await this.kr.save(seeds);
+      if (!matched) warn.push('Mangools answered but none of the returned keywords matched the saved seed keywords exactly.');
+      return matched > 0;
+    } catch (e) {
+      warn.push('Mangools seed validation failed: ' + errMsg(e));
+      return false;
+    }
+  }
+
+  private async keDomain(key: string, host: string): Promise<any> {
+    const body = new URLSearchParams({ dataSource: 'gkp', country: (process.env.KE_COUNTRY || 'in').toLowerCase(), currency: (process.env.KE_CURRENCY || 'inr').toLowerCase(), domain: host });
+    const res = await fetch('https://api.keywordseverywhere.com/v1/get_domain_keywords', { method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body, signal: AbortSignal.timeout(60000) });
+    const text = await res.text();
+    let b: any = {};
+    try { b = JSON.parse(text); } catch { /* keep {} */ }
+    if (!res.ok) throw new Error(String(b?.message || b?.error || b?.description || `HTTP ${res.status}`));
+    return b;
+  }
+
+  // Step 3: Keywords Everywhere - up to 5 competitor domains, one request each, the 10 best volume-bearing new keywords of each.
+  private async kePhase(project: Project, customer: Customer, keys: Keys, warn: string[]): Promise<boolean> {
+    const hosts = competitorHosts((customer.profile || {}) as Record<string, any>);
+    if (!hosts.length) {
+      warn.push('Keywords Everywhere skipped: the customer profile has no usable competitor website.');
+      return true;
+    }
+    const rows = await this.kr.find({ where: { projectId: project.id } });
+    const todo = hosts.filter((h) => !rows.some((r) => r.competitorDomain === h));
+    if (!todo.length) return true;
+    if (!keys.ke) {
+      warn.push('Keywords Everywhere skipped: no key is saved for this customer.');
+      return false;
+    }
+    const seen = new Set(rows.map((r) => r.keyNorm));
+    let ok = true;
+    for (let i = 0; i < todo.length; i++) {
+      if (i) await sleep(1200);
+      try {
+        const cands = parseCandidates(await this.keDomain(keys.ke, todo[i])).filter((c) => c.volume !== null && !seen.has(normKw(c.keyword))).sort((a, b) => (b.volume as number) - (a.volume as number)).slice(0, L11_COMPETITOR_KEYWORDS);
+        const fresh = cands.map((c) => {
+          const n = normKw(c.keyword);
+          seen.add(n);
+          const w = round2(competitorWeight(c.volume as number));
+          return this.kr.create({ customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, rank: 0, keyword: c.keyword, keyNorm: n, source: SRC_KE, isSeed: false, competitorDomain: todo[i], volume: c.volume, cpc: c.cpc, competition: c.competition, demand: demandOf(c.volume), weightage: w, starRating: starOf(w), validated: true, note: null });
+        });
+        if (fresh.length) await this.kr.save(fresh);
+        else warn.push(`Keywords Everywhere returned no new volume-bearing keywords for ${todo[i]}.`);
+      } catch (e) {
+        ok = false;
+        warn.push(`Keywords Everywhere ${todo[i]}: ${errMsg(e)}`);
+        if (/credit|unauthor|invalid|401|402|403/i.test(errMsg(e))) break;
+      }
+    }
+    return ok;
+  }
+
+  // Final rating: best weightage first, then volume, then seeds before the rest.
+  private async rerank(project: Project) {
+    const rows = await this.kr.find({ where: { projectId: project.id } });
+    rows.sort((a, b) => b.weightage - a.weightage || (b.volume ?? -1) - (a.volume ?? -1) || Number(b.isSeed) - Number(a.isSeed) || a.keyword.localeCompare(b.keyword));
+    rows.forEach((r, i) => { r.rank = i + 1; });
+    for (let i = 0; i < rows.length; i += 100) await this.kr.save(rows.slice(i, i + 100));
+    return { total: rows.length, withVolume: rows.filter((r) => r.volume !== null).length };
+  }
+
+  // Keeps the Layer 11 row of the Layer schedule in step: done only when every available step finished.
+  async syncLayerStatus(project: Project) {
+    const [n, st] = await Promise.all([this.kr.count({ where: { projectId: project.id } }), this.sr.findOne({ where: { projectId: project.id } })]);
+    if (n > 0 && st?.status === 'complete') await this.layers.setByMonth(project.customerId, project.monthIndex, 11, 'done');
+    else if (n > 0) await this.layers.markInProgress(project.customerId, project.monthIndex, 11);
+    else await this.layers.setByMonth(project.customerId, project.monthIndex, 11, 'pending');
+  }
+
+  async execute(project: Project, customer: Customer) {
+    const lock = project.id;
+    if (this.running.has(lock)) return;
+    this.running.add(lock);
+    const st = await this.state(project);
+    const warn: string[] = [];
+    try {
+      const keys = await this.keys(project.customerId);
+      await this.bootstrap(project, customer);
+      const mOk = await this.mangoolsPhase(project, customer, keys, st, warn);
+      const kOk = await this.kePhase(project, customer, keys, warn);
+      const { total, withVolume } = await this.rerank(project);
+      st.warnings = warn;
+      st.status = total === 0 ? 'failed' : mOk && kOk ? 'complete' : 'partial';
+      st.message = total === 0
+        ? 'No keywords: add seed keywords to the customer profile (or complete Layer 10) first.'
+        : `${total} keyword(s), ${withVolume} with search volume.` + (st.status === 'partial' ? ' Some steps were skipped - see warnings.' : '');
     } catch (err) {
-      this.log.error(`Layer 11 build (source Layer ${layerNo}): ${err instanceof Error ? err.message : err}`);
+      st.status = 'failed';
+      st.message = errMsg(err);
+      st.warnings = warn;
+    } finally {
+      this.running.delete(lock);
     }
+    st.lastRunAt = new Date();
+    await this.sr.save(st);
+    await this.syncLayerStatus(project);
   }
 
-  // Safety net (runs with the automation tick): builds any block whose source Layer is done but that has no rows yet.
-  async sweep(): Promise<number> {
-    const done = await this.pl.find({ where: { layerNo: In(L11_SOURCE_LAYERS), status: 'done' } });
-    if (!done.length) return 0;
-    const counts = await this.rec.createQueryBuilder('r').select('r.projectId', 'projectId').addSelect('r.block', 'block').addSelect('COUNT(*)', 'n').groupBy('r.projectId').addGroupBy('r.block').getRawMany();
-    const have = new Set(counts.map((c: any) => c.projectId + ':' + c.block));
-    let built = 0;
-    for (const d of done) {
-      const def = L11_BLOCKS.find((b) => b.layer === d.layerNo);
-      if (!def || have.has(d.projectId + ':' + def.block)) continue;
-      await this.onSourceDone(d.customerId, d.monthIndex, d.layerNo);
-      built++;
-    }
-    return built;
-  }
-
-  // Admin: rebuild every block whose source Layer is done (button on the Layer 11 card).
-  async rebuild(customerId: string, month?: string) {
+  // Admin "Run Layer 11 now": starts in the background; the page polls view().
+  async startRun(customerId: string, month: string) {
     const project = await this.monthOf(customerId, month);
-    const rows = await this.pl.find({ where: { projectId: project.id, layerNo: In(L11_SOURCE_LAYERS), status: 'done' } });
-    for (const r of rows) await this.onSourceDone(customerId, project.monthIndex, r.layerNo);
-    return this.view(customerId, project.monthCode);
-  }
-
-  private async state(project: Project) {
-    const [rows, srcs] = await Promise.all([
-      this.rec.find({ where: { projectId: project.id }, order: { block: 'ASC', rank: 'ASC' } }),
-      this.pl.find({ where: { projectId: project.id, layerNo: In(L11_SOURCE_LAYERS) } }),
-    ]);
-    return L11_BLOCKS.map((b) => {
-      const status = srcs.find((s) => s.layerNo === b.layer)?.status || 'pending';
-      const records = rows.filter((r) => r.block === b.block);
-      return { def: b, sourceStatus: status, records, complete: status === 'done' && records.length > 0 };
-    });
-  }
-
-  // Admin view.
-  async view(customerId: string, month?: string) {
-    const project = await this.monthOf(customerId, month);
+    const customer = await this.customerOf(customerId);
     const st = await this.state(project);
-    const blocks = st.map((s) => ({
-      block: s.def.block,
-      label: s.def.label,
-      sourceLayer: s.def.layer,
-      sourceStatus: s.sourceStatus,
-      complete: s.complete,
-      count: s.records.length,
-      records: s.records.map((r) => ({ rank: r.rank, record: r.record, intent: r.intent, demand: r.demand, weightage: r.weightage, star: r.starRating, occurrences: r.occurrences, estVolume: r.estVolume, extra: r.extra || {} })),
-    }));
-    return { month: project.monthCode, completeBlocks: blocks.filter((b) => b.complete).length, totalBlocks: blocks.length, blocks, pending: ['11-AA (seed + competitor + Quora keywords)', '11-AAA (master keywords)'] };
+    if (st.status === 'running' && st.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() < STALE_RUN_MS) throw new BadRequestException('Layer 11 is already running.');
+    st.status = 'running';
+    st.message = 'Collecting keywords...';
+    st.lastRunAt = new Date();
+    await this.sr.save(st);
+    void this.execute(project, customer).catch((err) => this.log.error(`Layer 11: ${errMsg(err)}`));
+    return this.view(customerId, month);
   }
 
-  // Customer panel (WordPress): the finished blocks. A block is shown only while its source Layer is complete.
+  // Automation: the set date (Day 11 of the Month Cycle). One customer month at a time; months already complete or
+  // already attempted today are skipped. Paid API calls only ever happen on the set date.
+  async runDay(monthRows: Array<{ customerId: string; monthIndex: number }>, force = false): Promise<string> {
+    const today = dateInTz(new Date());
+    let runs = 0;
+    for (const m of monthRows) {
+      const project = await this.projects.findOne({ where: { customerId: m.customerId, monthIndex: m.monthIndex } });
+      const customer = await this.customers.findOne({ where: { id: m.customerId } });
+      if (!project || !customer) continue;
+      const st = await this.state(project);
+      if (!force && st.status === 'complete') continue;
+      if (!force && st.lastRunAt && dateInTz(st.lastRunAt) === today && st.status !== 'idle') continue;
+      await this.execute(project, customer);
+      runs++;
+    }
+    return `${runs} customer month(s) analysed`;
+  }
+
+  async view(customerId: string, month: string) {
+    const project = await this.monthOf(customerId, month);
+    const customer = await this.customerOf(customerId);
+    const [rows, st, keys] = await Promise.all([this.kr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }), this.sr.findOne({ where: { projectId: project.id } }), this.keys(customerId)]);
+    const profile = (customer.profile || {}) as Record<string, any>;
+    let status = st?.status || 'idle';
+    if (status === 'running' && st?.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() > STALE_RUN_MS) status = 'failed';
+    return {
+      month: project.monthCode,
+      total: rows.length,
+      complete: rows.length > 0 && status === 'complete',
+      status,
+      message: st?.message || '',
+      warnings: st?.warnings || [],
+      lastRunAt: st?.lastRunAt ?? null,
+      keys: { mangools: !!keys.mangools, keywordsEverywhere: !!keys.ke },
+      locationId: keys.locationId || st?.locationId || null,
+      profile: { seedKeywords: list(profile.seed_keywords).length, competitors: competitorHosts(profile, 50).length },
+      records: rows.map((r) => ({ rank: r.rank, keyword: r.keyword, source: r.source, isSeed: r.isSeed, competitorDomain: r.competitorDomain, volume: r.volume, cpc: r.cpc, competition: r.competition, demand: r.demand, weightage: r.weightage, star: r.starRating, validated: r.validated, note: r.note })),
+    };
+  }
+
+  // Customer panel (WordPress): the table once every available step has finished.
   async customerTable(customerId: string, month?: string) {
-    const project = await this.monthOf(customerId, month).catch(() => null);
-    if (!project) return { layer: 11, complete: false, month: null, completeBlocks: 0, totalBlocks: L11_BLOCKS.length, blocks: [] };
-    const st = await this.state(project);
-    const blocks = st.map((s) => ({
-      block: s.def.block,
-      label: s.def.label,
-      sourceLayer: s.def.layer,
-      complete: s.complete,
-      total: s.records.length,
-      html: s.complete ? renderBlockHtml(s.def.block, s.records) : '',
-    }));
-    const completeBlocks = blocks.filter((b) => b.complete).length;
-    return { layer: 11, complete: completeBlocks === blocks.length, month: project.monthCode, completeBlocks, totalBlocks: blocks.length, blocks };
+    let project: Project | null = null;
+    if (month) project = await this.monthOf(customerId, month);
+    else {
+      const today = todayInTz();
+      const all = await this.projects.find({ where: { customerId }, order: { monthIndex: 'ASC' } });
+      project = all.find((p) => p.monthStartDate && p.monthEndDate && p.monthStartDate <= today && today <= p.monthEndDate) || all[0] || null;
+    }
+    if (!project) return { layer: 11, complete: false, month: null, total: 0, expected: 0, html: '', platforms: [] };
+    const [rows, st] = await Promise.all([this.kr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }), this.sr.findOne({ where: { projectId: project.id } })]);
+    const complete = rows.length > 0 && st?.status === 'complete';
+    return { layer: 11, complete, month: project.monthCode, total: rows.length, expected: 0, html: complete ? renderHtml(rows) : '', platforms: [] };
+  }
+
+  async removeByCustomer(customerId: string) {
+    await this.kr.delete({ customerId });
+    await this.sr.delete({ customerId });
   }
 }
 
 const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
-const stars = (n: number): string => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
 const dash = (s: unknown): string => (s === null || s === undefined || s === '' ? '—' : esc(s));
+const stars = (n: number): string => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
 
-// The customer-facing table of one block (same columns as the plugin's Layer 11 tables; Google volume is not available yet).
-export function renderBlockHtml(block: string, rows: Layer11Record[]): string {
-  const ex = (r: Layer11Record, k: string) => (r.extra || {})[k];
-  let head: string[] = [];
-  let cells: (r: Layer11Record) => unknown[] = () => [];
-  if (block === 'L4' || block === 'L5' || block === 'L6') {
-    head = ['Final Rating', block === 'L4' ? 'Keyword' : block === 'L5' ? 'AI Prompt' : 'Long-Tail Keyword', 'Intent', 'Demand', 'Est Volume', 'Weightage', 'Star Rating', 'AI Overview'];
-    cells = (r) => [r.rank, r.record, r.intent, r.demand, r.estVolume === null ? null : r.estVolume.toLocaleString('en-US'), r.weightage, stars(r.starRating), r.overview];
-  } else if (block === 'L7') {
-    head = ['Final Rating', 'PAA Question', 'Intent', 'Demand', 'Weightage', 'Star Rating', 'AI Overview'];
-    cells = (r) => [r.rank, r.record, r.intent, r.demand, r.weightage, stars(r.starRating), r.overview];
-  } else if (block === 'L8') {
-    head = ['Final Rating', 'Similar Product / Service', 'Relationship Type', 'Search Intent', 'Relevance', 'Weightage', 'Star Rating', 'AI Overview'];
-    cells = (r) => [r.rank, r.record, ex(r, 'relationship_type'), ex(r, 'search_intent'), ex(r, 'relevance'), r.weightage, stars(r.starRating), r.overview];
-  } else if (block === 'L9') {
-    head = ['Final Rating', 'FAQ Question', 'FAQ Type', 'Search Intent', 'Customer Journey', 'Relevance', 'Weightage', 'Star Rating', 'AI Overview'];
-    cells = (r) => [r.rank, r.record, ex(r, 'faq_type'), ex(r, 'search_intent'), ex(r, 'customer_journey'), ex(r, 'relevance'), r.weightage, stars(r.starRating), r.overview];
-  } else {
-    head = ['Final Rating', 'Quora Question', 'Topic', 'Primary Keyword', 'Search Intent', 'Relevance', 'Quora URL', 'Weightage', 'Star Rating'];
-    cells = (r) => [r.rank, r.record, ex(r, 'topic'), ex(r, 'primary_keyword'), ex(r, 'search_intent'), ex(r, 'relevance'), ex(r, 'quora_url'), r.weightage, stars(r.starRating)];
-  }
-  const body = rows.map((r) => '<tr>' + cells(r).map((c, i) => '<td>' + (block === 'L10' && i === 6 && c ? `<a href="${esc(c)}" rel="nofollow noopener">${esc(c)}</a>` : dash(c)) + '</td>').join('') + '</tr>').join('');
+export function renderHtml(rows: Layer11Keyword[]): string {
+  const head = ['Final Rating', 'Keyword', 'Source', 'Seed Keyword', 'Competitor Domain', 'Volume', 'Demand', 'Weightage', 'Star Rating'];
+  const body = rows
+    .map((r) => '<tr>' + [r.rank, r.keyword, r.source, r.isSeed ? 'Yes' : 'No', r.competitorDomain, r.volume === null ? null : r.volume.toLocaleString('en-US'), r.demand, r.weightage, stars(r.starRating)].map((c) => `<td>${dash(c)}</td>`).join('') + '</tr>')
+    .join('');
   return `<table class="kp21-l11"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }
