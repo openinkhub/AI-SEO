@@ -46,6 +46,12 @@ export class Layer12Controller {
     return this.l12.startRun(customerId, body?.month, !!body?.force);
   }
 
+  // Completes a partial month (a provider had no key) so Layers 13 and 14 become done and customer-visible.
+  @Post('layer12/accept-partial')
+  acceptPartial(@Param('customerId') customerId: string, @Body() body: { month: string }) {
+    return this.l12.acceptPartial(customerId, body?.month);
+  }
+
   @Get('layer13')
   view13(@Param('customerId') customerId: string, @Query('month') month: string) {
     return this.l13.view(customerId, month);

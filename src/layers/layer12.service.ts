@@ -335,6 +335,25 @@ export class Layer12Service {
     }
   }
 
+  // Admin decision: finish a month whose Layer 12 stayed partial because a provider has no key (Mangools / SerpApi). The evidence that
+  // exists is kept, nothing is invented, the gap is recorded in the warnings, and Layers 13 and 14 follow through the done-chain.
+  // A later forced run (once the keys exist) replaces it with the full validation.
+  async acceptPartial(customerId: string, month: string) {
+    const project = await this.monthOf(customerId, month);
+    const st = await this.state(project);
+    const n = await this.rr.count({ where: { projectId: project.id } });
+    if (!n) throw new BadRequestException('Layer 12 has no keywords yet: run Layer 12 first.');
+    if (st.status === 'complete') return this.view(customerId, project.monthCode);
+    if (st.status === 'running') throw new BadRequestException('Layer 12 is still running.');
+    const skipped = (st.warnings || []).filter((w) => /skipped|bypassed/i.test(w));
+    st.status = 'complete';
+    st.message = `${n} keyword(s) validated; completed without the skipped provider(s) by admin decision.`;
+    st.warnings = [...(skipped.length ? skipped : ['Some providers were skipped.']), 'Completed by admin without full provider evidence: unavailable KPIs are redistributed, not counted as zero. Run Layer 12 again with force once the keys exist to replace it.'];
+    await this.sr.save(st);
+    await this.syncLayerStatus(project);
+    return this.view(customerId, project.monthCode);
+  }
+
   // Admin "Run Layer 12 now": starts in the background; the page polls view().
   async startRun(customerId: string, month: string, force = false) {
     const project = await this.monthOf(customerId, month);
