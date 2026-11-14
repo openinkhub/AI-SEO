@@ -11,6 +11,8 @@ import { LayersService } from './layers.service';
 import { Layer12Row, Layer12State } from './layer12.entities';
 import { competitorHosts, locationQuery, normKw, starOf } from './layer11.service';
 import { Layer11MasterService, fmt, stars } from './layer11master.service';
+import { Layer13Service } from './layer13.service';
+import { Layer14Service } from './layer14.service';
 import { competitorStrength, geekflareFacts, logScore, mangoolsRows, matchCompetitors, num, resolveMangoolsLocation, round2, weightedAvailable } from './layer12.helpers';
 
 // Layer 12 - Keyword Market Validation (port of the plugin's layer12_*): the 11-AAA master keywords validated with Mangools / KWFinder
@@ -57,6 +59,8 @@ export class Layer12Service {
     private readonly globalApis: GlobalApisService,
     private readonly layers: LayersService,
     private readonly master: Layer11MasterService,
+    private readonly l13: Layer13Service,
+    private readonly l14: Layer14Service,
   ) {}
 
   async monthOf(customerId: string, month: string): Promise<Project> {
@@ -320,6 +324,14 @@ export class Layer12Service {
     st.lastRunAt = new Date();
     await this.sr.save(st);
     await this.syncLayerStatus(project);
+    // A partial Layer 12 still has rows: Layers 13 and 14 are built from them (a complete one builds them through the done chain).
+    if (st.status === 'partial') {
+      try {
+        if (await this.l13.buildPartial(project)) await this.l14.buildPartial(project);
+      } catch (e) {
+        this.log.error('Layer 13/14 (partial): ' + errMsg(e));
+      }
+    }
   }
 
   // Admin "Run Layer 12 now": starts in the background; the page polls view().

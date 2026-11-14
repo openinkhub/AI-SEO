@@ -85,6 +85,13 @@ export class Layer14Service implements OnModuleInit {
     }
   }
 
+  // Build without marking the schedule row done (used while Layer 12 is partial).
+  async buildPartial(project: Project) {
+    const n = await this.build(project);
+    if (n > 0) await this.layers.markInProgress(project.customerId, project.monthIndex, 14);
+    return n;
+  }
+
   // Safety net (automation tick): months that have Layer 13 rows but no Layer 14 rows.
   async sweep(): Promise<number> {
     const rows = await this.xr.createQueryBuilder('x').select('x.projectId', 'projectId').groupBy('x.projectId').getRawMany();
@@ -106,7 +113,8 @@ export class Layer14Service implements OnModuleInit {
   async rebuild(customerId: string, month: string) {
     const project = await this.monthOf(customerId, month);
     if (!(await this.xr.count({ where: { projectId: project.id } }))) throw new BadRequestException('Layer 13 must be built before Layer 14.');
-    await this.finish(project);
+    if (await this.l12Complete(project.id)) await this.finish(project);
+    else await this.buildPartial(project);
     return this.view(customerId, project.monthCode);
   }
 

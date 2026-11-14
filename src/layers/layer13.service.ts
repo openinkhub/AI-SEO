@@ -105,11 +105,21 @@ export class Layer13Service implements OnModuleInit {
     return (await this.sr.findOne({ where: { projectId } }))?.status === 'complete';
   }
 
+  // Admin: builds from whatever Layer 12 rows exist (also a partial Layer 12). The Layer 13 row of the schedule turns done only
+  // when Layer 12 is complete; customers see the table only then.
   async rebuild(customerId: string, month: string) {
     const project = await this.monthOf(customerId, month);
-    if (!(await this.l12Complete(project.id))) throw new BadRequestException('Layer 12 must be complete before Layer 13 can be built.');
-    await this.finish(project);
+    if (!(await this.rr.count({ where: { projectId: project.id } }))) throw new BadRequestException('Layer 12 has no keywords yet: run Layer 12 first.');
+    if (await this.l12Complete(project.id)) await this.finish(project);
+    else await this.buildPartial(project);
     return this.view(customerId, project.monthCode);
+  }
+
+  // Build without marking the schedule row done (used while Layer 12 is partial).
+  async buildPartial(project: Project) {
+    const n = await this.build(project);
+    if (n > 0) await this.layers.markInProgress(project.customerId, project.monthIndex, 13);
+    return n;
   }
 
   async view(customerId: string, month?: string) {

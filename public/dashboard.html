@@ -678,7 +678,7 @@
       head: ['#', 'Keyword', 'Intent', 'Volume', 'KD', 'CPC', 'Competitors', 'Best pos.', 'Strength', 'Page str.', 'Weightage', 'Stars'],
       row: function(r){ return [r.rank, r.keyword, r.intent, KW_NUM(r.searchVolume), r.kd, r.cpc, r.competitorCount == null ? '' : r.competitorCount + (r.competitorDomains.length ? ' (' + r.competitorDomains.join(', ') + ')' : ''), r.bestPosition, r.competitorStrength, r.pageStrength, r.weightage, KW_STAR(r.star)]; } },
     13: { path: 'layer13', tag: 'Layer 13 · Day 13', name: 'Intent & Opportunity Analysis', run: 'Rebuild Layer 13',
-      desc: 'Built automatically right after Layer 12 (no API call): the Layer 12 evidence plus an Opportunity Score.',
+      desc: 'Built automatically right after every Layer 12 run, also a partial one (no API call): the Layer 12 evidence plus an Opportunity Score. Customers see it once Layer 12 is complete.',
       head: ['#', 'Keyword', 'Intent', 'Demand', 'Volume', 'KD', 'Competitors', 'Comp. opportunity', 'Opportunity', 'L12 weight', 'Stars'],
       row: function(r){ return [r.rank, r.keyword, r.intent, r.demand, KW_NUM(r.searchVolume), r.kd, r.competitorCount, r.competitorStrength == null ? '' : Math.round((100 - r.competitorStrength) * 100) / 100, r.opportunity, r.layer12Weightage, KW_STAR(r.star)]; } },
     14: { path: 'layer14', tag: 'Layer 14 · Day 14', name: 'Keyword Weighted Selection', run: 'Rebuild Layer 14',
@@ -720,7 +720,7 @@
   function drawKw(cust, cm, n, box) {
     var cfg = KW_CFG[n], d = kw.data[n];
     var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2>' +
-      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + (n === 12 ? ' · status: <b>' + escapeHtml(d.status) + '</b>' + (d.message ? ' · ' + escapeHtml(d.message) : '') : ' · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built, waiting for Layer 12 to be complete' : 'not built yet'))) + '</p>';
+      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + (n === 12 ? ' · status: <b>' + escapeHtml(d.status) + '</b>' + (d.message ? ' · ' + escapeHtml(d.message) : '') : ' · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built from the Layer 12 data so far; customers see it once Layer 12 is complete' : 'not built yet'))) + '</p>';
     if (n === 12) {
       var st = d.stages;
       h += '<p class="muted" style="margin:0 0 8px">Mangools: ' + (d.keys.mangools ? 'key saved' : 'no key') + ' (' + st.mangools.completed + ' done) · SerpApi: ' + (d.keys.serpapi ? 'key saved' : 'no key') + ' (' + st.serpapi.completed + ' done) · Geekflare: ' + (d.keys.geekflare ? 'key saved' : 'no key') + ' (' + st.geekflare.completed + ' pages) · ' + d.masterKeywords + ' master keyword(s)</p>';

@@ -45,8 +45,11 @@ export class Layer12Controller {
   }
 
   @Post('layer13/rebuild')
-  rebuild13(@Param('customerId') customerId: string, @Body() body: { month: string }) {
-    return this.l13.rebuild(customerId, body?.month);
+  async rebuild13(@Param('customerId') customerId: string, @Body() body: { month: string }) {
+    const v = await this.l13.rebuild(customerId, body?.month);
+    // While Layer 12 is partial there is no done-chain, so Layer 14 is rebuilt here.
+    if (!v.layer12Complete) await this.l14.rebuild(customerId, body?.month);
+    return v;
   }
 
   @Get('layer14')
