@@ -8,12 +8,19 @@ import { Layer11MasterService } from './layer11master.service';
 import { Layer12Service } from './layer12.service';
 import { Layer13Service } from './layer13.service';
 import { Layer14Service } from './layer14.service';
+import { Layer12ImportService, WpImportBody } from './layer12.import';
 
 // Layers 11-AAA, 12, 13, 14 (On Page SEO > Keyword Planner), admin side.
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers/:customerId')
 export class Layer12Controller {
-  constructor(private readonly master: Layer11MasterService, private readonly l12: Layer12Service, private readonly l13: Layer13Service, private readonly l14: Layer14Service) {}
+  constructor(private readonly master: Layer11MasterService, private readonly l12: Layer12Service, private readonly l13: Layer13Service, private readonly l14: Layer14Service, private readonly importer: Layer12ImportService) {}
+
+  // Copies one month's 11-AAA / 12 / 13 / 14 tables out of the WP plugin (see layer12.import.ts).
+  @Post('layer12/import-wp')
+  async importWp(@Param('customerId') customerId: string, @Body() body: WpImportBody) {
+    return this.importer.importWp(customerId, body);
+  }
 
   // 11-AAA master keyword list (Layer 4-A + Layer 11).
   @Get('layer11/master')

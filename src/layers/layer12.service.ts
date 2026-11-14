@@ -101,7 +101,7 @@ export class Layer12Service {
   private async prepare(project: Project, force: boolean): Promise<Layer12Row[]> {
     const have = await this.rr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } });
     if (have.length && !force) return have;
-    await this.master.build(project);
+    await this.master.build(project, force);
     const src = await this.master.rows(project.id);
     if (force) await this.rr.delete({ projectId: project.id });
     else if (have.length) return have;
@@ -294,6 +294,7 @@ export class Layer12Service {
     this.running.add(lock);
     const st = await this.state(project);
     const warn: string[] = [];
+    if (force) st.imported = false;
     try {
       const keys = await this.keys(project.customerId);
       const rows = await this.prepare(project, force);
@@ -339,6 +340,7 @@ export class Layer12Service {
     const project = await this.monthOf(customerId, month);
     const customer = await this.customerOf(customerId);
     const st = await this.state(project);
+    if (st.imported && !force) throw new BadRequestException('This month was copied from the WP plugin. Run with force to replace it with an engine run (Mangools / SerpApi / Geekflare).');
     if (st.status === 'running' && st.lastRunAt && Date.now() - new Date(st.lastRunAt).getTime() < STALE_RUN_MS) throw new BadRequestException('Layer 12 is already running.');
     st.status = 'running';
     st.message = 'Validating keywords...';
@@ -382,7 +384,7 @@ export class Layer12Service {
       keys: { mangools: !!keys.mangools, serpapi: !!keys.serp, geekflare: !!keys.geek },
       masterKeywords: masterRows.length,
       stages: { mangools: stage('mangools'), serpapi: stage('serpapi'), geekflare: stage('geekflare') },
-      records: rows.map((r) => ({ rank: r.rank, keyword: r.keyword, intent: r.intent, demand: r.demand, searchVolume: r.searchVolume, kd: r.kd, cpc: r.cpc, competitorCount: r.competitorCount, bestPosition: r.bestCompetitorPosition, competitorStrength: r.competitorStrength, competitorDomains: r.competitorDomains || [], competitorUrl: r.competitorUrl, pageStrength: r.page?.page_strength_score ?? null, weightage: r.weightage, star: r.starRating, stages: r.stages || {}, errors: r.errors || {} })),
+      records: rows.map((r) => ({ rank: r.rank, keyword: r.keyword, googleVolume: r.googleVolume ?? null, intent: r.intent, demand: r.demand, searchVolume: r.searchVolume, kd: r.kd, cpc: r.cpc, competitorCount: r.competitorCount, bestPosition: r.bestCompetitorPosition, competitorStrength: r.competitorStrength, competitorDomains: r.competitorDomains || [], competitorUrl: r.competitorUrl, pageStrength: r.page?.page_strength_score ?? null, weightage: r.weightage, star: r.starRating, stages: r.stages || {}, errors: r.errors || {} })),
     };
   }
 
@@ -410,8 +412,9 @@ const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"]/g, (c) => ({
 const dash = (s: unknown): string => (s === null || s === undefined || s === '' ? '—' : esc(s));
 
 export function renderL12Html(rows: Layer12Row[]): string {
-  const head = ['Final Rating', 'Keyword', 'Intent', 'Search Volume', 'KD', 'CPC', 'Competitors Found', 'Best Competitor Position', 'Competitor Strength', 'Competitor Page', 'Weightage', 'Star Rating'];
+  const gv = rows.some((r) => r.googleVolume !== null && r.googleVolume !== undefined);
+  const head = ['Final Rating', 'Keyword', 'Intent', 'Search Volume', ...(gv ? ['Google Volume'] : []), 'KD', 'CPC', 'Competitors Found', 'Best Competitor Position', 'Competitor Strength', 'Competitor Page', 'Weightage', 'Star Rating'];
   const page = (r: Layer12Row) => (r.page ? [r.page.title, r.page.word_count ? r.page.word_count + ' words' : null, r.page.page_strength_score !== null && r.page.page_strength_score !== undefined ? 'strength ' + r.page.page_strength_score : null].filter(Boolean).join(' · ') : null);
-  const body = rows.map((r) => '<tr>' + [r.rank, r.keyword, r.intent, fmt(r.searchVolume), r.kd, r.cpc, r.competitorCount === null ? null : r.competitorCount + (r.competitorDomains?.length ? ' (' + r.competitorDomains.join(', ') + ')' : ''), r.bestCompetitorPosition, r.competitorStrength, page(r), r.weightage, stars(r.starRating)].map((c) => `<td>${dash(c)}</td>`).join('') + '</tr>').join('');
+  const body = rows.map((r) => '<tr>' + [r.rank, r.keyword, r.intent, fmt(r.searchVolume), ...(gv ? [fmt(r.googleVolume)] : []), r.kd, r.cpc, r.competitorCount === null ? null : r.competitorCount + (r.competitorDomains?.length ? ' (' + r.competitorDomains.join(', ') + ')' : ''), r.bestCompetitorPosition, r.competitorStrength, page(r), r.weightage, stars(r.starRating)].map((c) => `<td>${dash(c)}</td>`).join('') + '</tr>').join('');
   return `<table class="kp21-l11 kp21-l12"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }

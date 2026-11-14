@@ -49,6 +49,8 @@ export class Layer12Row {
   @Column({ type: 'int', nullable: true }) estVolume: number | null;
   // Mangools / KWFinder: 12-month average search volume, keyword difficulty, CPC, PPC.
   @Column({ type: 'int', nullable: true }) searchVolume: number | null;
+  // Google Volume (SerpApi) as recorded by the WP plugin; only set on rows imported from it.
+  @Column({ type: 'bigint', nullable: true, transformer: { to: (v: number | null) => v, from: (v: any) => (v === null || v === undefined ? null : Number(v)) } }) googleVolume: number | null;
   @Column({ type: 'float', nullable: true }) kd: number | null;
   @Column({ type: 'float', nullable: true }) cpc: number | null;
   @Column({ type: 'float', nullable: true }) ppc: number | null;
@@ -84,6 +86,8 @@ export class Layer12State {
   @Column({ type: 'simple-json', nullable: true }) warnings: string[] | null;
   @Column({ type: 'int', nullable: true }) locationId: number | null;
   @Column({ type: 'datetime', nullable: true }) lastRunAt: Date | null;
+  // True when this month's Layers 11-AAA..14 were copied from the WP plugin (not computed here): the done-chain must not rebuild them.
+  @Column({ type: 'boolean', default: false }) imported: boolean;
   @UpdateDateColumn() updatedAt: Date;
 }
 
@@ -103,6 +107,8 @@ export class Layer13Row {
   @Column({ type: 'varchar', length: 120, nullable: true }) demand: string | null;
   @Column({ type: 'int', nullable: true }) estVolume: number | null;
   @Column({ type: 'int', nullable: true }) searchVolume: number | null;
+  // Google Volume (SerpApi) as recorded by the WP plugin; only set on rows imported from it.
+  @Column({ type: 'bigint', nullable: true, transformer: { to: (v: number | null) => v, from: (v: any) => (v === null || v === undefined ? null : Number(v)) } }) googleVolume: number | null;
   @Column({ type: 'float', nullable: true }) kd: number | null;
   @Column({ type: 'float', nullable: true }) cpc: number | null;
   @Column({ type: 'int', nullable: true }) competitorCount: number | null;
@@ -134,6 +140,8 @@ export class Layer14Row {
   @Column({ type: 'varchar', length: 255, nullable: true }) intent: string | null;
   @Column({ type: 'varchar', length: 120, nullable: true }) demand: string | null;
   @Column({ type: 'int', nullable: true }) searchVolume: number | null;
+  // Google Volume (SerpApi) as recorded by the WP plugin; only set on rows imported from it.
+  @Column({ type: 'bigint', nullable: true, transformer: { to: (v: number | null) => v, from: (v: any) => (v === null || v === undefined ? null : Number(v)) } }) googleVolume: number | null;
   @Column({ type: 'float', nullable: true }) kd: number | null;
   @Column({ type: 'float', default: 0 }) opportunity: number;
   @Column({ type: 'float', default: 0 }) weightage: number;

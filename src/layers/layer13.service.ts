@@ -79,7 +79,8 @@ export class Layer13Service implements OnModuleInit {
   // Build, then mark the Layer 13 row done (which starts Layer 14).
   async finish(project: Project) {
     try {
-      const n = await this.build(project);
+      const imported = (await this.sr.findOne({ where: { projectId: project.id } }))?.imported;
+      const n = imported ? await this.xr.count({ where: { projectId: project.id } }) : await this.build(project);
       this.log.log(`Layer 13 built for ${project.monthCode}: ${n} row(s)`);
       if (n > 0) await this.layers.setByMonth(project.customerId, project.monthIndex, 13, 'done');
     } catch (err) {
@@ -125,7 +126,7 @@ export class Layer13Service implements OnModuleInit {
   async view(customerId: string, month?: string) {
     const project = await this.monthOf(customerId, month);
     const [rows, l12] = await Promise.all([this.xr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }), this.l12Complete(project.id)]);
-    return { month: project.monthCode, total: rows.length, complete: rows.length > 0 && l12, layer12Complete: l12, records: rows.map((r) => ({ rank: r.rank, keyword: r.keyword, intent: r.intent, demand: r.demand, searchVolume: r.searchVolume, kd: r.kd, cpc: r.cpc, competitorCount: r.competitorCount, competitorStrength: r.competitorStrength, layer12Weightage: r.layer12Weightage, opportunity: r.opportunity, star: r.layer12Star, usedKpis: r.usedKpis || [] })) };
+    return { month: project.monthCode, total: rows.length, complete: rows.length > 0 && l12, layer12Complete: l12, records: rows.map((r) => ({ rank: r.rank, keyword: r.keyword, googleVolume: r.googleVolume ?? null, intent: r.intent, demand: r.demand, searchVolume: r.searchVolume, kd: r.kd, cpc: r.cpc, competitorCount: r.competitorCount, competitorStrength: r.competitorStrength, layer12Weightage: r.layer12Weightage, opportunity: r.opportunity, star: r.layer12Star, usedKpis: r.usedKpis || [] })) };
   }
 
   async customerTable(customerId: string, month?: string) {
@@ -145,7 +146,8 @@ const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"]/g, (c) => ({
 const dash = (s: unknown): string => (s === null || s === undefined || s === '' ? '—' : esc(s));
 
 export function renderL13Html(rows: Layer13Row[]): string {
-  const head = ['Final Rating', 'Keyword', 'Primary Intent', 'Demand', 'Search Volume', 'KD', 'Competitors Found', 'Competitor Opportunity', 'Opportunity Score', 'Layer 12 Weightage', 'Star Rating'];
-  const body = rows.map((r) => '<tr>' + [r.rank, r.keyword, r.intent, r.demand, fmt(r.searchVolume), r.kd, r.competitorCount, r.competitorStrength === null ? null : round2(Math.max(0, 100 - r.competitorStrength)), r.opportunity, r.layer12Weightage, stars(r.layer12Star)].map((c) => `<td>${dash(c)}</td>`).join('') + '</tr>').join('');
+  const gv = rows.some((r) => r.googleVolume !== null && r.googleVolume !== undefined);
+  const head = ['Final Rating', 'Keyword', 'Primary Intent', 'Demand', 'Search Volume', ...(gv ? ['Google Volume'] : []), 'KD', 'Competitors Found', 'Competitor Opportunity', 'Opportunity Score', 'Layer 12 Weightage', 'Star Rating'];
+  const body = rows.map((r) => '<tr>' + [r.rank, r.keyword, r.intent, r.demand, fmt(r.searchVolume), ...(gv ? [fmt(r.googleVolume)] : []), r.kd, r.competitorCount, r.competitorStrength === null ? null : round2(Math.max(0, 100 - r.competitorStrength)), r.opportunity, r.layer12Weightage, stars(r.layer12Star)].map((c) => `<td>${dash(c)}</td>`).join('') + '</tr>').join('');
   return `<table class="kp21-l11 kp21-l13"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }

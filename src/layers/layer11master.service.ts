@@ -77,13 +77,18 @@ export class Layer11MasterService implements OnModuleInit {
     this.layers.onDone(async (customerId, monthIndex, layerNo) => {
       if (layerNo !== 11) return;
       const project = await this.projects.findOne({ where: { customerId, monthIndex } });
-      if (project) await this.build(project).catch((e) => this.log.error('Master build: ' + (e instanceof Error ? e.message : e)));
+      if (project) await this.build(project, false).catch((e) => this.log.error('Master build: ' + (e instanceof Error ? e.message : e)));
     });
   }
 
   // Rebuilds the master list (replaces its rows). Serialised per month.
-  build(project: Project): Promise<number> {
+  build(project: Project, force = true): Promise<number> {
     const run = (this.chain.get(project.id) || Promise.resolve()).catch(() => undefined).then(async () => {
+      // A list copied from the WP plugin stays as it is unless a rebuild is explicitly forced.
+      if (!force) {
+        const first = await this.mr.findOne({ where: { projectId: project.id } });
+        if (first?.sources?.includes('WP plugin')) return this.mr.count({ where: { projectId: project.id } });
+      }
       const [l4, l11] = await Promise.all([this.cr.find({ where: { projectId: project.id, block: 'L4' }, order: { rank: 'ASC' } }), this.kr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } })]);
       const out = mergeMaster(
         l4.map((r) => ({ record: r.record, intent: r.intent, demand: r.demand, weightage: r.weightage, estVolume: r.estVolume })),

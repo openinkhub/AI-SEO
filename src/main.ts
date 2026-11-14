@@ -6,6 +6,8 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // The WP-plugin copy of Layers 11-AAA..14 posts four 80-row tables at once.
+  app.useBodyParser('json', { limit: '3mb' });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // The onboarding form is also shown inside the WordPress customer portal
   // (iframe, ?embed=1). Only that site - and this app itself - may frame it.
