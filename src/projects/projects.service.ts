@@ -19,6 +19,7 @@ import { Layer11MasterService } from '../layers/layer11master.service';
 import { Layer12Service } from '../layers/layer12.service';
 import { Layer13Service } from '../layers/layer13.service';
 import { Layer14Service } from '../layers/layer14.service';
+import { Layer15Service } from '../layers/layer15.service';
 import { ConsolidationService } from '../layers/consolidation.service';
 
 @Injectable()
@@ -41,6 +42,7 @@ export class ProjectsService {
     private readonly layer12: Layer12Service,
     private readonly layer13: Layer13Service,
     private readonly layer14: Layer14Service,
+    private readonly layer15: Layer15Service,
     private readonly consolidation: ConsolidationService,
   ) {}
 
@@ -100,6 +102,7 @@ export class ProjectsService {
     await this.layer12.removeByCustomer(customerId);
     await this.layer13.removeByCustomer(customerId);
     await this.layer14.removeByCustomer(customerId);
+    await this.layer15.removeByCustomer(customerId);
     await this.consolidation.removeByCustomer(customerId);
     if (projects.length) await this.repo.remove(projects);
   }

@@ -12,6 +12,7 @@ import { Layer11Service } from './layer11.service';
 import { Layer12Service } from './layer12.service';
 import { Layer13Service } from './layer13.service';
 import { Layer14Service } from './layer14.service';
+import { Layer15Service } from './layer15.service';
 
 // AUTOMATION RULE (decided 2026-10-28): a Layer that is automated runs on its SET DATE only - the scheduled date
 // of its row in the customer's Month Cycle (Layer 4 = Day 4, Layer 5 = Day 5, Layer 6 = Day 6, Layer 7 = Day 7, Layer 8 = Day 8, Layer 9 = Day 9, Layer 10 = Day 10, Layer 11 = Day 11, Layer 12 = Day 12 of the month (Layers 13 and 14 are local and follow Layer 12 at once), M0..M12). It does not run early and does
@@ -36,7 +37,7 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
   private first: NodeJS.Timeout | null = null;
   private busy = false;
 
-  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service, private readonly consolidation: ConsolidationService, private readonly layer11: Layer11Service, private readonly layer12: Layer12Service, private readonly layer13: Layer13Service, private readonly layer14: Layer14Service) {}
+  constructor(private readonly layers: LayersService, private readonly layer4: Layer4Service, private readonly layer5: Layer5Service, private readonly layer6: Layer6Service, private readonly layer7: Layer7Service, private readonly layer8: Layer8Service, private readonly layer9: Layer9Service, private readonly layer10: Layer10Service, private readonly consolidation: ConsolidationService, private readonly layer11: Layer11Service, private readonly layer12: Layer12Service, private readonly layer13: Layer13Service, private readonly layer14: Layer14Service, private readonly layer15: Layer15Service) {}
 
   onModuleInit() {
     if ((process.env.LAYER_AUTOMATION || '').toLowerCase() === 'off') {
@@ -63,7 +64,7 @@ export class LayerAutomation implements OnModuleInit, OnModuleDestroy {
     }
     // Layers 13 and 14 are local (no API): built right after Layer 12; this sweep finishes any month that was missed.
     try {
-      const built = (await this.layer13.sweep()) + (await this.layer14.sweep());
+      const built = (await this.layer13.sweep()) + (await this.layer14.sweep()) + (await this.layer15.sweep());
       if (built) this.log.log('Layer 13/14 sweep: ' + built + ' month(s).');
     } catch (err) {
       this.log.error('Layer 13/14 sweep: ' + (err instanceof Error ? err.message : err));

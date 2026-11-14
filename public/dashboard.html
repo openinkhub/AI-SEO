@@ -760,14 +760,68 @@
       }).catch(function(err){ btn.disabled = false; var mm = document.getElementById('kwMsg' + n); if (mm) mm.textContent = err.message; });
     };
   }
+  // ---- Layers 15, 16, 17: Blog Intent Primary / Sub-Primary / Secondary (allocation only, 30 blogs each) ----
+  var bi = { mid: null, data: {} };
+  var BI_CFG = {
+    15: { tag: 'Layer 15 · Day 15', name: 'Blog Intent Primary' },
+    16: { tag: 'Layer 16 · Day 16', name: 'Blog Intent Sub Primary' },
+    17: { tag: 'Layer 17 · Day 17', name: 'Blog Intent Secondary' }
+  };
+  function mountBlogIntent(cust) {
+    var cm = currentMonth();
+    if (!cm) return;
+    bi.mid = cm.id;
+    [15, 16, 17].forEach(function(n){
+      var box = document.getElementById('l' + n + 'Box');
+      if (!box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Loading Layer ' + n + '...</p></section>';
+      loadBlogIntent(cust, cm, n, box);
+    });
+  }
+  function loadBlogIntent(cust, cm, n, box) {
+    api('/customers/' + cust.id + '/layer' + n + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+      if (document.getElementById('l' + n + 'Box') !== box || bi.mid !== cm.id) return;
+      bi.data[n] = d;
+      drawBlogIntent(cust, cm, n, box);
+    }).catch(function(err){
+      if (document.getElementById('l' + n + 'Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + n + ': ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+  function drawBlogIntent(cust, cm, n, box) {
+    var cfg = BI_CFG[n], d = bi.data[n];
+    var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2>' +
+      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' blog slots · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : 'not built yet')) + '</p>' +
+      '<p class="muted" style="margin:0 0 8px">Allocation only, no API call: every blog takes the fixed Layer 14 rank-1 keyword (H1) plus one value from each final pool (Layer 14 H2, then 11-B prompts, 11-C long-tail, 11-D PAA, 11-E similar, 11-F FAQ, 11-G Quora). Layers 15/16/17 start at pool item 1/31/61 so together they use the whole pool. Intro, intent and meta are written later by Layers 18-20.</p>';
+    if (d.checks) {
+      var bad = Object.keys(d.checks.duplicates || {});
+      var cons = d.checks.consumption || {};
+      h += '<p class="muted" style="margin:0 0 8px">Check: duplicates inside a layer: ' + (bad.length ? '<b>found</b> (' + escapeHtml(bad.join(', ')) + ')' : 'none') + ' · pools fully covered: ' + Object.keys(cons).map(function(k){ return k + ' ' + cons[k].planned + '/' + cons[k].available; }).join(', ') + '</p>';
+    }
+    h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '">Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
+    if (!d.records.length) h += '<p class="muted">No records yet.</p>';
+    else {
+      h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Blog</th><th>H1</th><th>H2</th><th>H3 (11-B)</th><th>H4 (11-C)</th><th>PAA</th><th>Similar</th><th>FAQ</th><th>Quora</th></tr></thead><tbody>';
+      d.records.forEach(function(r){ h += '<tr><td>' + r.blogNo + '</td>' + [r.h1, r.h2, r.h3, r.h4, r.paa, r.similar, r.faq, r.quora].map(function(c){ return '<td>' + escapeHtml(c || '') + '</td>'; }).join('') + '</tr>'; });
+      h += '</tbody></table></div>';
+    }
+    box.innerHTML = h + '</section>';
+    var btn = document.getElementById('biRun' + n);
+    if (btn) btn.onclick = function(){
+      btn.disabled = true;
+      api('/customers/' + cust.id + '/layer15-17/rebuild', { method: 'POST', body: { month: cm.monthCode } }).then(function(){
+        [15, 16, 17].forEach(function(k){ var b = document.getElementById('l' + k + 'Box'); if (b) loadBlogIntent(cust, cm, k, b); });
+      }).catch(function(err){ btn.disabled = false; var mm = document.getElementById('biMsg' + n); if (mm) mm.textContent = err.message; });
+    };
+  }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 

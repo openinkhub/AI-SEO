@@ -47,13 +47,16 @@ import { Layer12Service } from './layer12.service';
 import { Layer12ImportService } from './layer12.import';
 import { Layer13Service } from './layer13.service';
 import { Layer14Service } from './layer14.service';
+import { Layer15Row } from './layer15.entities';
+import { Layer15Service } from './layer15.service';
+import { Layer15Controller, WpLayer15Controller, WpLayer16Controller, WpLayer17Controller } from './layer15.controller';
 import { Layer12Controller, WpLayer12Controller, WpLayer13Controller, WpLayer14Controller } from './layer12.controller';
 import { LayerAutomation } from './layer-automation';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform, Layer9Faq, Layer9Platform, Layer10Quora, Layer10Platform, ConsolidatedRecord, Layer11Keyword, Layer11State, Layer11Master, Layer12Row, Layer12State, Layer13Row, Layer14Row]), CustomerApisModule],
-  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service, Layer11MasterService, Layer12Service, Layer12ImportService, Layer13Service, Layer14Service, LayerAutomation, WpApiKeyGuard],
-  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller, Layer9Controller, WpLayer9Controller, Layer10Controller, WpLayer10Controller, ConsolidationController, WpConsolidationController, Layer11Controller, WpLayer11Controller, Layer12Controller, WpLayer12Controller, WpLayer13Controller, WpLayer14Controller],
-  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service, Layer11MasterService, Layer12Service, Layer13Service, Layer14Service],
+  imports: [TypeOrmModule.forFeature([ProjectLayer, Project, Customer, Layer4Keyword, Layer4Platform, Layer5Prompt, Layer5Platform, Layer6Keyword, Layer6Platform, Layer7Question, Layer7State, Layer8Item, Layer8Platform, Layer9Faq, Layer9Platform, Layer10Quora, Layer10Platform, ConsolidatedRecord, Layer11Keyword, Layer11State, Layer11Master, Layer12Row, Layer12State, Layer13Row, Layer14Row, Layer15Row, Layer15Row]), CustomerApisModule],
+  providers: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service, Layer11MasterService, Layer12Service, Layer12ImportService, Layer13Service, Layer14Service, Layer15Service, LayerAutomation, WpApiKeyGuard],
+  controllers: [LayersController, Layer4Controller, WpLayer4Controller, Layer5Controller, WpLayer5Controller, Layer6Controller, WpLayer6Controller, Layer7Controller, WpLayer7Controller, Layer8Controller, WpLayer8Controller, Layer9Controller, WpLayer9Controller, Layer10Controller, WpLayer10Controller, ConsolidationController, WpConsolidationController, Layer11Controller, WpLayer11Controller, Layer12Controller, WpLayer12Controller, WpLayer13Controller, WpLayer14Controller, Layer15Controller, WpLayer15Controller, WpLayer16Controller, WpLayer17Controller],
+  exports: [LayersService, Layer4Service, Layer5Service, Layer6Service, Layer7Service, Layer8Service, Layer9Service, Layer10Service, ConsolidationService, Layer11Service, Layer11MasterService, Layer12Service, Layer13Service, Layer14Service, Layer15Service],
 })
 export class LayersModule {}
