@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Customer } from '../customers/customer.entity';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { WpLayerCopyService, WpLayersBody } from './wp-layer-copy.service';
+import { Layer15Service } from './layer15.service';
 
 // Admin: copy Layers 15-20 of a month out of the WP plugin (POST) and read the copied grid (GET).
 @UseGuards(JwtAuthGuard)
@@ -23,8 +24,9 @@ export class WpLayerCopyController {
   }
 }
 
+// Layers 18-20: the Engine's platform mapping once the cluster is built for the month, otherwise the grid copied from the plugin.
 abstract class WpCopyBase {
-  constructor(private readonly customers: Repository<Customer>, private readonly service: WpLayerCopyService, private readonly layerNo: number) {}
+  constructor(private readonly customers: Repository<Customer>, private readonly service: Layer15Service, private readonly layerNo: number) {}
   protected async table(wpUserId: string, month?: string) {
     const c = await this.customers.findOne({ where: { wpUserId } });
     if (!c) throw new NotFoundException(`No customer synced for WP user ${wpUserId}`);
@@ -36,7 +38,7 @@ abstract class WpCopyBase {
 @UseGuards(WpApiKeyGuard)
 @Controller('api/v1/wp-sync/customers/:wpUserId/layers/18')
 export class WpLayer18Controller extends WpCopyBase {
-  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: WpLayerCopyService) { super(customers, service, 18); }
+  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: Layer15Service) { super(customers, service, 18); }
   @Get()
   get(@Param('wpUserId') wpUserId: string, @Query('month') month?: string) { return this.table(wpUserId, month); }
 }
@@ -44,7 +46,7 @@ export class WpLayer18Controller extends WpCopyBase {
 @UseGuards(WpApiKeyGuard)
 @Controller('api/v1/wp-sync/customers/:wpUserId/layers/19')
 export class WpLayer19Controller extends WpCopyBase {
-  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: WpLayerCopyService) { super(customers, service, 19); }
+  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: Layer15Service) { super(customers, service, 19); }
   @Get()
   get(@Param('wpUserId') wpUserId: string, @Query('month') month?: string) { return this.table(wpUserId, month); }
 }
@@ -52,7 +54,7 @@ export class WpLayer19Controller extends WpCopyBase {
 @UseGuards(WpApiKeyGuard)
 @Controller('api/v1/wp-sync/customers/:wpUserId/layers/20')
 export class WpLayer20Controller extends WpCopyBase {
-  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: WpLayerCopyService) { super(customers, service, 20); }
+  constructor(@InjectRepository(Customer) customers: Repository<Customer>, service: Layer15Service) { super(customers, service, 20); }
   @Get()
   get(@Param('wpUserId') wpUserId: string, @Query('month') month?: string) { return this.table(wpUserId, month); }
 }

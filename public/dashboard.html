@@ -792,6 +792,7 @@
   }
   function reloadBlogIntent(cust, cm) {
     [15, 16, 17].forEach(function(k){ var b = document.getElementById('l' + k + 'Box'); if (b) loadBlogIntent(cust, cm, k, b); });
+    mountPlatformMap(cust);
   }
   function biCell(c, w) { var t = c === null || c === undefined ? '' : String(c); return '<td' + (w ? ' style="min-width:' + w + 'px"' : '') + '>' + escapeHtml(t) + '</td>'; }
   function biBrief(r) {
@@ -864,26 +865,43 @@
     }
   }
 
-  // ---- Layers 15-20 copied as they are from the WP plugin (read-only grids) ----
-  function wpCopyTable(c) {
-    var h = '<p class="muted" style="margin:0 0 8px">Copied from the WP plugin (' + escapeHtml(c.month) + ') · ' + c.rowCount + '/' + c.expected + ' rows · not recomputed.</p><div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table class="tbl"><thead><tr>' +
-      c.columns.map(function(x){ return '<th>' + escapeHtml(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
-    c.rows.forEach(function(r){ h += '<tr>' + r.map(function(v, i){ return i === 0 ? '<td><b>' + escapeHtml(v) + '</b></td>' : '<td style="min-width:' + (v && v.length > 40 ? 220 : 90) + 'px">' + escapeHtml(v) + '</td>'; }).join('') + '</tr>'; });
-    return h + '</tbody></table></div>';
-  }
-  var WPC_CFG = { 18: 'Layer 18 · Day 18 · Primary Publishing Preparation', 19: 'Layer 19 · Day 19 · Sub-Primary Publishing Preparation', 20: 'Layer 20 · Day 20 · Secondary Publishing Preparation' };
-  function mountWpCopy(cust) {
+  // ---- Layers 18, 19, 20: platform mapping of the cluster (Tier 1 = 180, Tier 2 = 180, Tier 3 = 540); the copied WP grid shows until the cluster is built ----
+  var PM_CFG = {
+    18: { tag: 'Layer 18 · Day 18', name: 'Tier 1 Platform Mapping', note: '30 Tier 1 sites x 6 articles = 180. Site N publishes the 6 articles that link to website blog N.' },
+    19: { tag: 'Layer 19 · Day 19', name: 'Tier 2 Platform Mapping', note: '30 Tier 2 sites x 6 articles = 180. Site N, article A links to Tier 1 site N, article A.' },
+    20: { tag: 'Layer 20 · Day 20', name: 'Tier 3 Platform Mapping', note: '90 Tier 3 sites x 6 articles = 540. Each Tier 2 site has 3 follow-up sites: B1 = app. host, B2 = site. host, B3 = one of the 30 extra hosts.' }
+  };
+  function mountPlatformMap(cust) {
     var cm = currentMonth();
     if (!cm) return;
     [18, 19, 20].forEach(function(n){
       var box = document.getElementById('l' + n + 'Box');
       if (!box) return;
       box.innerHTML = '<section class="card"><p class="muted">Loading Layer ' + n + '...</p></section>';
-      api('/customers/' + cust.id + '/layers-wp?month=' + encodeURIComponent(cm.monthCode) + '&layer=' + n).then(function(c){
+      api('/customers/' + cust.id + '/layer' + n + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
         if (document.getElementById('l' + n + 'Box') !== box) return;
-        box.innerHTML = '<section class="card"><h2>' + escapeHtml(WPC_CFG[n]) + '</h2>' + (c && c.rows ? wpCopyTable(c) : '<p class="muted">Not copied or built yet for ' + escapeHtml(cm.monthCode) + '.</p>') + '</section>';
+        box.innerHTML = drawPlatformMap(n, d);
       }).catch(function(err){ if (document.getElementById('l' + n + 'Box') === box) box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + n + ': ' + escapeHtml(err.message) + '</p></section>'; });
     });
+  }
+  function drawPlatformMap(n, d) {
+    var cfg = PM_CFG[n];
+    var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2><p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : (d.needsPages ? 'waiting for the 6 target pages (Layer 15)' : 'not built yet'))) + '</p><p class="muted" style="margin:0 0 8px">' + cfg.note + ' Planned URLs are shown for the Admin\'s own domains; platforms such as Medium assign the URL when the article is published.</p>';
+    if (d.mapping) { var c = d.mapping.counts || {}; h += '<p class="muted" style="margin:0 0 8px">Check: ' + (d.mapping.ok ? '<b>all passed</b>' : '<b>problems</b> (' + escapeHtml((d.mapping.problems || []).slice(0, 3).join('; ')) + ')') + ' · Tier 1 ' + c.tier1Sites + ' sites · Tier 2 ' + c.tier2Sites + ' sites · Tier 3 ' + c.tier3Sites + ' sites</p>'; }
+    if (!d.records.length) return h + (d.copy ? '<h3 style="margin:8px 0">Copied plugin grid</h3>' + wpCopyTable(d.copy) : '<p class="muted">Not copied or built yet for ' + escapeHtml(d.month) + '.</p>') + '</section>';
+    h += '<div style="overflow-x:auto;max-height:560px;overflow-y:auto"><table class="tbl"><thead><tr><th>ID</th><th>Publishing site</th>' + (n === 20 ? '<th>Sub-site</th>' : '') + '<th>Article</th><th>Links to</th><th>Links to (site)</th><th>Anchor</th><th>Primary keyword</th><th>Title</th><th>Planned URL</th><th>Publish</th><th>Status</th></tr></thead><tbody>';
+    d.records.forEach(function(r){
+      h += '<tr><td><b>' + escapeHtml(r.code) + '</b></td><td style="min-width:150px">' + escapeHtml(r.platform || '') + '<br><span class="muted">' + escapeHtml(r.siteUrl || '') + '</span></td>' + (n === 20 ? biCell('B' + r.subSite) : '') + biCell('A' + r.articleNo) + biCell(r.parentCode) + biCell(r.parentPlatform, 130) + biCell(r.anchorText, 140) + biCell(r.primaryKeyword, 160) + biCell(r.title, 220) + biCell(r.plannedUrl || (r.siteKind === 'public' ? 'set when published' : ''), 220) + biCell(r.publishDate) + biCell(r.status) + '</tr>';
+    });
+    return h + '</tbody></table></div></section>';
+  }
+
+  // ---- Layers 15-20 copied as they are from the WP plugin (read-only grids) ----
+  function wpCopyTable(c) {
+    var h = '<p class="muted" style="margin:0 0 8px">Copied from the WP plugin (' + escapeHtml(c.month) + ') · ' + c.rowCount + '/' + c.expected + ' rows · not recomputed.</p><div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table class="tbl"><thead><tr>' +
+      c.columns.map(function(x){ return '<th>' + escapeHtml(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    c.rows.forEach(function(r){ h += '<tr>' + r.map(function(v, i){ return i === 0 ? '<td><b>' + escapeHtml(v) + '</b></td>' : '<td style="min-width:' + (v && v.length > 40 ? 220 : 90) + 'px">' + escapeHtml(v) + '</td>'; }).join('') + '</tr>'; });
+    return h + '</tbody></table></div>';
   }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
@@ -892,7 +910,7 @@
     if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountWpCopy(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 

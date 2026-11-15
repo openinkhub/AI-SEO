@@ -85,8 +85,9 @@ export class ClusterArticle {
   @Column({ type: 'text' }) imageBrief: string;
   @Column({ type: 'text' }) avoid: string;
   @Column({ type: 'varchar', length: 10 }) publishDate: string;
-  // Filled later: Layers 18-20 (platform / site) and Layer 21 (published URL).
+  // Layers 18-20 (platform / site, assigned when the cluster is built) and Layer 21 (published URL, filled later).
   @Column({ type: 'varchar', length: 200, nullable: true }) platform: string | null;
+  @Column({ type: 'varchar', length: 300, nullable: true }) siteUrl: string | null;
   @Column({ type: 'varchar', length: 700, nullable: true }) publishedUrl: string | null;
   @Column({ type: 'varchar', length: 20, default: 'planned' }) status: string;
   @Column({ type: 'varchar', length: 20, default: 'template' }) generatedBy: string;

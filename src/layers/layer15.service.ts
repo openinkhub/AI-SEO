@@ -11,12 +11,18 @@ import { ConsolidatedRecord } from './consolidation.entities';
 import { Layer11Master, Layer12State, Layer14Row } from './layer12.entities';
 import { ClusterArticle, ClusterPageRow } from './layer15.entities';
 import { ArticleDraft, CLUSTER, ClusterInput, PoolItem, checkPlan, norm, planCluster } from './cluster.plan';
+import { checkMapping, checkSiteLists, plannedUrl, siteFor } from './cluster.sites';
 
 // Layers 15, 16, 17 - Topical Blog Intent cluster. The Admin picks 6 target pages; the Engine plans 930 articles with the complete writing
 // brief (keyword mapping + template/meta algorithm, local - no API call): Layer 15 = 30 website blogs, Layer 16 = 180 Tier 1, Layer 17 = 180 Tier 2 + 540 Tier 3.
+// Layers 18, 19, 20 are the platform mapping of the same articles: Tier 1 (180), Tier 2 (180), Tier 3 (540) -> the site that publishes each one.
 export const L15_LAYERS = [15, 16, 17];
-export const L15_EXPECTED: Record<number, number> = { 15: 30, 16: 180, 17: 720 };
-export const L15_NAMES: Record<number, string> = { 15: 'Website Blog Cluster Plan', 16: 'Tier 1 Mapping', 17: 'Tier 2 and Tier 3 Mapping' };
+export const L18_LAYERS = [18, 19, 20];
+export const L15_EXPECTED: Record<number, number> = { 15: 30, 16: 180, 17: 720, 18: 180, 19: 180, 20: 540 };
+export const L15_NAMES: Record<number, string> = { 15: 'Website Blog Cluster Plan', 16: 'Tier 1 Mapping', 17: 'Tier 2 and Tier 3 Mapping', 18: 'Tier 1 Platform Mapping', 19: 'Tier 2 Platform Mapping', 20: 'Tier 3 Platform Mapping' };
+// Layers 18-20 read the cluster by tier (the stored articles carry layerNo 15-17).
+const TIER_OF_LAYER: Record<number, number> = { 18: 1, 19: 2, 20: 3 };
+const where = (projectId: string, layerNo: number) => (TIER_OF_LAYER[layerNo] ? { projectId, tier: TIER_OF_LAYER[layerNo] } : { projectId, layerNo });
 // Consolidated blocks (Layers 4-10) -> article fields. Layers 11-14 supply the keyword pool (h2).
 const BLOCKS: Array<{ key: 'l4' | 'h3' | 'h4' | 'paa' | 'similar' | 'faq' | 'quora'; block: string; tag: string }> = [
   { key: 'l4', block: 'L4', tag: 'L4' }, { key: 'h3', block: 'L5', tag: '11-B' }, { key: 'h4', block: 'L6', tag: '11-C' }, { key: 'paa', block: 'L7', tag: '11-D' },
@@ -157,6 +163,7 @@ export class Layer15Service implements OnModuleInit {
   }
 
   private toRow(project: Project, a: ArticleDraft): ClusterArticle {
+    const site = siteFor(a.tier, a.siteNo, a.subSite);
     return this.ar.create({
       customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, layerNo: a.layerNo, tier: a.tier, code: a.code, seq: a.seq, blogNo: a.blogNo, pageSlot: a.pageSlot,
       articleInPage: a.articleInPage, siteNo: a.siteNo, subSite: a.subSite, articleNo: a.articleNo, parentCode: a.parentCode, targetPageUrl: a.targetPageUrl,
@@ -164,7 +171,7 @@ export class Layer15Service implements OnModuleInit {
       secondaryKeywords: a.secondaryKeywords, sources: a.sources, role: a.role, title: a.title, slug: a.slug, metaTitle: a.metaTitle, metaDescription: a.metaDescription, metaTags: a.metaTags,
       intentType: a.intentType, journeyStage: a.journeyStage, objective: a.objective, angle: a.angle, audience: a.audience, tone: a.tone, intro: a.intro, outline: a.outline,
       wordTarget: a.wordTarget, placementRules: a.placementRules, linkPlan: a.linkPlan, anchorText: a.anchorText, cta: a.cta, schemaType: a.schemaType, imageBrief: a.imageBrief,
-      avoid: a.avoid, publishDate: a.publishDate, platform: null, publishedUrl: null, status: 'planned', generatedBy: 'template',
+      avoid: a.avoid, publishDate: a.publishDate, platform: site?.name || null, siteUrl: site?.url || null, publishedUrl: null, status: 'planned', generatedBy: 'template',
     });
   }
 
@@ -173,8 +180,8 @@ export class Layer15Service implements OnModuleInit {
     try {
       const n = await this.build(project);
       if (!n) { this.log.log(`Layers 15-17 for ${project.monthCode}: waiting for the Admin to pick ${CLUSTER.pages} target pages`); return; }
-      this.log.log(`Layers 15-17 built for ${project.monthCode}: ${n} article(s)`);
-      if (n === CLUSTER.total && (await this.l12Complete(project.id))) for (const l of L15_LAYERS) await this.layers.setByMonth(project.customerId, project.monthIndex, l, 'done');
+      this.log.log(`Layers 15-20 built for ${project.monthCode}: ${n} article(s)`);
+      if (n === CLUSTER.total && (await this.l12Complete(project.id))) for (const l of [...L15_LAYERS, ...L18_LAYERS]) await this.layers.setByMonth(project.customerId, project.monthIndex, l, 'done');
     } catch (err) {
       this.log.error('Layers 15-17: ' + (err instanceof Error ? err.message : err));
     }
@@ -218,7 +225,7 @@ export class Layer15Service implements OnModuleInit {
   async view(customerId: string, month: string | undefined, layerNo: number) {
     const project = await this.monthOf(customerId, month);
     const [rows, all, picks, l12, l14] = await Promise.all([
-      this.ar.find({ where: { projectId: project.id, layerNo }, order: { seq: 'ASC' } }),
+      this.ar.find({ where: where(project.id, layerNo), order: { seq: 'ASC' } }),
       this.ar.count({ where: { projectId: project.id } }),
       this.pr.find({ where: { projectId: project.id }, order: { slot: 'ASC' } }),
       this.l12Complete(project.id),
@@ -227,33 +234,46 @@ export class Layer15Service implements OnModuleInit {
     const expected = L15_EXPECTED[layerNo];
     const full = all === CLUSTER.total ? await this.ar.find({ where: { projectId: project.id } }) : null;
     const checks = full ? await this.checksOf(full) : null;
-    const coverage = full ? await this.coverage(project, full) : null;
+    const coverage = full && layerNo <= 17 ? await this.coverage(project, full) : null;
+    const mapping = full && layerNo >= 18 ? checkMapping(full) : null;
+    const listProblems = layerNo >= 18 ? checkSiteLists() : [];
     return {
       layer: layerNo, month: project.monthCode, total: rows.length, expected, complete: rows.length === expected && l12, layer14Complete: l12, hasLayer14: l14 > 0,
       needsPages: picks.length !== CLUSTER.pages,
       pages: picks.map((p) => ({ slot: p.slot, pageUrl: p.pageUrl, pageName: p.pageName, primaryKeyword: p.primaryKeyword })),
-      checks: checks ? { ok: checks.ok && !Object.values(coverage || {}).some((c) => c.used < c.total), counts: checks.counts, reuse: checks.reuse, coverage, problems: [...checks.problems, ...Object.entries(coverage || {}).filter(([, c]) => c.used < c.total).map(([k, c]) => `coverage ${k}: ${c.total - c.used} of ${c.total} items never used`)] } : null,
+      mapping: mapping ? { ok: mapping.ok && !listProblems.length, counts: mapping.counts, problems: [...listProblems, ...mapping.problems] } : null,
+      checks: layerNo >= 18 ? null : checks ? { ok: checks.ok && !Object.values(coverage || {}).some((c) => c.used < c.total), counts: checks.counts, reuse: checks.reuse, coverage, problems: [...checks.problems, ...Object.entries(coverage || {}).filter(([, c]) => c.used < c.total).map(([k, c]) => `coverage ${k}: ${c.total - c.used} of ${c.total} items never used`)] } : null,
       records: rows.map((r) => this.recordOf(r)),
       // Layers 15-17 copied as they are from the WP plugin (shown while the Engine's own cluster is not built for the month).
       copy: await this.copies.get(customerId, project.monthCode, layerNo),
     };
   }
 
+  // The site the parent article lives on (Tier 1 -> the customer's website blog).
+  private parentSite(r: ClusterArticle): { name: string; url: string } | null {
+    const m = /^T([12])-S(\d+)/.exec(r.parentCode || '');
+    const s = m ? siteFor(parseInt(m[1], 10), parseInt(m[2], 10)) : null;
+    return s ? { name: s.name, url: s.url } : r.parentCode ? { name: `Website blog ${r.parentCode}`, url: r.targetPageUrl } : null;
+  }
+
   private recordOf(r: ClusterArticle) {
+    const site = siteFor(r.tier, r.siteNo, r.subSite);
+    const parent = this.parentSite(r);
     return {
+      platform: site?.name ?? r.platform, siteUrl: site?.url ?? r.siteUrl, siteKind: site?.kind || null, plannedUrl: plannedUrl(site, r.slug), parentPlatform: parent?.name || null, parentSiteUrl: parent?.url || null,
       code: r.code, tier: r.tier, blogNo: r.blogNo, pageSlot: r.pageSlot, articleInPage: r.articleInPage, siteNo: r.siteNo, subSite: r.subSite, articleNo: r.articleNo, parentCode: r.parentCode,
       targetPageUrl: r.targetPageUrl, h1: r.h1, h2: r.h2, h3: r.h3, h4: r.h4, paa: r.paa, similar: r.similar, faq: r.faq, quora: r.quora, aiKeyword: r.aiKeyword, primaryKeyword: r.primaryKeyword, hierarchy: r.hierarchy,
       secondaryKeywords: r.secondaryKeywords, role: r.role, title: r.title, slug: r.slug, metaTitle: r.metaTitle, metaDescription: r.metaDescription, metaTags: r.metaTags,
       intentType: r.intentType, journeyStage: r.journeyStage, objective: r.objective, angle: r.angle, audience: r.audience, tone: r.tone, intro: r.intro, outline: r.outline,
       wordTarget: r.wordTarget, placementRules: r.placementRules, linkPlan: r.linkPlan, anchorText: r.anchorText, cta: r.cta, schemaType: r.schemaType, imageBrief: r.imageBrief, avoid: r.avoid,
-      publishDate: r.publishDate, platform: r.platform, publishedUrl: r.publishedUrl, status: r.status, generatedBy: r.generatedBy,
+      publishDate: r.publishDate, publishedUrl: r.publishedUrl, status: r.status, generatedBy: r.generatedBy,
     };
   }
 
   async summary(customerId: string, month?: string) {
     const project = await this.monthOf(customerId, month);
     const out: Record<string, number> = {};
-    for (const l of L15_LAYERS) out['layer' + l] = await this.ar.count({ where: { projectId: project.id, layerNo: l } });
+    for (const l of [...L15_LAYERS, ...L18_LAYERS]) out['layer' + l] = await this.ar.count({ where: where(project.id, l) });
     out.pages = await this.pr.count({ where: { projectId: project.id } });
     return { month: project.monthCode, ...out };
   }
@@ -262,10 +282,10 @@ export class Layer15Service implements OnModuleInit {
     const expected = L15_EXPECTED[layerNo];
     const project = await this.monthOf(customerId, month).catch(() => null);
     if (!project) return { layer: layerNo, complete: false, month: null, total: 0, expected, html: '', platforms: [] };
-    const [rows, l12] = await Promise.all([this.ar.find({ where: { projectId: project.id, layerNo }, order: { seq: 'ASC' } }), this.l12Complete(project.id)]);
+    const [rows, l12] = await Promise.all([this.ar.find({ where: where(project.id, layerNo), order: { seq: 'ASC' } }), this.l12Complete(project.id)]);
     if (!rows.length && (await this.copies.has(customerId, project.monthCode, layerNo))) return this.copies.customerTable(customerId, project.monthCode, layerNo);
     const complete = rows.length === expected && l12;
-    return { layer: layerNo, complete, month: project.monthCode, total: rows.length, expected, html: complete ? renderClusterHtml(layerNo, rows) : '', platforms: [] };
+    return { layer: layerNo, complete, month: project.monthCode, total: rows.length, expected, html: complete ? (layerNo >= 18 ? renderPlatformHtml(layerNo, rows) : renderClusterHtml(layerNo, rows)) : '', platforms: [] };
   }
 
   async removeByCustomer(customerId: string) {
@@ -292,4 +312,20 @@ export function renderClusterHtml(layerNo: number, rows: ClusterArticle[]): stri
     .concat([r.title, r.metaTitle, r.metaDescription, r.metaTags, r.intentType, r.journeyStage, r.angle, r.intro, outlineText(r.outline), r.wordTarget, r.cta, r.publishDate]);
   const body = rows.map((r) => '<tr>' + cells(r).map((c, i) => (i === 0 ? `<td><b>${esc(c)}</b></td>` : `<td${typeof c === 'string' && c.includes('\n') ? ' style="white-space:pre-line"' : ''}>${dash(c)}</td>`)).join('') + '</tr>').join('');
   return `<table class="kp21-l11 kp21-l${layerNo}"><thead><tr>${[...head, ...tail].map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Layers 18-20 customer grid: which site publishes each article, what it links to and when.
+export function renderPlatformHtml(layerNo: number, rows: ClusterArticle[]): string {
+  const tier3 = layerNo === 20;
+  const head = ['ID', 'Publishing Site', 'Site URL', tier3 ? 'Sub-site' : null, 'Article', 'Links To', 'Links To (site)', 'Anchor Text', 'Target Page', 'Primary Keyword', 'Title', 'Slug', 'Planned URL', 'Publish Date', 'Status'].filter((h): h is string => !!h);
+  const body = rows.map((r) => {
+    const site = siteFor(r.tier, r.siteNo, r.subSite);
+    const m = /^T([12])-S(\d+)/.exec(r.parentCode || '');
+    const ps = m ? siteFor(parseInt(m[1], 10), parseInt(m[2], 10)) : null;
+    const cells: unknown[] = [r.code, site?.name ?? r.platform, site?.url ?? r.siteUrl];
+    if (tier3) cells.push(`B${r.subSite}`);
+    cells.push(`A${r.articleNo}`, r.parentCode, ps ? ps.name : `Website blog ${r.parentCode || ''}`, r.anchorText, r.targetPageUrl, r.primaryKeyword, r.title, r.slug, plannedUrl(site, r.slug), r.publishDate, r.status);
+    return '<tr>' + cells.map((c, i) => (i === 0 ? `<td><b>${esc(c)}</b></td>` : `<td>${dash(c)}</td>`)).join('') + '</tr>';
+  }).join('');
+  return `<table class="kp21-l11 kp21-l${layerNo}"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }

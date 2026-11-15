@@ -6,7 +6,7 @@ import { Customer } from '../customers/customer.entity';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { Layer15Service } from './layer15.service';
 
-// Layers 15, 16, 17 (Off Page SEO > Blogs: Topical Blog Intent cluster - website blogs, Tier 1, Tier 2 + Tier 3), admin side.
+// Layers 15-20 (Off Page SEO > Blogs: Topical Blog Intent cluster - website blogs, Tier 1, Tier 2 + Tier 3, and their platform mapping), admin side.
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers/:customerId')
 export class Layer15Controller {
@@ -25,6 +25,22 @@ export class Layer15Controller {
   @Get('layer17')
   view17(@Param('customerId') customerId: string, @Query('month') month: string) {
     return this.service.view(customerId, month, 17);
+  }
+
+  // Layers 18, 19, 20: the platform mapping of the same articles (Tier 1 = 180, Tier 2 = 180, Tier 3 = 540); the copied WP grid shows until the cluster is built.
+  @Get('layer18')
+  view18(@Param('customerId') customerId: string, @Query('month') month: string) {
+    return this.service.view(customerId, month, 18);
+  }
+
+  @Get('layer19')
+  view19(@Param('customerId') customerId: string, @Query('month') month: string) {
+    return this.service.view(customerId, month, 19);
+  }
+
+  @Get('layer20')
+  view20(@Param('customerId') customerId: string, @Query('month') month: string) {
+    return this.service.view(customerId, month, 20);
   }
 
   // The customer's website pages (with the 6 picked ones marked) for the Admin's target-page picker.
