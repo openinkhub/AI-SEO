@@ -227,7 +227,7 @@ interface FormSpec {
 }
 const FORMS: Record<string, FormSpec> = {
   pillar: {
-    role: 'pillar', angle: 'Complete guide that anchors the target page', objective: 'Rank for the page keyword and give readers everything needed to decide', words: 1800, schema: 'Article',
+    role: 'pillar', angle: 'Complete guide that anchors the target page', objective: 'Rank for the page keyword and give readers everything needed to decide', words: 1100, schema: 'Article',
     hooks: ['{Kw}: The Complete Guide', 'The Complete Guide to {Kw}', '{Kw}: What to Know Before You Choose'],
     lead: ['Looking for {kw}? This guide covers what it is, how to choose and what to expect.', 'Wondering {kw} This guide gives a clear, complete answer.'],
     value: 'Practical advice from {brand}.', cta: 'Read the full guide.',
@@ -236,7 +236,7 @@ const FORMS: Record<string, FormSpec> = {
     outline: ['2|What is {kw}?', '2|Why {kw} matters', '3|{h3}', '2|How to choose: {h2}', '3|{h4}', '2|Common mistakes to avoid', '2|Frequently asked questions', '3|{paa}', '3|{faq}', '2|Next steps with {brand}'],
   },
   howto: {
-    role: 'how-to', angle: 'Step-by-step practical guide', objective: 'Help readers act on the topic and link them to the target page', words: 1400, schema: 'HowTo',
+    role: 'how-to', angle: 'Step-by-step practical guide', objective: 'Help readers act on the topic and link them to the target page', words: 1100, schema: 'HowTo',
     hooks: ['How to Choose {Kw}: Step by Step', '{Kw}: A Practical How-To Guide', '{Kw}: How It Works, Step by Step'],
     lead: ['A step-by-step guide to {kw}: what to check, what to avoid and how to get it right.', 'A step-by-step answer to {kw}'],
     value: 'Clear steps from {brand}.', cta: 'Follow the steps.',
@@ -245,7 +245,7 @@ const FORMS: Record<string, FormSpec> = {
     outline: ['2|Before you start', '2|Step 1: Define what you need', '2|Step 2: {h2}', '3|{h4}', '2|Step 3: Compare your options', '3|{similar}', '2|Step 4: Check quality and proof', '2|Questions people ask', '3|{paa}', '3|{quora}', '2|Take the next step with {brand}'],
   },
   comparison: {
-    role: 'comparison', angle: 'Side-by-side comparison of options', objective: 'Support the decision stage and pass authority to the target page', words: 1400, schema: 'Article',
+    role: 'comparison', angle: 'Side-by-side comparison of options', objective: 'Support the decision stage and pass authority to the target page', words: 1100, schema: 'Article',
     hooks: ['{Kw}: Options Compared', '{Kw} Compared: What Sets Them Apart', '{Kw}: How to Compare Your Options'],
     lead: ['Comparing {kw}? See how the options differ on quality, price and results.', 'Comparing options for: {kw}'],
     value: 'An honest comparison from {brand}.', cta: 'See the comparison.',
@@ -254,7 +254,7 @@ const FORMS: Record<string, FormSpec> = {
     outline: ['2|What to compare', '2|Option overview: {h2}', '3|{similar}', '2|Quality, price and results', '3|{h4}', '2|Which option suits whom', '2|Frequently asked questions', '3|{faq}', '3|{paa}', '2|Our recommendation'],
   },
   faq: {
-    role: 'faq', angle: 'Questions and answers around the topic', objective: 'Capture question searches and AI-answer citations', words: 1400, schema: 'FAQPage', intent: 'Informational',
+    role: 'faq', angle: 'Questions and answers around the topic', objective: 'Capture question searches and AI-answer citations', words: 1100, schema: 'FAQPage', intent: 'Informational',
     hooks: ['{Kw}: Your Questions Answered', '{Kw} FAQs: Clear Answers', '{Kw}: Frequently Asked Questions'],
     lead: ['Answers to the most common questions about {kw}, in plain language.', 'A plain-language answer to: {kw}'],
     value: 'Straight answers from {brand}.', cta: 'Get the answers.',
@@ -263,7 +263,7 @@ const FORMS: Record<string, FormSpec> = {
     outline: ['2|The basics', '3|{paa}', '3|{faq}', '2|Choosing and pricing', '3|{quora}', '3|{h4}', '2|More about {h2}', '2|Still have a question?'],
   },
   local: {
-    role: 'local', angle: 'Local relevance, proof and results', objective: 'Build trust and local relevance that supports the target page', words: 1400, schema: 'LocalBusiness',
+    role: 'local', angle: 'Local relevance, proof and results', objective: 'Build trust and local relevance that supports the target page', words: 1100, schema: 'LocalBusiness',
     hooks: ['{Kw}: Local Insights and Results', '{Kw}: What Local Customers Should Know', '{Kw}: Real Results, Local Experience'],
     lead: ['What local customers should know about {kw}, with real examples and results.', 'A local view of: {kw}'],
     value: 'Local experience from {brand}.', cta: 'See the results.',
@@ -329,7 +329,8 @@ const FORMS: Record<string, FormSpec> = {
 const BLOG_FORMS = ['pillar', 'howto', 'comparison', 'faq', 'local'];
 // article N of a site: keyword | AI search prompt | long-tail | similar product/service | People Also Ask | FAQ
 const TIER_FORMS = ['explainer', 'question', 'longtail', 'alternatives', 'community', 'faqround'];
-const TIER_WORDS: Record<number, number> = { 1: 1000, 2: 800, 3: 600 };
+// Blog length rules: Website Blog 1000-1200, Tier 1 800-1000, Tier 2 600-800, Tier 3 600 (targets are the middle of each range).
+const TIER_WORDS: Record<number, number> = { 1: 900, 2: 700, 3: 600 };
 const ANCHOR_KINDS = ['exact', 'learn', 'brand', 'related', 'guide', 'brand-kw'];
 const AVOID = 'No unverifiable claims, no guaranteed rankings or results, no competitor names, no copied text; keep facts specific and checkable.';
 const PLACEMENT = 'Primary keyword in the title, the first 100 words, one H2, the meta description and the URL slug; each mapped H2/H3 keyword used once where it fits naturally; keyword density 0.5-1.5%; no stuffing.';
@@ -454,7 +455,7 @@ export function planCluster(input: ClusterInput): { articles: ArticleDraft[]; ch
         sources: src,
         role: b.f.role, title: b.title, slug: slugOf(b.title), metaTitle: b.metaTitle, metaDescription: b.metaDescription, metaTags: b.tags,
         intentType: intent, journeyStage: journeyOf(intent), objective: b.f.objective, angle: b.f.angle, audience, tone: TONE, intro: b.intro, outline: b.outline,
-        wordTarget: a === 1 ? 1800 : b.f.words, placementRules: PLACEMENT, anchorText: null,
+        wordTarget: b.f.words, placementRules: PLACEMENT, anchorText: null,
         linkPlan: [
           { role: 'target-page', toCode: null, targetUrl: page.url, anchor: h1, rel: 'dofollow', position: 'paragraph 2' },
           { role: 'sibling', toCode: `W${pad(sibling)}`, targetUrl: null, anchor: '', rel: 'dofollow', position: 'closing section' },

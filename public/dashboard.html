@@ -227,14 +227,14 @@
   var NAV = [
     { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
     { key: 'all-layers', label: 'All Layers', subs: [], layers: [] },
-    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 21) },
+    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 24) },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
         ['backlinks', 'Backlinks'], ['digital-pr', 'Digital PR'] ],
-      layers: [23].concat(rng(30, 59), rng(73, 162)) },
+      layers: rng(30, 59).concat(rng(73, 162)) },
     { key: 'on-page', label: 'On Page SEO', subs: [['website-development', 'Website Development']],
-      layers: [22, 193, 194] },
+      layers: [193, 194] },
     { key: 'technical', label: 'Technical SEO', subs: [
         ['website-audit', 'Website Audit'], ['google-analytics', 'Google Analytics'],
         ['ai-visibility', 'AI Visibility'] ],
@@ -909,10 +909,10 @@
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'research-publish';
     if (hasL4) html += '<div id="layerBox"></div>';
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div><div id="l21Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div><div id="l21Box"></div><div id="l22Box"></div><div id="l23Box"></div><div id="l24Box"></div>';
     if (!hasL4) html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); mountWebsiteBlog(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); mountWebsiteBlog(cust); mountTierBlogs(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -1030,7 +1030,7 @@
         '<button type="button" class="btn" id="wbSrc">HTML</button></div>' +
         '<div id="wbRich" contenteditable="' + (locked ? 'false' : 'true') + '" style="min-height:360px;max-height:640px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:14px;background:#fff;line-height:1.6">' + (b.body || '') + '</div>' +
         '<textarea id="wbHtml" rows="16" style="display:none;width:100%;font-family:monospace;font-size:12px"></textarea>' +
-        '<p class="muted" style="margin:6px 0">Words: <span id="wbWords">' + (b.wordCount || 0) + '</span> · scripts and unsafe markup are removed on save.</p>' +
+        '<p class="muted" style="margin:6px 0">Words: <span id="wbWords">' + (b.wordCount || 0) + '</span> (target 1000-1200) · scripts and unsafe markup are removed on save.</p>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="wbSave"' + (locked ? ' disabled' : '') + '>Save draft</button>' +
         '<button class="btn" id="wbSavePush"' + (locked ? ' disabled' : '') + '>Save &amp; push to customer panel</button><button class="btn" id="wbClose">Close</button> <span class="muted" id="wbEdMsg"></span></div>';
       ed.innerHTML = h;
@@ -1075,6 +1075,151 @@
       document.getElementById('wbSave').addEventListener('click', function(){ save(false); });
       document.getElementById('wbSavePush').addEventListener('click', function(){ save(true); });
     }).catch(function(e){ ed.innerHTML = '<p class="muted">Could not open blog: ' + escapeHtml(e.message) + '</p>'; });
+  }
+
+  // ---- Layers 22 / 23 / 24 · Blog Tier 1 / 2 / 3: import inputs, write, publish, Final Output Table ----
+  var TB_META = { 22: { name: 'Blog Tier 1', src: 'Layer 16 Tier 1 Mapping + Layer 18 Platform Mapping', range: '800-1000 words' },
+                  23: { name: 'Blog Tier 2', src: 'Layer 17 Tier 2 Mapping + Layer 19 Platform Mapping', range: '600-800 words' },
+                  24: { name: 'Blog Tier 3', src: 'Layer 17 Tier 3 Mapping + Layer 20 Platform Mapping', range: '600 words (570-630)' } };
+  var tb = { 22: {}, 23: {}, 24: {} };
+  function tbBase(cust, L) { return '/customers/' + cust.id + '/tier-blogs/' + L; }
+  function mountTierBlogs(cust) {
+    var cm = currentMonth();
+    if (!cm) return;
+    [22, 23, 24].forEach(function(L){
+      var box = document.getElementById('l' + L + 'Box');
+      if (!box) return;
+      tb[L] = { cid: cust.id, month: cm.monthCode, page: 1, site: '', status: '', q: '', edit: null, data: null };
+      box.innerHTML = '<section class="card"><p class="muted">Loading Layer ' + L + '…</p></section>';
+      loadTierBlogs(cust, L, box);
+    });
+  }
+  function loadTierBlogs(cust, L, box) {
+    var s = tb[L];
+    var qs = '?month=' + encodeURIComponent(s.month) + '&page=' + s.page + '&pageSize=50' + (s.site ? '&site=' + encodeURIComponent(s.site) : '') + (s.status ? '&status=' + encodeURIComponent(s.status) : '') + (s.q ? '&q=' + encodeURIComponent(s.q) : '');
+    api(tbBase(cust, L) + qs).then(function(d){
+      if (document.getElementById('l' + L + 'Box') !== box || s.cid !== cust.id) return;
+      s.data = d; drawTierBlogs(cust, L, box);
+    }).catch(function(err){
+      if (document.getElementById('l' + L + 'Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + L + ': ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+  var TB_BADGE = { pending: 'pending', written: 'pending', published: 'ok' };
+  var TB_WORD = { under: 'var(--fail)', over: 'var(--fail)', ok: 'inherit', empty: 'inherit' };
+  function drawTierBlogs(cust, L, box) {
+    var s = tb[L], d = s.data, meta = TB_META[L];
+    var h = '<section class="card"><h2><span class="layer-tag">Layer ' + L + ' · Day ' + L + '</span>' + meta.name + '</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + escapeHtml(d.month) + ' · ' + d.imported + ' / ' + d.expected + ' imported · ' + d.written + ' written · ' + d.published + ' published. ' +
+      '1) <b>Import</b> the blog inputs from ' + escapeHtml(meta.src) + ', 2) <b>write</b> each blog (' + meta.range + '), 3) add the <b>publish date and live URL</b>. ' +
+      'When all ' + d.expected + ' are published the customer panel shows the Final Output Table.</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;align-items:center"><button class="btn" id="tb' + L + 'Imp">Import blog inputs</button><button class="btn" id="tb' + L + 'Ref">Refresh</button>' +
+      '<select id="tb' + L + 'Site"><option value="">All sites</option>' + d.sites.map(function(x){ return '<option value="' + x.siteNo + '"' + (String(s.site) === String(x.siteNo) ? ' selected' : '') + '>Site ' + x.siteNo + (x.platform ? ' · ' + escapeHtml(x.platform) : '') + '</option>'; }).join('') + '</select>' +
+      '<select id="tb' + L + 'St"><option value="">All status</option>' + ['pending', 'written', 'published'].map(function(x){ return '<option value="' + x + '"' + (s.status === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
+      '<input id="tb' + L + 'Q" placeholder="Search code / title" value="' + escapeHtml(s.q) + '" style="min-width:180px"><button class="btn" id="tb' + L + 'Go">Filter</button><span class="muted" id="tb' + L + 'Msg"></span></div>';
+    if (!d.imported) {
+      h += '<p class="muted">Nothing imported yet. Press <b>Import blog inputs</b> to bring in the ' + d.expected + ' articles of this month.</p></section><div id="tb' + L + 'Ed"></div>';
+      box.innerHTML = h; wireTierBlogs(cust, L, box); return;
+    }
+    h += '<div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Platform</th><th>Title</th><th>Links to</th><th>Words</th><th>Date</th><th>Published URL</th><th>Status</th><th></th></tr></thead><tbody>';
+    d.rows.forEach(function(b){
+      h += '<tr data-code="' + escapeHtml(b.code) + '"><td><b>' + escapeHtml(b.code) + '</b></td><td>' + escapeHtml(b.platform || '') + '</td><td style="min-width:240px">' + escapeHtml(b.title || '—') + '</td>' +
+        '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(b.targetPageUrl || '') + '</td>' +
+        '<td style="color:' + (TB_WORD[b.wordState] || 'inherit') + '">' + (b.wordCount || '') + '</td>' +
+        '<td><input type="date" data-f="publishDate" value="' + escapeHtml(b.publishDate ? String(b.publishDate).slice(0, 10) : '') + '"></td>' +
+        '<td style="min-width:260px"><input data-f="publishedUrl" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.publishedUrl || '') + '"></td>' +
+        '<td><span class="badge ' + (TB_BADGE[b.status] || 'pending') + '" data-s>' + escapeHtml(b.status) + '</span></td>' +
+        '<td><button class="btn" data-edit="' + escapeHtml(b.code) + '">' + (b.wordCount ? 'Edit' : 'Write') + '</button></td></tr>';
+    });
+    h += '</tbody></table></div><div style="display:flex;gap:8px;align-items:center;margin-top:10px"><button class="btn" id="tb' + L + 'Prev"' + (d.page <= 1 ? ' disabled' : '') + '>Prev</button><span class="muted">Page ' + d.page + ' / ' + d.pages + ' · ' + d.total + ' blogs</span><button class="btn" id="tb' + L + 'Next"' + (d.page >= d.pages ? ' disabled' : '') + '>Next</button></div>' +
+      '</section><div id="tb' + L + 'Ed"></div>';
+    box.innerHTML = h; wireTierBlogs(cust, L, box);
+  }
+  function wireTierBlogs(cust, L, box) {
+    var s = tb[L], q = function(id){ return document.getElementById('tb' + L + id); };
+    var msg = function(t){ var m = q('Msg'); if (m) m.textContent = t || ''; };
+    q('Ref').addEventListener('click', function(){ loadTierBlogs(cust, L, box); });
+    q('Imp').addEventListener('click', function(){
+      msg('Importing…');
+      api(tbBase(cust, L) + '/import?month=' + encodeURIComponent(s.month), { method: 'POST', body: {} }).then(function(r){ msg('Imported ' + r.imported + ' (' + r.created + ' new)'); loadTierBlogs(cust, L, box); }).catch(function(e){ msg(e.message); });
+    });
+    q('Go').addEventListener('click', function(){ s.site = q('Site').value; s.status = q('St').value; s.q = q('Q').value; s.page = 1; loadTierBlogs(cust, L, box); });
+    var pv = q('Prev'), nx = q('Next');
+    if (pv) pv.addEventListener('click', function(){ s.page = Math.max(1, s.page - 1); loadTierBlogs(cust, L, box); });
+    if (nx) nx.addEventListener('click', function(){ s.page += 1; loadTierBlogs(cust, L, box); });
+    Array.prototype.forEach.call(box.querySelectorAll('tr[data-code] input'), function(inp){
+      inp.addEventListener('change', function(){
+        var tr = inp.closest('tr'), code = tr.getAttribute('data-code'), st = tr.querySelector('[data-s]');
+        var body = {}; body[inp.getAttribute('data-f')] = inp.value;
+        api(tbBase(cust, L) + '/article/' + encodeURIComponent(code) + '/publishing?month=' + encodeURIComponent(s.month), { method: 'PUT', body: body }).then(function(r){
+          st.textContent = r.status; st.className = 'badge ' + (TB_BADGE[r.status] || 'pending'); msg('');
+        }).catch(function(e){ msg(code + ': ' + e.message); });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('button[data-edit]'), function(el){
+      el.addEventListener('click', function(){ openTierEditor(cust, L, box, el.getAttribute('data-edit')); });
+    });
+  }
+  function tbField(id, label, val, wide) {
+    return '<div class="profile-field"' + (wide ? ' style="grid-column:1/-1"' : '') + '><label for="' + id + '">' + label + '</label><input id="' + id + '" value="' + escapeHtml(val || '') + '"></div>';
+  }
+  function openTierEditor(cust, L, box, code) {
+    var s = tb[L], ed = document.getElementById('tb' + L + 'Ed');
+    ed.innerHTML = '<p class="muted">Loading ' + escapeHtml(code) + '…</p>';
+    api(tbBase(cust, L) + '/article/' + encodeURIComponent(code) + '?month=' + encodeURIComponent(s.month)).then(function(b){
+      var p = 'tbe' + L + '_';
+      var tools = [['bold', 'B'], ['italic', 'I'], ['underline', 'U'], ['h2', 'H2'], ['h3', 'H3'], ['p', 'P'], ['ul', '• List'], ['ol', '1. List'], ['quote', 'Quote'], ['link', 'Link'], ['clear', 'Clear format']];
+      var h = '<section class="card"><h3 style="margin:0 0 4px">' + escapeHtml(b.code) + ' · ' + escapeHtml(b.platform || '') + ' <span class="badge ' + (TB_BADGE[b.status] || 'pending') + '">' + escapeHtml(b.status) + '</span></h3>' +
+        '<div style="margin:8px 0 12px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px"><b>Brief</b> · ' + TB_META[L].range +
+        '<div>Keyword: ' + escapeHtml(b.primaryKeyword || '—') + (b.secondaryKeywords && b.secondaryKeywords.length ? ' · also: ' + escapeHtml(b.secondaryKeywords.join(', ')) : '') + '</div>' +
+        '<div>Links to: ' + escapeHtml(b.targetPageUrl || '—') + (b.anchorText ? ' · anchor: ' + escapeHtml(b.anchorText) : '') + '</div>' +
+        (b.objective ? '<div>Objective: ' + escapeHtml(b.objective) + '</div>' : '') + (b.angle ? '<div>Angle: ' + escapeHtml(b.angle) + '</div>' : '') +
+        (b.audience ? '<div>Audience: ' + escapeHtml(b.audience) + (b.tone ? ' · tone: ' + escapeHtml(b.tone) : '') + '</div>' : '') +
+        (b.intro ? '<div>Intro: ' + escapeHtml(b.intro) + '</div>' : '') +
+        (b.outline && b.outline.length ? '<div>Outline: ' + b.outline.map(function(o){ return escapeHtml((o.level || 'h2').toUpperCase() + ' ' + (o.text || o.heading || '')); }).join(' · ') + '</div>' : '') +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' + tbField(p + 'T', 'Title (H1)', b.title, true) + tbField(p + 'S', 'URL slug', b.slug) + tbField(p + 'MT', 'Meta title', b.metaTitle) +
+        tbField(p + 'Tg', 'Meta tags (comma separated)', b.metaTags, true) + tbField(p + 'D', 'Meta description', b.metaDescription, true) + '</div>' +
+        '<div style="margin:12px 0 6px"><b>Blog content</b></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px" id="' + p + 'Tools">' + tools.map(function(t){ return '<button type="button" class="btn" data-cmd="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '<button type="button" class="btn" id="' + p + 'Src">HTML</button></div>' +
+        '<div id="' + p + 'Rich" contenteditable="true" style="min-height:320px;max-height:600px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:14px;background:#fff;line-height:1.6">' + (b.body || '') + '</div>' +
+        '<textarea id="' + p + 'Html" rows="14" style="display:none;width:100%;font-family:monospace;font-size:12px"></textarea>' +
+        '<p class="muted" style="margin:6px 0">Words: <b id="' + p + 'W">' + (b.wordCount || 0) + '</b> · target ' + TB_META[L].range + '</p>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="' + p + 'Save">Save blog</button><button class="btn" id="' + p + 'Close">Close</button> <span class="muted" id="' + p + 'Msg"></span></div></section>';
+      ed.innerHTML = h; ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var g = function(x){ return document.getElementById(p + x); };
+      var rich = g('Rich'), src = g('Html'), srcOn = false;
+      var range = { 22: [800, 1000], 23: [600, 800], 24: [570, 630] }[L];
+      var words = function(){ var t = srcOn ? src.value.replace(/<[^>]+>/g, ' ') : (rich.innerText || ''); var n = t.trim() ? t.trim().split(/\s+/).length : 0; var w = g('W'); w.textContent = n; w.style.color = n && (n < range[0] || n > range[1]) ? 'var(--fail)' : 'inherit'; };
+      words(); rich.addEventListener('input', words); src.addEventListener('input', words);
+      Array.prototype.forEach.call(ed.querySelectorAll('#' + p + 'Tools button[data-cmd]'), function(el){
+        el.addEventListener('mousedown', function(e){ e.preventDefault(); });
+        el.addEventListener('click', function(){
+          if (srcOn) return;
+          var c = el.getAttribute('data-cmd'); rich.focus();
+          if (c === 'bold' || c === 'italic' || c === 'underline') document.execCommand(c);
+          else if (c === 'h2' || c === 'h3' || c === 'p') document.execCommand('formatBlock', false, c);
+          else if (c === 'quote') document.execCommand('formatBlock', false, 'blockquote');
+          else if (c === 'ul') document.execCommand('insertUnorderedList');
+          else if (c === 'ol') document.execCommand('insertOrderedList');
+          else if (c === 'link') { var u = prompt('Link URL (https://…)', 'https://'); if (u) document.execCommand('createLink', false, u); }
+          else if (c === 'clear') document.execCommand('removeFormat');
+          words();
+        });
+      });
+      g('Src').addEventListener('click', function(){
+        if (!srcOn) { src.value = rich.innerHTML; src.style.display = ''; rich.style.display = 'none'; srcOn = true; }
+        else { rich.innerHTML = src.value; src.style.display = 'none'; rich.style.display = ''; srcOn = false; }
+        words();
+      });
+      g('Close').addEventListener('click', function(){ ed.innerHTML = ''; });
+      g('Save').addEventListener('click', function(){
+        var m = g('Msg'); m.textContent = 'Saving…';
+        var body = { title: g('T').value, slug: g('S').value, metaTitle: g('MT').value, metaTags: g('Tg').value, metaDescription: g('D').value, body: srcOn ? src.value : rich.innerHTML };
+        api(tbBase(cust, L) + '/article/' + encodeURIComponent(code) + '?month=' + encodeURIComponent(s.month), { method: 'PUT', body: body }).then(function(r){
+          m.textContent = 'Saved · ' + r.wordCount + ' words'; loadTierBlogs(cust, L, box);
+        }).catch(function(e){ m.textContent = e.message; });
+      });
+    }).catch(function(e){ ed.innerHTML = '<p class="muted">Could not open ' + escapeHtml(code) + ': ' + escapeHtml(e.message) + '</p>'; });
   }
 
   // ---- Layer 4 · AI Search Keyword: 9 AI platforms x 10 keywords ----

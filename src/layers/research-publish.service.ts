@@ -21,7 +21,10 @@ export const RP_LAYERS = LAYER_REGISTRY.filter((d) => d.section === RP_SECTION).
 export const RP_GATED_FROM = 11;
 
 export const RP_PUSH_LAYER = 21;
+// Layers 22-24 (Blog Tier 1/2/3) are customer-visible only when every article of the Layer is published (the Final Output Table); no Layer-12 gate.
+export const RP_TIER_LAYERS = [22, 23, 24];
 export function rpPublished(layer: number, status: string, layer12Complete: boolean): boolean {
+  if (RP_TIER_LAYERS.includes(layer)) return status === 'done';
   return status === 'done' && (layer < RP_GATED_FROM || layer12Complete);
 }
 
@@ -78,7 +81,7 @@ export class ResearchPublishService {
         // Layer 21 is published blog by blog: the Admin pushes each one; the customer panel shows exactly the pushed ones.
         published: applicable && (d.layer === RP_PUSH_LAYER ? pushedBlogs > 0 : rpPublished(d.layer, status, l12Complete)),
         pushed: d.layer === RP_PUSH_LAYER ? pushedBlogs : undefined,
-        gatedByLayer12: d.layer >= RP_GATED_FROM && d.layer !== RP_PUSH_LAYER,
+        gatedByLayer12: d.layer >= RP_GATED_FROM && d.layer !== RP_PUSH_LAYER && !RP_TIER_LAYERS.includes(d.layer),
         endpoint: `/api/v1/wp-sync/customers/{wpUserId}/layers/${d.layer}?month=${project!.monthCode}`,
       };
     });
