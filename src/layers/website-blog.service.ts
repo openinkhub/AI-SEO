@@ -17,6 +17,13 @@ const WP_STATUS: Record<string, BlogStatus> = { 'published': 'published', 'auto 
 
 export interface BlogInput { title?: string; slug?: string; metaTags?: string; metaDescription?: string; intro?: string; body?: string; targetKeyword?: string; h1?: string; h2?: string; targetWebpage?: string; productionDate?: string; publishDate?: string }
 
+const esc = (x: unknown): string => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+const link = (u: string | null): string => (u ? `<a href="${esc(u)}">${esc(u)}</a>` : '\u2014');
+export function publishedTableHtml(rows: Array<{ blogNo: number; date: string | null; title: string | null; targetPage: string | null; publishedUrl: string | null }>): string {
+  const body = rows.map((r) => `<tr><td>${esc(r.date || '')}</td><td><b>${r.blogNo}</b></td><td>${esc(r.title || '')}</td><td>${link(r.targetPage)}</td><td>${link(r.publishedUrl)}</td></tr>`).join('');
+  return `<table class="kp21-l11 kp21-l22"><thead><tr><th>Date</th><th>Blog</th><th>Title</th><th>Target page</th><th>Published blog URL</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
 @Injectable()
 export class WebsiteBlogService {
   private readonly log = new Logger('WebsiteBlog');
@@ -289,6 +296,49 @@ export class WebsiteBlogService {
     const any = rows.some((r) => r.body && r.body.trim());
     if (resolved >= BLOG_COUNT) await this.layers.setByMonth(customerId, p.monthIndex, 21, 'done');
     else if (any) await this.layers.setByMonth(customerId, p.monthIndex, 21, 'in_progress');
+    // Layer 22 (publish) of the NEXT month tracks the posting of these blogs.
+    const published = rows.filter((r) => r.status === 'published').length;
+    if (published >= BLOG_COUNT) await this.layers.setByMonth(customerId, p.monthIndex + 1, 22, 'done');
+    else if (published > 0) await this.layers.setByMonth(customerId, p.monthIndex + 1, 22, 'in_progress');
+  }
+
+  // ---- Layer 22 Website Blog Publish: in month M the Admin publishes the blogs produced in M-1 (Layer 21) ----
+  async sourceOf(customerId: string, month?: string): Promise<{ publish: Project; source: Project | null }> {
+    const publish = await this.monthOf(customerId, month);
+    const source = publish.monthIndex > 0 ? await this.projects.findOne({ where: { customerId, monthIndex: publish.monthIndex - 1 } }) : null;
+    return { publish, source };
+  }
+
+  async sourceMonthCode(customerId: string, month?: string): Promise<string> {
+    const { publish, source } = await this.sourceOf(customerId, month);
+    if (!source) throw new BadRequestException(`Layer 22 publishes the previous month's blogs, so it starts in M1 (${publish.monthCode} has nothing to publish).`);
+    return source.monthCode;
+  }
+
+  async publishView(customerId: string, month?: string) {
+    const { publish, source } = await this.sourceOf(customerId, month);
+    const base = { layer: 22, month: publish.monthCode, sourceMonth: source ? source.monthCode : null, expected: BLOG_COUNT };
+    if (!source) return { ...base, applicable: false, ready: 0, published: 0, blogs: [] };
+    const rows = await this.repo.find({ where: { projectId: source.id }, order: { blogNo: 'ASC' } });
+    const by = new Map(rows.map((r) => [r.blogNo, r]));
+    const blogs = Array.from({ length: BLOG_COUNT }, (_, i) => {
+      const r = by.get(i + 1);
+      return {
+        blogNo: i + 1, title: r?.title || null, status: r?.status || 'empty', statusLabel: r ? STATUS_LABEL[r.status] || r.status : 'Not created',
+        ready: !!r && RESOLVED.includes(r.status), publishDate: r?.publishDate || null, targetWebpage: r?.targetWebpage || null, blogUrl: r?.blogUrl || null,
+        publishError: r?.publishError || null,
+      };
+    });
+    return { ...base, applicable: true, ready: blogs.filter((b) => b.ready).length, published: blogs.filter((b) => b.status === 'published').length, blogs };
+  }
+
+  // Customer panel: the blogs published so far (date - target page - published blog URL); complete when all 30 are live.
+  async customerPublishView(customerId: string, month?: string) {
+    const { publish, source } = await this.sourceOf(customerId, month).catch(() => ({ publish: null as Project | null, source: null as Project | null }));
+    if (!publish) return { layer: 22, complete: false, month: null, total: 0, expected: BLOG_COUNT, html: '', platforms: [], rows: [] };
+    const rows = source ? (await this.repo.find({ where: { projectId: source.id }, order: { blogNo: 'ASC' } })).filter((r) => r.status === 'published' && r.blogUrl) : [];
+    const out = rows.map((r) => ({ blogNo: r.blogNo, date: r.publishDate, title: r.title, targetPage: r.targetWebpage, publishedUrl: r.blogUrl }));
+    return { layer: 22, complete: out.length === BLOG_COUNT, month: publish.monthCode, sourceMonth: source ? source.monthCode : null, total: out.length, expected: BLOG_COUNT, html: out.length ? publishedTableHtml(out) : '', platforms: [], rows: out };
   }
 
   async afterPublish(customerId: string, p: Project) { await this.syncLayer(customerId, p); }

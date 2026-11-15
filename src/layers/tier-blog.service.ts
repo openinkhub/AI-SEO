@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Project } from '../projects/project.entity';
@@ -12,9 +12,9 @@ import { WORD_RANGES, wordState } from './word-ranges';
 
 // layerNo -> where the articles come from. Tier 1 = Layer 16 (+ platform from 18); Tier 2 / Tier 3 = Layer 17 (+ 19 / 20).
 export const TIER_SOURCE: Record<number, { articleLayer: number; tier: number; mapping: string; platformLayer: number; name: string }> = {
-  22: { articleLayer: 16, tier: 1, mapping: 'Layer 16 Tier 1 Mapping', platformLayer: 18, name: 'Blog Tier 1' },
-  23: { articleLayer: 17, tier: 2, mapping: 'Layer 17 Tier 2 Mapping', platformLayer: 19, name: 'Blog Tier 2' },
-  24: { articleLayer: 17, tier: 3, mapping: 'Layer 17 Tier 3 Mapping', platformLayer: 20, name: 'Blog Tier 3' },
+  23: { articleLayer: 16, tier: 1, mapping: 'Layer 16 Tier 1 Mapping', platformLayer: 18, name: 'Blog Tier 1' },
+  24: { articleLayer: 17, tier: 2, mapping: 'Layer 17 Tier 2 Mapping', platformLayer: 19, name: 'Blog Tier 2' },
+  25: { articleLayer: 17, tier: 3, mapping: 'Layer 17 Tier 3 Mapping', platformLayer: 20, name: 'Blog Tier 3' },
 };
 const expectedOf = (layerNo: number) => LAYER_REGISTRY.find((d) => d.layer === layerNo)?.expected || 0;
 const str = (v: unknown, max: number): string | null => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s ? s.slice(0, max) : null; };
@@ -25,7 +25,7 @@ export const statusOf = (b: { body: string | null; publishedUrl: string | null }
 export interface TierInput { title?: string; slug?: string; metaTitle?: string; metaDescription?: string; metaTags?: string; body?: string; publishDate?: string; publishedUrl?: string }
 
 @Injectable()
-export class TierBlogService {
+export class TierBlogService implements OnModuleInit {
   private readonly log = new Logger('TierBlog');
 
   constructor(
@@ -35,8 +35,18 @@ export class TierBlogService {
     private readonly layers: LayersService,
   ) {}
 
+  // The tier blogs were first numbered 22-24 (now 23-25). The article code says the tier, so rows are put on the right Layer once, idempotently.
+  async onModuleInit() {
+    try {
+      for (const [tier, layerNo] of [[1, 23], [2, 24], [3, 25]] as const) {
+        const r: any = await this.repo.createQueryBuilder().update(TierBlog).set({ layerNo }).where('code LIKE :c', { c: `T${tier}-%` }).andWhere('layerNo <> :l', { l: layerNo }).execute();
+        if (r?.affected) this.log.log(`Moved ${r.affected} Tier ${tier} blog(s) to Layer ${layerNo}`);
+      }
+    } catch (e: any) { this.log.warn(`Tier blog renumber skipped: ${e?.message || e}`); }
+  }
+
   private check(layerNo: number) {
-    if (!(TIER_LAYERS as readonly number[]).includes(layerNo)) throw new BadRequestException('Tier blogs are Layers 22, 23 and 24.');
+    if (!(TIER_LAYERS as readonly number[]).includes(layerNo)) throw new BadRequestException('Tier blogs are Layers 23, 24 and 25.');
   }
 
   async monthOf(customerId: string, month?: string): Promise<Project> {

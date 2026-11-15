@@ -21,8 +21,10 @@ export const RP_LAYERS = LAYER_REGISTRY.filter((d) => d.section === RP_SECTION).
 export const RP_GATED_FROM = 11;
 
 export const RP_PUSH_LAYER = 21;
-// Layers 22-24 (Blog Tier 1/2/3) are customer-visible only when every article of the Layer is published (the Final Output Table); no Layer-12 gate.
-export const RP_TIER_LAYERS = [22, 23, 24];
+// Layers 23-25 (Blog Tier 1/2/3) are customer-visible only when every article of the Layer is published (the Final Output Table); no Layer-12 gate.
+export const RP_TIER_LAYERS = [23, 24, 25];
+// Layer 22 (Website Blog Publish) is shown blog by blog as the previous month's blogs go live.
+export const RP_PUBLISH_LAYER = 22;
 export function rpPublished(layer: number, status: string, layer12Complete: boolean): boolean {
   if (RP_TIER_LAYERS.includes(layer)) return status === 'done';
   return status === 'done' && (layer < RP_GATED_FROM || layer12Complete);
@@ -59,6 +61,8 @@ export class ResearchPublishService {
     if (!project) return { ...head, month: null, layers: [] };
     await this.layers.syncForCustomer(customerId, all);
     const pushedBlogs = await this.blogs.createQueryBuilder('b').where('b.projectId = :p', { p: project.id }).andWhere('b.pushedAt IS NOT NULL').getCount();
+    const prev = project.monthIndex > 0 ? all.find((p) => p.monthIndex === project!.monthIndex - 1) : undefined;
+    const liveBlogs = prev ? await this.blogs.createQueryBuilder('b').where('b.projectId = :p', { p: prev.id }).andWhere("b.status = 'published'").getCount() : 0;
     const [rows, st] = await Promise.all([
       this.rows.find({ where: { customerId, monthIndex: project.monthIndex } }),
       this.l12.findOne({ where: { projectId: project.id } }),
@@ -79,9 +83,9 @@ export class ResearchPublishService {
         status,
         expected: d.expected,
         // Layer 21 is published blog by blog: the Admin pushes each one; the customer panel shows exactly the pushed ones.
-        published: applicable && (d.layer === RP_PUSH_LAYER ? pushedBlogs > 0 : rpPublished(d.layer, status, l12Complete)),
-        pushed: d.layer === RP_PUSH_LAYER ? pushedBlogs : undefined,
-        gatedByLayer12: d.layer >= RP_GATED_FROM && d.layer !== RP_PUSH_LAYER && !RP_TIER_LAYERS.includes(d.layer),
+        published: applicable && (d.layer === RP_PUSH_LAYER ? pushedBlogs > 0 : d.layer === RP_PUBLISH_LAYER ? liveBlogs > 0 : rpPublished(d.layer, status, l12Complete)),
+        pushed: d.layer === RP_PUSH_LAYER ? pushedBlogs : d.layer === RP_PUBLISH_LAYER ? liveBlogs : undefined,
+        gatedByLayer12: d.layer >= RP_GATED_FROM && d.layer !== RP_PUSH_LAYER && d.layer !== RP_PUBLISH_LAYER && !RP_TIER_LAYERS.includes(d.layer),
         endpoint: `/api/v1/wp-sync/customers/{wpUserId}/layers/${d.layer}?month=${project!.monthCode}`,
       };
     });

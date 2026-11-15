@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { TierBlogService } from './tier-blog.service';
 
-// Layers 22 / 23 / 24 - Blog Tier 1 / 2 / 3. Admin: import inputs, write, publish. Customer panel: the Final Output Table.
+// Layers 23 / 24 / 25 - Blog Tier 1 / 2 / 3. Admin: import inputs, write, publish. Customer panel: the Final Output Table.
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers/:customerId/tier-blogs/:layerNo')
 export class TierBlogController {
@@ -31,12 +31,6 @@ abstract class WpTierBase {
 }
 
 @UseGuards(WpApiKeyGuard)
-@Controller('api/v1/wp-sync/customers/:wpUserId/layers/22')
-export class WpLayer22Controller extends WpTierBase {
-  constructor(service: TierBlogService, @InjectRepository(Customer) customers: Repository<Customer>) { super(service, customers, 22); }
-  @Get() t(@Param('wpUserId') w: string, @Query('month') m?: string) { return this.table(w, m); }
-}
-@UseGuards(WpApiKeyGuard)
 @Controller('api/v1/wp-sync/customers/:wpUserId/layers/23')
 export class WpLayer23Controller extends WpTierBase {
   constructor(service: TierBlogService, @InjectRepository(Customer) customers: Repository<Customer>) { super(service, customers, 23); }
@@ -46,5 +40,11 @@ export class WpLayer23Controller extends WpTierBase {
 @Controller('api/v1/wp-sync/customers/:wpUserId/layers/24')
 export class WpLayer24Controller extends WpTierBase {
   constructor(service: TierBlogService, @InjectRepository(Customer) customers: Repository<Customer>) { super(service, customers, 24); }
+  @Get() t(@Param('wpUserId') w: string, @Query('month') m?: string) { return this.table(w, m); }
+}
+@UseGuards(WpApiKeyGuard)
+@Controller('api/v1/wp-sync/customers/:wpUserId/layers/25')
+export class WpLayer25Controller extends WpTierBase {
+  constructor(service: TierBlogService, @InjectRepository(Customer) customers: Repository<Customer>) { super(service, customers, 25); }
   @Get() t(@Param('wpUserId') w: string, @Query('month') m?: string) { return this.table(w, m); }
 }

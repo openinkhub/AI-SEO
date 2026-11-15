@@ -227,7 +227,7 @@
   var NAV = [
     { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
     { key: 'all-layers', label: 'All Layers', subs: [], layers: [] },
-    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 24) },
+    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 25) },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
@@ -909,10 +909,10 @@
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'research-publish';
     if (hasL4) html += '<div id="layerBox"></div>';
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div><div id="l21Box"></div><div id="l22Box"></div><div id="l23Box"></div><div id="l24Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div><div id="l21Box"></div><div id="l22Box"></div><div id="l23Box"></div><div id="l24Box"></div><div id="l25Box"></div>';
     if (!hasL4) html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); mountWebsiteBlog(cust); mountTierBlogs(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); mountWebsiteBlog(cust); mountWebsitePublish(cust); mountTierBlogs(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 
@@ -938,27 +938,16 @@
   var WB_BADGE = { draft: 'pending', pending_review: 'pending', approved: 'ok', auto_approved: 'ok', published: 'ok', rejected: 'fail', empty: 'pending' };
   function drawWebsiteBlog(cust, box) {
     var d = wb.data;
-    var h = '<section class="card"><h2><span class="layer-tag">Layer 21 · Day 21</span>Website Blog</h2>' +
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 21 · Day 21–30</span>Website Blog Production</h2>' +
       '<p class="muted" style="margin:4px 0 12px">' + escapeHtml(d.month) + ' · ' + d.created + ' / ' + d.expected + ' written · ' + d.pushed + ' on the customer panel · ' + d.resolved + ' approved. ' +
-      'You write the blog content and press <b>Push</b>: the customer sees only the pushed blog, in rich-text view, and can Approve or Reject with a comment. A pushed blog nobody reviews in 7 days is auto-approved.</p>' +
+      'Blogs are produced Day 21–30 for posting <b>next month</b> (publishing is Layer 22). You write the blog content (1000–1200 words) and press <b>Push</b>: the customer sees only the pushed blog, in rich-text view, and can Approve or Reject with a comment. A pushed blog nobody reviews in 7 days is auto-approved.</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px"><button class="btn" id="wbPushAll">Push all drafts</button><button class="btn" id="wbReload">Refresh</button><span class="muted" id="wbMsg"></span></div>' +
-      '<h3 style="margin:0 0 6px">Publishing tracker</h3><p class="muted" style="margin:0 0 8px">Date, target page and the live blog URL for each blog. Saves when you leave a field. A URL on an approved blog marks it Published. <b>Publish via API</b> (Admin only, never automatic) sends an approved blog to the customer\'s own Blog Publish API (set in the customer API settings) and fills the URL.</p>' +
-      '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;margin-bottom:16px"><table><thead><tr><th>Blog</th><th>Date</th><th>Target page</th><th>Published blog URL</th><th>Status</th><th>Admin</th></tr></thead><tbody>' +
-      d.blogs.map(function(b){
-        return '<tr data-trk="' + b.blogNo + '"><td><b>' + b.blogNo + '</b></td>' +
-          '<td><input type="date" data-f="publishDate" value="' + escapeHtml(b.publishDate ? String(b.publishDate).slice(0, 10) : '') + '"></td>' +
-          '<td style="min-width:280px"><input data-f="targetWebpage" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.targetWebpage || '') + '"></td>' +
-          '<td style="min-width:320px"><input data-f="blogUrl" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.blogUrl || '') + '"></td>' +
-          '<td class="muted" data-s style="white-space:nowrap">' + (b.publishError ? '<span style="color:var(--fail)">' + escapeHtml(b.publishError) + '</span>' : '') + '</td>' +
-          '<td>' + ((b.status === 'approved' || b.status === 'auto_approved') && !b.blogUrl ? '<button class="btn" data-pub="' + b.blogNo + '">Publish via API</button>' : '') + '</td></tr>';
-      }).join('') + '</tbody></table></div>' +
       '<div style="overflow-x:auto"><table><thead><tr><th>Blog</th><th>Publish date</th><th>Title</th><th>Words</th><th>Status</th><th>Customer panel</th><th>Customer comment</th><th></th></tr></thead><tbody>';
     d.blogs.forEach(function(b){
       var no = b.blogNo, has = b.hasBody, st = b.status || 'empty';
       var acts = '<button class="btn" data-wb="edit" data-no="' + no + '">' + (has ? 'Edit' : 'Write') + '</button> ';
       if (has && (st === 'draft' || st === 'rejected')) acts += '<button class="btn" data-wb="push" data-no="' + no + '">' + (st === 'rejected' ? 'Push again' : 'Push') + '</button> ';
       if (b.pushed && (st === 'pending_review' || st === 'rejected')) acts += '<button class="btn" data-wb="unpush" data-no="' + no + '">Withdraw</button> ';
-      if (st === 'approved' || st === 'auto_approved') acts += '<button class="btn" data-wb="published" data-no="' + no + '">Mark published</button> ';
       if (st === 'approved' || st === 'auto_approved' || st === 'published') acts += '<button class="btn" data-wb="reopen" data-no="' + no + '">Reopen</button>';
       h += '<tr><td><b>' + no + '</b></td><td>' + escapeHtml(b.publishDate ? fmtDay(b.publishDate) : '') + '</td><td style="min-width:240px">' + escapeHtml(b.title || '—') + '</td><td>' + (b.wordCount || '') + '</td>' +
         '<td><span class="badge ' + (WB_BADGE[st] || 'pending') + '">' + escapeHtml(b.statusLabel) + '</span></td>' +
@@ -967,26 +956,6 @@
     h += '</tbody></table></div><div id="wbEditor"></div></section>';
     box.innerHTML = h;
     var msg = function(t){ var m = document.getElementById('wbMsg'); if (m) m.textContent = t || ''; };
-    Array.prototype.forEach.call(box.querySelectorAll('tr[data-trk] input'), function(inp){
-      inp.addEventListener('change', function(){
-        var tr = inp.closest('tr'), no = tr.getAttribute('data-trk'), st = tr.querySelector('[data-s]');
-        var body = {}; body[inp.getAttribute('data-f')] = inp.value;
-        st.textContent = 'Saving…';
-        api(wbBase(cust) + '/blogs/' + no + '/tracking?month=' + encodeURIComponent(wb.month), { method: 'PUT', body: body }).then(function(r){
-          st.textContent = 'Saved' + (r.status === 'published' ? ' · Published' : '');
-        }).catch(function(e){ st.textContent = e.message; });
-      });
-    });
-    Array.prototype.forEach.call(box.querySelectorAll('button[data-pub]'), function(el){
-      el.addEventListener('click', function(){
-        var no = el.getAttribute('data-pub'), tr = el.closest('tr'), st = tr.querySelector('[data-s]');
-        if (!confirm('Publish blog ' + no + ' to the customer\'s live website now? This posts it for real.')) return;
-        el.disabled = true; st.textContent = 'Publishing…';
-        api(wbBase(cust) + '/blogs/' + no + '/publish-api?month=' + encodeURIComponent(wb.month), { method: 'POST', body: {} }).then(function(r){
-          loadWebsiteBlog(cust, box);
-        }).catch(function(e){ el.disabled = false; st.innerHTML = '<span style="color:var(--fail)">' + escapeHtml(e.message) + '</span>'; });
-      });
-    });
     document.getElementById('wbReload').addEventListener('click', function(){ loadWebsiteBlog(cust, box); });
     document.getElementById('wbPushAll').addEventListener('click', function(){
       if (!confirm('Push every written draft to the customer panel?')) return;
@@ -1077,16 +1046,79 @@
     }).catch(function(e){ ed.innerHTML = '<p class="muted">Could not open blog: ' + escapeHtml(e.message) + '</p>'; });
   }
 
-  // ---- Layers 22 / 23 / 24 · Blog Tier 1 / 2 / 3: import inputs, write, publish, Final Output Table ----
-  var TB_META = { 22: { name: 'Blog Tier 1', src: 'Layer 16 Tier 1 Mapping + Layer 18 Platform Mapping', range: '800-1000 words' },
-                  23: { name: 'Blog Tier 2', src: 'Layer 17 Tier 2 Mapping + Layer 19 Platform Mapping', range: '600-800 words' },
-                  24: { name: 'Blog Tier 3', src: 'Layer 17 Tier 3 Mapping + Layer 20 Platform Mapping', range: '600 words (570-630)' } };
-  var tb = { 22: {}, 23: {}, 24: {} };
+
+  // ---- Layer 22 · Website Blog Publish: in month M the Admin publishes the blogs produced in M-1 (Layer 21) ----
+  var wp22 = { cid: null, month: null, data: null };
+  function wpBase(cust) { return '/customers/' + cust.id + '/layer22'; }
+  function mountWebsitePublish(cust) {
+    var cm = currentMonth(), box = document.getElementById('l22Box');
+    if (!box || !cm) return;
+    wp22.cid = cust.id; wp22.month = cm.monthCode;
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 22…</p></section>';
+    loadWebsitePublish(cust, box);
+  }
+  function loadWebsitePublish(cust, box) {
+    api(wpBase(cust) + '?month=' + encodeURIComponent(wp22.month)).then(function(d){
+      if (document.getElementById('l22Box') !== box || wp22.cid !== cust.id) return;
+      wp22.data = d; drawWebsitePublish(cust, box);
+    }).catch(function(err){
+      if (document.getElementById('l22Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 22: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+  function drawWebsitePublish(cust, box) {
+    var d = wp22.data;
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 22 · Next month</span>Website Blog Publish</h2>';
+    if (!d.applicable) {
+      box.innerHTML = h + '<p class="muted">' + escapeHtml(d.month) + ' has no blogs to publish: Layer 22 publishes the previous month\'s Layer 21 blogs, so it starts in M1.</p></section>';
+      return;
+    }
+    h += '<p class="muted" style="margin:4px 0 12px">' + escapeHtml(d.month) + ' · publishing the ' + escapeHtml(d.sourceMonth) + ' blogs · ' + d.ready + ' / ' + d.expected + ' approved and ready · ' + d.published + ' published. ' +
+      'Add the date, target page and live blog URL for each blog (saves when you leave a field). A URL on an approved blog marks it Published. <b>Publish via API</b> posts an approved blog to the customer\'s own website API. The customer panel shows the published blogs as they go live.</p>' +
+      '<div style="display:flex;gap:8px;margin:0 0 12px"><button class="btn" id="wpReload">Refresh</button></div>' +
+      '<div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table><thead><tr><th>Blog</th><th>Title</th><th>Date</th><th>Target page</th><th>Published blog URL</th><th>Status</th><th>Admin</th></tr></thead><tbody>' +
+      d.blogs.map(function(b){
+        return '<tr data-trk="' + b.blogNo + '"><td><b>' + b.blogNo + '</b></td><td style="min-width:200px">' + escapeHtml(b.title || '—') + '</td>' +
+          '<td><input type="date" data-f="publishDate" value="' + escapeHtml(b.publishDate ? String(b.publishDate).slice(0, 10) : '') + '"></td>' +
+          '<td style="min-width:260px"><input data-f="targetWebpage" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.targetWebpage || '') + '"></td>' +
+          '<td style="min-width:300px"><input data-f="blogUrl" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.blogUrl || '') + '"></td>' +
+          '<td class="muted" data-s style="white-space:nowrap">' + escapeHtml(b.statusLabel) + (b.publishError ? ' · <span style="color:var(--fail)">' + escapeHtml(b.publishError) + '</span>' : '') + '</td>' +
+          '<td>' + (b.ready && !b.blogUrl ? '<button class="btn" data-pub="' + b.blogNo + '">Publish via API</button>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>';
+    box.innerHTML = h;
+    Array.prototype.forEach.call(box.querySelectorAll('tr[data-trk] input'), function(inp){
+      inp.addEventListener('change', function(){
+        var tr = inp.closest('tr'), no = tr.getAttribute('data-trk'), st = tr.querySelector('[data-s]');
+        var body = {}; body[inp.getAttribute('data-f')] = inp.value;
+        st.textContent = 'Saving…';
+        api(wpBase(cust) + '/blogs/' + no + '/tracking?month=' + encodeURIComponent(wp22.month), { method: 'PUT', body: body }).then(function(r){
+          st.textContent = 'Saved · ' + r.statusLabel;
+        }).catch(function(e){ st.textContent = e.message; });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('button[data-pub]'), function(el){
+      el.addEventListener('click', function(){
+        var no = el.getAttribute('data-pub'), st = el.closest('tr').querySelector('[data-s]');
+        if (!confirm('Publish blog ' + no + ' to the customer\'s live website now? This posts it for real.')) return;
+        el.disabled = true; st.textContent = 'Publishing…';
+        api(wpBase(cust) + '/blogs/' + no + '/publish-api?month=' + encodeURIComponent(wp22.month), { method: 'POST', body: {} }).then(function(){
+          loadWebsitePublish(cust, box);
+        }).catch(function(e){ el.disabled = false; st.innerHTML = '<span style="color:var(--fail)">' + escapeHtml(e.message) + '</span>'; });
+      });
+    });
+    document.getElementById('wpReload').addEventListener('click', function(){ loadWebsitePublish(cust, box); });
+  }
+
+  // ---- Layers 23 / 24 / 25 · Blog Tier 1 / 2 / 3: import inputs, write, publish, Final Output Table ----
+  var TB_META = { 23: { name: 'Blog Tier 1', src: 'Layer 16 Tier 1 Mapping + Layer 18 Platform Mapping', range: '800-1000 words' },
+                  24: { name: 'Blog Tier 2', src: 'Layer 17 Tier 2 Mapping + Layer 19 Platform Mapping', range: '600-800 words' },
+                  25: { name: 'Blog Tier 3', src: 'Layer 17 Tier 3 Mapping + Layer 20 Platform Mapping', range: '600 words (570-630)' } };
+  var tb = { 23: {}, 24: {}, 25: {} };
   function tbBase(cust, L) { return '/customers/' + cust.id + '/tier-blogs/' + L; }
   function mountTierBlogs(cust) {
     var cm = currentMonth();
     if (!cm) return;
-    [22, 23, 24].forEach(function(L){
+    [23, 24, 25].forEach(function(L){
       var box = document.getElementById('l' + L + 'Box');
       if (!box) return;
       tb[L] = { cid: cust.id, month: cm.monthCode, page: 1, site: '', status: '', q: '', edit: null, data: null };
@@ -1188,7 +1220,7 @@
       ed.innerHTML = h; ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
       var g = function(x){ return document.getElementById(p + x); };
       var rich = g('Rich'), src = g('Html'), srcOn = false;
-      var range = { 22: [800, 1000], 23: [600, 800], 24: [570, 630] }[L];
+      var range = { 23: [800, 1000], 24: [600, 800], 25: [570, 630] }[L];
       var words = function(){ var t = srcOn ? src.value.replace(/<[^>]+>/g, ' ') : (rich.innerText || ''); var n = t.trim() ? t.trim().split(/\s+/).length : 0; var w = g('W'); w.textContent = n; w.style.color = n && (n < range[0] || n > range[1]) ? 'var(--fail)' : 'inherit'; };
       words(); rich.addEventListener('input', words); src.addEventListener('input', words);
       Array.prototype.forEach.call(ed.querySelectorAll('#' + p + 'Tools button[data-cmd]'), function(el){

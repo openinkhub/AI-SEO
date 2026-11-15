@@ -1,10 +1,10 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
 import type { LinkStep, OutlineItem } from './cluster.plan';
 
-// Layers 22 / 23 / 24 - Blog Tier 1 / Tier 2 / Tier 3. One row per article of the month (180 / 180 / 540):
+// Layers 23 / 24 / 25 - Blog Tier 1 / Tier 2 / Tier 3. One row per article of the month (180 / 180 / 540):
 // imported from the mapping layers (Tier 1 = Layers 16 + 18, Tier 2 = 17 + 19, Tier 3 = 17 + 20), written by the Admin,
 // then published (live URL). The Final Output Table is the customer's view once every article is published.
-export const TIER_LAYERS = [22, 23, 24] as const;
+export const TIER_LAYERS = [23, 24, 25] as const;
 export type TierStatus = 'pending' | 'written' | 'published';
 
 @Entity('tier_blogs')

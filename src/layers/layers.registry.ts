@@ -21,16 +21,17 @@ export interface LayerDef {
 export const SECTION_LABELS: Record<string, string> = {"profile": "Profile", "research-publish": "Research & Publish", "on-page": "On Page SEO", "off-page": "Off Page SEO", "technical": "Technical SEO", "local": "Local SEO", "social": "Social Media", "international": "International SEO"};
 
 // Layers built in the Engine so far (built numerically: Layer 1, then 2, 3, ...).
-export const BUILT_LAYERS: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+export const BUILT_LAYERS: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
 
 const R = (layer: number, key: string, name: string, visibility: 'customer' | 'admin', expected: number, section: string, subsection: string, day: number | null, dayLabel: string, fromMonth: number, toMonth: number, note: string, internalStorage = false): LayerDef => ({ layer, key, name, visibility, expected, section, subsection, day, dayLabel, fromMonth, toMonth, note, internalStorage });
 
-// PARKED (decided 2026-11-15): Layers 22-24 became Blog Tier 1 / 2 / 3. The previous definitions are kept here, unchanged, for the next step
+// PARKED (decided 2026-11-15): Layers 22-25 were re-used (22 Website Blog Publish, 23-25 Blog Tier 1 / 2 / 3). The previous definitions are kept here, unchanged, for the next step
 // (they get new layer numbers later). Not part of LAYER_REGISTRY, so no schedule rows are created for them.
 export const PARKED_LAYER_DEFS: string[] = [
   "R(22, \"website_content\", \"Website Content\", \"customer\", 8, \"on-page\", \"website-development\", 22, \"Day 22\", 0, 12, \"\"),",
   "R(23, \"website_blog_post_daily\", \"Website Blog Post \u2014 Daily Publishing\", \"customer\", 30, \"off-page\", \"website-blog-post\", 1, \"Day 1\u201330 (daily)\", 1, 12, \"Not applicable in M0\"),",
   "R(24, \"blog_1_submission_storage\", \"Blog 1.0 Submission \u2014 Legacy Aggregate Storage\", \"admin\", 240, \"off-page\", \"blog-1-submission\", 1, \"Day 1 (storage)\", 0, 0, \"M0 aggregate (Team Assignment) storage; M1+ uses daily Layers\", true),",
+  "R(25, \"blog_2_submission_storage\", \"Blog 2.0 Submission \u2014 Legacy Aggregate Storage\", \"admin\", 240, \"off-page\", \"blog-2-submission\", 1, \"Day 1 (storage)\", 0, 0, \"M0 aggregate (Team Assignment) storage; M1+ uses daily Layers\", true),",
 ];
 
 export const LAYER_REGISTRY: LayerDef[] = [
@@ -54,11 +55,11 @@ export const LAYER_REGISTRY: LayerDef[] = [
   R(18, "write_primary", "Tier 1 Platform Mapping", "customer", 180, "research-publish", "layers", 18, "Day 18", 0, 12, ""),
   R(19, "write_subprimary", "Tier 2 Platform Mapping", "customer", 180, "research-publish", "layers", 19, "Day 19", 0, 12, ""),
   R(20, "write_secondary", "Tier 3 Platform Mapping", "customer", 540, "research-publish", "layers", 20, "Day 20", 0, 12, ""),
-  R(21, "website_blog", "Website Blog — Next Month Production", "customer", 30, "research-publish", "layers", 21, "Day 21", 0, 12, ""),
-  R(22, "blog_tier_1", "Blog Tier 1", "customer", 180, "research-publish", "layers", 22, "Day 22", 0, 12, "Imports Layer 16 + 18; 800-1000 words"),
-  R(23, "blog_tier_2", "Blog Tier 2", "customer", 180, "research-publish", "layers", 23, "Day 23", 0, 12, "Imports Layer 17 (Tier 2) + 19; 600-800 words"),
-  R(24, "blog_tier_3", "Blog Tier 3", "customer", 540, "research-publish", "layers", 24, "Day 24", 0, 12, "Imports Layer 17 (Tier 3) + 20; 600 words"),
-  R(25, "blog_2_submission_storage", "Blog 2.0 Submission — Legacy Aggregate Storage", "admin", 240, "off-page", "blog-2-submission", 1, "Day 1 (storage)", 0, 0, "M0 aggregate (Team Assignment) storage; M1+ uses daily Layers", true),
+  R(21, "website_blog", "Website Blog Production", "customer", 30, "research-publish", "layers", 21, "Day 21–30 (for next month)", 0, 12, "Produced Day 21-30 for posting next month; 1000-1200 words"),
+  R(22, "website_blog_publish", "Website Blog Publish", "customer", 30, "research-publish", "layers", 1, "Next month (Day 1–30)", 1, 12, "Publishes the previous month's Layer 21 blogs"),
+  R(23, "blog_tier_1", "Blog Tier 1", "customer", 180, "research-publish", "layers", 23, "Day 23", 0, 12, "Imports Layer 16 + 18; 800-1000 words"),
+  R(24, "blog_tier_2", "Blog Tier 2", "customer", 180, "research-publish", "layers", 24, "Day 24", 0, 12, "Imports Layer 17 (Tier 2) + 19; 600-800 words"),
+  R(25, "blog_tier_3", "Blog Tier 3", "customer", 540, "research-publish", "layers", 25, "Day 25", 0, 12, "Imports Layer 17 (Tier 3) + 20; 600 words"),
   R(26, "website_audit", "Website Audit & Tracking", "customer", 8, "technical", "website-audit", 26, "Day 26", 0, 12, ""),
   R(27, "google_analytics_hub", "Google Analytics — Google API Approval Hub", "customer", 12, "technical", "google-analytics", 27, "Day 27", 0, 12, ""),
   R(28, "blog_3_submission_storage", "Blog 3.0 Submission — Legacy Aggregate Storage", "admin", 240, "off-page", "blog-3-submission", 1, "Day 1 (storage)", 0, 0, "M0 aggregate (Team Assignment) storage; M1+ uses daily Layers", true),
