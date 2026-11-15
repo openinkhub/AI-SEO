@@ -826,7 +826,8 @@
       h += '<p class="muted" style="margin:0 0 8px">Layers 4-14 used in this cluster: ' + Object.keys(cv).map(function(k){ var c = cv[k]; return (CVN[k] || k) + ' ' + c.used + '/' + c.total + (c.used < c.total ? ' <b>(' + (c.total - c.used) + ' unused)</b>' : ''); }).join(' · ') + '</p>';
     }
     h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '"' + (d.needsPages ? ' disabled' : '') + '>Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
-    if (!d.records.length) h += '<p class="muted">No articles yet.</p>';
+    if (!d.records.length && d.copy) h += '<h3 style="margin:8px 0">Copied plugin grid</h3>' + wpCopyTable(d.copy);
+    else if (!d.records.length) h += '<p class="muted">No articles yet.</p>';
     else {
       var kwHead = n === 15 ? '<th>H1</th><th>H2</th><th>H3 (11-B)</th><th>H4 (11-C)</th><th>PAA</th><th>Similar</th><th>FAQ</th><th>Quora</th>' : '<th>Supporting keyword</th><th>Links to</th><th>Anchor</th>';
       h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>' + (n === 15 ? 'Page' : 'Site') + '</th><th>Role</th><th>Primary keyword</th>' + kwHead + '<th>Title</th><th>Meta title</th><th>Meta description</th><th>Meta tags</th><th>Intent</th><th>Stage</th><th>Publish</th><th>Brief</th></tr></thead><tbody>';
@@ -862,14 +863,36 @@
       };
     }
   }
+
+  // ---- Layers 15-20 copied as they are from the WP plugin (read-only grids) ----
+  function wpCopyTable(c) {
+    var h = '<p class="muted" style="margin:0 0 8px">Copied from the WP plugin (' + escapeHtml(c.month) + ') · ' + c.rowCount + '/' + c.expected + ' rows · not recomputed.</p><div style="overflow-x:auto;max-height:520px;overflow-y:auto"><table class="tbl"><thead><tr>' +
+      c.columns.map(function(x){ return '<th>' + escapeHtml(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    c.rows.forEach(function(r){ h += '<tr>' + r.map(function(v, i){ return i === 0 ? '<td><b>' + escapeHtml(v) + '</b></td>' : '<td style="min-width:' + (v && v.length > 40 ? 220 : 90) + 'px">' + escapeHtml(v) + '</td>'; }).join('') + '</tr>'; });
+    return h + '</tbody></table></div>';
+  }
+  var WPC_CFG = { 18: 'Layer 18 · Day 18 · Primary Publishing Preparation', 19: 'Layer 19 · Day 19 · Sub-Primary Publishing Preparation', 20: 'Layer 20 · Day 20 · Secondary Publishing Preparation' };
+  function mountWpCopy(cust) {
+    var cm = currentMonth();
+    if (!cm) return;
+    [18, 19, 20].forEach(function(n){
+      var box = document.getElementById('l' + n + 'Box');
+      if (!box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Loading Layer ' + n + '...</p></section>';
+      api('/customers/' + cust.id + '/layers-wp?month=' + encodeURIComponent(cm.monthCode) + '&layer=' + n).then(function(c){
+        if (document.getElementById('l' + n + 'Box') !== box) return;
+        box.innerHTML = '<section class="card"><h2>' + escapeHtml(WPC_CFG[n]) + '</h2>' + (c && c.rows ? wpCopyTable(c) : '<p class="muted">Not copied or built yet for ' + escapeHtml(cm.monthCode) + '.</p>') + '</section>';
+      }).catch(function(err){ if (document.getElementById('l' + n + 'Box') === box) box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + n + ': ' + escapeHtml(err.message) + '</p></section>'; });
+    });
+  }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div>';
     html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountWpCopy(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
   }
 

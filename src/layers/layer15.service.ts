@@ -6,6 +6,7 @@ import { Customer } from '../customers/customer.entity';
 import { WebsitePage } from '../page-images/website-page.entity';
 import { todayInTz } from '../projects/month-cycle';
 import { LayersService } from './layers.service';
+import { WpLayerCopyService } from './wp-layer-copy.service';
 import { ConsolidatedRecord } from './consolidation.entities';
 import { Layer11Master, Layer12State, Layer14Row } from './layer12.entities';
 import { ClusterArticle, ClusterPageRow } from './layer15.entities';
@@ -38,6 +39,7 @@ export class Layer15Service implements OnModuleInit {
     @InjectRepository(Layer12State) private readonly sr: Repository<Layer12State>,
     @InjectRepository(Project) private readonly projects: Repository<Project>,
     private readonly layers: LayersService,
+    private readonly copies: WpLayerCopyService,
   ) {}
 
   onModuleInit() {
@@ -232,6 +234,8 @@ export class Layer15Service implements OnModuleInit {
       pages: picks.map((p) => ({ slot: p.slot, pageUrl: p.pageUrl, pageName: p.pageName, primaryKeyword: p.primaryKeyword })),
       checks: checks ? { ok: checks.ok && !Object.values(coverage || {}).some((c) => c.used < c.total), counts: checks.counts, reuse: checks.reuse, coverage, problems: [...checks.problems, ...Object.entries(coverage || {}).filter(([, c]) => c.used < c.total).map(([k, c]) => `coverage ${k}: ${c.total - c.used} of ${c.total} items never used`)] } : null,
       records: rows.map((r) => this.recordOf(r)),
+      // Layers 15-17 copied as they are from the WP plugin (shown while the Engine's own cluster is not built for the month).
+      copy: await this.copies.get(customerId, project.monthCode, layerNo),
     };
   }
 
@@ -259,6 +263,7 @@ export class Layer15Service implements OnModuleInit {
     const project = await this.monthOf(customerId, month).catch(() => null);
     if (!project) return { layer: layerNo, complete: false, month: null, total: 0, expected, html: '', platforms: [] };
     const [rows, l12] = await Promise.all([this.ar.find({ where: { projectId: project.id, layerNo }, order: { seq: 'ASC' } }), this.l12Complete(project.id)]);
+    if (!rows.length && (await this.copies.has(customerId, project.monthCode, layerNo))) return this.copies.customerTable(customerId, project.monthCode, layerNo);
     const complete = rows.length === expected && l12;
     return { layer: layerNo, complete, month: project.monthCode, total: rows.length, expected, html: complete ? renderClusterHtml(layerNo, rows) : '', platforms: [] };
   }
@@ -266,6 +271,7 @@ export class Layer15Service implements OnModuleInit {
   async removeByCustomer(customerId: string) {
     await this.ar.delete({ customerId });
     await this.pr.delete({ customerId });
+    await this.copies.removeByCustomer(customerId);
   }
 }
 
