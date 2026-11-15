@@ -55,6 +55,8 @@ export class ClusterArticle {
   @Column({ type: 'varchar', length: 500, nullable: true }) similar: string | null;
   @Column({ type: 'varchar', length: 500, nullable: true }) faq: string | null;
   @Column({ type: 'varchar', length: 500, nullable: true }) quora: string | null;
+  // Layer 4 AI search keyword (Layer 17 only)
+  @Column({ type: 'varchar', length: 500, nullable: true }) aiKeyword: string | null;
   @Column({ type: 'varchar', length: 500 }) primaryKeyword: string;
   @Column({ type: 'varchar', length: 8 }) hierarchy: string;
   @Column({ type: 'simple-json', nullable: true }) secondaryKeywords: string[] | null;

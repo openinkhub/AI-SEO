@@ -7,17 +7,19 @@ import { WebsitePage } from '../page-images/website-page.entity';
 import { todayInTz } from '../projects/month-cycle';
 import { LayersService } from './layers.service';
 import { ConsolidatedRecord } from './consolidation.entities';
-import { Layer12State, Layer14Row } from './layer12.entities';
+import { Layer11Master, Layer12State, Layer14Row } from './layer12.entities';
 import { ClusterArticle, ClusterPageRow } from './layer15.entities';
-import { ArticleDraft, CLUSTER, ClusterInput, PoolItem, checkPlan, planCluster } from './cluster.plan';
+import { ArticleDraft, CLUSTER, ClusterInput, PoolItem, checkPlan, norm, planCluster } from './cluster.plan';
 
 // Layers 15, 16, 17 - Topical Blog Intent cluster. The Admin picks 6 target pages; the Engine plans 930 articles with the complete writing
 // brief (keyword mapping + template/meta algorithm, local - no API call): Layer 15 = 30 website blogs, Layer 16 = 180 Tier 1, Layer 17 = 180 Tier 2 + 540 Tier 3.
 export const L15_LAYERS = [15, 16, 17];
 export const L15_EXPECTED: Record<number, number> = { 15: 30, 16: 180, 17: 720 };
 export const L15_NAMES: Record<number, string> = { 15: 'Website Blog Cluster Plan', 16: 'Tier 1 Mapping', 17: 'Tier 2 and Tier 3 Mapping' };
-const BLOCKS: Array<{ key: 'h3' | 'h4' | 'paa' | 'similar' | 'faq' | 'quora'; block: string }> = [
-  { key: 'h3', block: 'L5' }, { key: 'h4', block: 'L6' }, { key: 'paa', block: 'L7' }, { key: 'similar', block: 'L8' }, { key: 'faq', block: 'L9' }, { key: 'quora', block: 'L10' },
+// Consolidated blocks (Layers 4-10) -> article fields. Layers 11-14 supply the keyword pool (h2).
+const BLOCKS: Array<{ key: 'l4' | 'h3' | 'h4' | 'paa' | 'similar' | 'faq' | 'quora'; block: string; tag: string }> = [
+  { key: 'l4', block: 'L4', tag: 'L4' }, { key: 'h3', block: 'L5', tag: '11-B' }, { key: 'h4', block: 'L6', tag: '11-C' }, { key: 'paa', block: 'L7', tag: '11-D' },
+  { key: 'similar', block: 'L8', tag: '11-E' }, { key: 'faq', block: 'L9', tag: '11-F' }, { key: 'quora', block: 'L10', tag: '11-G' },
 ];
 
 @Injectable()
@@ -31,6 +33,7 @@ export class Layer15Service implements OnModuleInit {
     @InjectRepository(WebsitePage) private readonly wp: Repository<WebsitePage>,
     @InjectRepository(Customer) private readonly customers: Repository<Customer>,
     @InjectRepository(Layer14Row) private readonly fr: Repository<Layer14Row>,
+    @InjectRepository(Layer11Master) private readonly mr: Repository<Layer11Master>,
     @InjectRepository(ConsolidatedRecord) private readonly cr: Repository<ConsolidatedRecord>,
     @InjectRepository(Layer12State) private readonly sr: Repository<Layer12State>,
     @InjectRepository(Project) private readonly projects: Repository<Project>,
@@ -89,11 +92,38 @@ export class Layer15Service implements OnModuleInit {
   }
 
   // ---- build ----
+  // The pools of Layers 4-14. Keyword pool = Layer 14 first, ordered by rank AND opportunity score (sum of the two positions, rank breaks ties),
+  // then the rest of the Layer 11-13 master keywords by rank. Blocks L4..L10 come in their consolidated (weighted) order.
   private async poolsOf(project: Project) {
-    const [l14, cons] = await Promise.all([this.fr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }), this.cr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } })]);
+    const [l14, master, cons] = await Promise.all([
+      this.fr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }),
+      this.mr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }),
+      this.cr.find({ where: { projectId: project.id }, order: { rank: 'ASC' } }),
+    ]);
+    const byOpp = [...l14].sort((a, b) => (b.opportunity || 0) - (a.opportunity || 0) || a.rank - b.rank);
+    const oppPos = new Map(byOpp.map((r, i) => [r.id, i]));
+    const keywords: PoolItem[] = l14.map((r, i) => ({ text: r.keyword, rank: r.rank, tag: r.hierarchy, prio: i + (oppPos.get(r.id) ?? i) + i / 1000 }));
+    const inL14 = new Set(l14.map((r) => norm(r.keyword)));
+    master.filter((m) => !inL14.has(norm(m.keyword))).forEach((m, i) => keywords.push({ text: m.keyword, rank: m.rank, tag: 'M', prio: 100000 + i }));
     const pools: Record<string, PoolItem[]> = {};
     for (const b of BLOCKS) pools[b.key] = cons.filter((c) => c.block === b.block).map((c) => ({ text: c.record, rank: c.rank }));
-    return { l14: l14.map((r) => ({ text: r.keyword, rank: r.rank, tag: r.hierarchy })), pools: pools as ClusterInput['pools'] };
+    return { l14: keywords, pools: pools as unknown as ClusterInput['pools'] };
+  }
+
+  // Layers 4-14 coverage: how many items of every pool appear in at least one article (the plan must use every item at least once).
+  async coverage(project: Project, rows: ClusterArticle[]) {
+    const { l14, pools } = await this.poolsOf(project);
+    const uniq = (xs: PoolItem[]) => new Set(xs.map((x) => norm(x.text)).filter(Boolean));
+    const used = (f: (r: ClusterArticle) => Array<string | null>) => { const u = new Set<string>(); for (const r of rows) for (const v of f(r)) if (v) u.add(norm(v)); return u; };
+    const spec: Array<[string, Set<string>, Set<string>]> = [
+      ['L14', uniq(l14), used((r) => [r.h1, r.h2, r.primaryKeyword])],
+      ['L4', uniq(pools.l4 || []), used((r) => [r.aiKeyword])],
+      ['11-B', uniq(pools.h3), used((r) => [r.h3])], ['11-C', uniq(pools.h4), used((r) => [r.h4])], ['11-D', uniq(pools.paa), used((r) => [r.paa])],
+      ['11-E', uniq(pools.similar), used((r) => [r.similar])], ['11-F', uniq(pools.faq), used((r) => [r.faq])], ['11-G', uniq(pools.quora), used((r) => [r.quora])],
+    ];
+    const out: Record<string, { total: number; used: number }> = {};
+    for (const [k, all, u] of spec) { let n = 0; for (const x of all) if (u.has(x)) n++; out[k] = { total: all.size, used: n }; }
+    return out;
   }
 
   private nextMonthStart(project: Project): string {
@@ -128,7 +158,7 @@ export class Layer15Service implements OnModuleInit {
     return this.ar.create({
       customerId: project.customerId, projectId: project.id, monthIndex: project.monthIndex, layerNo: a.layerNo, tier: a.tier, code: a.code, seq: a.seq, blogNo: a.blogNo, pageSlot: a.pageSlot,
       articleInPage: a.articleInPage, siteNo: a.siteNo, subSite: a.subSite, articleNo: a.articleNo, parentCode: a.parentCode, targetPageUrl: a.targetPageUrl,
-      h1: a.h1, h2: a.h2, h3: a.h3, h4: a.h4, paa: a.paa, similar: a.similar, faq: a.faq, quora: a.quora, primaryKeyword: a.primaryKeyword, hierarchy: a.hierarchy,
+      h1: a.h1, h2: a.h2, h3: a.h3, h4: a.h4, paa: a.paa, similar: a.similar, faq: a.faq, quora: a.quora, aiKeyword: a.aiKeyword, primaryKeyword: a.primaryKeyword, hierarchy: a.hierarchy,
       secondaryKeywords: a.secondaryKeywords, sources: a.sources, role: a.role, title: a.title, slug: a.slug, metaTitle: a.metaTitle, metaDescription: a.metaDescription, metaTags: a.metaTags,
       intentType: a.intentType, journeyStage: a.journeyStage, objective: a.objective, angle: a.angle, audience: a.audience, tone: a.tone, intro: a.intro, outline: a.outline,
       wordTarget: a.wordTarget, placementRules: a.placementRules, linkPlan: a.linkPlan, anchorText: a.anchorText, cta: a.cta, schemaType: a.schemaType, imageBrief: a.imageBrief,
@@ -193,12 +223,14 @@ export class Layer15Service implements OnModuleInit {
       this.fr.count({ where: { projectId: project.id } }),
     ]);
     const expected = L15_EXPECTED[layerNo];
-    const checks = all === CLUSTER.total ? await this.checksOf(await this.ar.find({ where: { projectId: project.id } })) : null;
+    const full = all === CLUSTER.total ? await this.ar.find({ where: { projectId: project.id } }) : null;
+    const checks = full ? await this.checksOf(full) : null;
+    const coverage = full ? await this.coverage(project, full) : null;
     return {
       layer: layerNo, month: project.monthCode, total: rows.length, expected, complete: rows.length === expected && l12, layer14Complete: l12, hasLayer14: l14 > 0,
       needsPages: picks.length !== CLUSTER.pages,
       pages: picks.map((p) => ({ slot: p.slot, pageUrl: p.pageUrl, pageName: p.pageName, primaryKeyword: p.primaryKeyword })),
-      checks: checks ? { ok: checks.ok, counts: checks.counts, reuse: checks.reuse, problems: checks.problems } : null,
+      checks: checks ? { ok: checks.ok && !Object.values(coverage || {}).some((c) => c.used < c.total), counts: checks.counts, reuse: checks.reuse, coverage, problems: [...checks.problems, ...Object.entries(coverage || {}).filter(([, c]) => c.used < c.total).map(([k, c]) => `coverage ${k}: ${c.total - c.used} of ${c.total} items never used`)] } : null,
       records: rows.map((r) => this.recordOf(r)),
     };
   }
@@ -206,7 +238,7 @@ export class Layer15Service implements OnModuleInit {
   private recordOf(r: ClusterArticle) {
     return {
       code: r.code, tier: r.tier, blogNo: r.blogNo, pageSlot: r.pageSlot, articleInPage: r.articleInPage, siteNo: r.siteNo, subSite: r.subSite, articleNo: r.articleNo, parentCode: r.parentCode,
-      targetPageUrl: r.targetPageUrl, h1: r.h1, h2: r.h2, h3: r.h3, h4: r.h4, paa: r.paa, similar: r.similar, faq: r.faq, quora: r.quora, primaryKeyword: r.primaryKeyword, hierarchy: r.hierarchy,
+      targetPageUrl: r.targetPageUrl, h1: r.h1, h2: r.h2, h3: r.h3, h4: r.h4, paa: r.paa, similar: r.similar, faq: r.faq, quora: r.quora, aiKeyword: r.aiKeyword, primaryKeyword: r.primaryKeyword, hierarchy: r.hierarchy,
       secondaryKeywords: r.secondaryKeywords, role: r.role, title: r.title, slug: r.slug, metaTitle: r.metaTitle, metaDescription: r.metaDescription, metaTags: r.metaTags,
       intentType: r.intentType, journeyStage: r.journeyStage, objective: r.objective, angle: r.angle, audience: r.audience, tone: r.tone, intro: r.intro, outline: r.outline,
       wordTarget: r.wordTarget, placementRules: r.placementRules, linkPlan: r.linkPlan, anchorText: r.anchorText, cta: r.cta, schemaType: r.schemaType, imageBrief: r.imageBrief, avoid: r.avoid,

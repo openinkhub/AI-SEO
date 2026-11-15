@@ -10,15 +10,15 @@
 // keyword mapping, title, meta title (<=60), meta description (<=155), meta tags, slug, intent, journey stage, objective, angle,
 // audience/tone, intro, outline, word target, keyword-placement rules, link plan with anchor text, CTA, schema, image brief, dates.
 
-export interface PoolItem { text: string; rank: number; tag?: string }
+export interface PoolItem { text: string; rank: number; tag?: string; prio?: number } // prio: lower = higher priority (rank + opportunity score); defaults to rank
 export interface ClusterPage { id: string; url: string; name: string | null; h1: string | null }
 export interface ClusterInput {
   brand: string;
   industry?: string | null;
   nextMonthStart: string; // YYYY-MM-DD, first day of the cycle the articles publish in
   pages: ClusterPage[]; // the 6 Admin-picked target pages, in pick order
-  l14: PoolItem[]; // Layer 14 keywords (rank order); tag = 'H1' | 'H2'
-  pools: { h3: PoolItem[]; h4: PoolItem[]; paa: PoolItem[]; similar: PoolItem[]; faq: PoolItem[]; quora: PoolItem[] };
+  l14: PoolItem[]; // keyword pool: Layer 14 rows first (tag H1 | H2, prio from rank + opportunity score), then the other Layer 11-13 master keywords (tag M)
+  pools: { h3: PoolItem[]; h4: PoolItem[]; paa: PoolItem[]; similar: PoolItem[]; faq: PoolItem[]; quora: PoolItem[]; l4?: PoolItem[] };
 }
 
 export const CLUSTER = { pages: 6, perPage: 5, blogs: 30, tier1PerBlog: 6, siteArticles: 6, tier3PerTier2Site: 3, total: 930 };
@@ -45,6 +45,7 @@ export interface ArticleDraft {
   targetPageUrl: string;
   // keyword mapping
   h1: string | null; h2: string | null; h3: string | null; h4: string | null; paa: string | null; similar: string | null; faq: string | null; quora: string | null;
+  aiKeyword: string | null; // Layer 4 AI search keyword (Layer 17 only)
   primaryKeyword: string;
   hierarchy: string; // where the primary keyword comes from: H1 | H2 | 11-B .. 11-G
   secondaryKeywords: string[];
@@ -139,11 +140,18 @@ export function intentOf(kw: string): Intent {
 }
 const journeyOf = (i: Intent): Journey => (i === 'Informational' ? 'Awareness' : i === 'Transactional' ? 'Decision' : 'Consideration');
 
-// ---------- picker: least-used first, then most relevant to the context, then best rank ----------
+// ---------- picker ----------
+// Layers 15 and 16 pick GATED: only items related to the article's target page (shares a page-specific word; the page's own words and its
+// Layer 14 keyword), least-used first, then best priority (rank + opportunity score), then closest match. Layer 17 picks FREE: unused items
+// first (the rest nobody used yet), then the closest match to the parent article, then best priority. An item is repeated only when every
+// eligible item has already been used (or a pool is smaller than the number of articles).
+type Pick = PoolItem & { reused: boolean; unmatched?: boolean };
 class Picker {
   private uses: number[];
   private toks: Array<Set<string>>;
   private keys: string[];
+  private score: number[][] = [];
+  private elig: boolean[][] = [];
   readonly items: PoolItem[];
   constructor(items: PoolItem[]) {
     const seen = new Set<string>();
@@ -153,28 +161,60 @@ class Picker {
       const n = norm(t);
       if (!n || seen.has(n)) continue;
       seen.add(n);
-      this.items.push({ text: t, rank: i.rank, tag: i.tag });
+      this.items.push({ text: t, rank: i.rank, tag: i.tag, prio: i.prio });
     }
     this.uses = this.items.map(() => 0);
     this.toks = this.items.map((i) => tokens(i.text));
     this.keys = this.items.map((i) => norm(i.text));
   }
   get size(): number { return this.items.length; }
-  pick(ctx: Set<string>, avoid?: Set<string>): (PoolItem & { reused: boolean }) | null {
-    let best = -1;
-    let bu = Infinity, bs = -1, br = Infinity;
+  stats(): { total: number; used: number } { return { total: this.items.length, used: this.uses.filter((u) => u > 0).length }; }
+  private prio(i: number): number { const p = this.items[i].prio; return p === undefined ? this.items[i].rank : p; }
+  // Page-specific relevance: a shared word counts 1 / (number of pages that contain it), so a word common to every page decides nothing.
+  gate(pageToks: Array<Set<string>>): void {
+    const df = new Map<string, number>();
+    for (const s of pageToks) for (const t of s) df.set(t, (df.get(t) || 0) + 1);
+    this.score = pageToks.map(() => new Array(this.items.length).fill(0));
+    this.elig = pageToks.map(() => new Array(this.items.length).fill(false));
+    for (let i = 0; i < this.items.length; i++) {
+      let max = 0;
+      pageToks.forEach((pt, p) => { let sc = 0; for (const t of this.toks[i]) if (pt.has(t)) sc += 1 / (df.get(t) || 1); this.score[p][i] = sc; if (sc > max) max = sc; });
+      pageToks.forEach((_pt, p) => { this.elig[p][i] = this.score[p][i] > 0 && this.score[p][i] >= 0.5 * max; });
+    }
+  }
+  pickGated(page: number, avoid?: Set<string>): Pick | null {
+    let best = -1, bu = Infinity, bp = Infinity, bs = -1;
+    for (let i = 0; i < this.items.length; i++) {
+      if (!this.elig[page]?.[i] || (avoid && avoid.has(this.keys[i]))) continue;
+      const u = this.uses[i], p = this.prio(i), s = this.score[page][i];
+      if (u < bu || (u === bu && (p < bp || (p === bp && s > bs)))) { best = i; bu = u; bp = p; bs = s; }
+    }
+    let unmatched = false;
+    if (best < 0) {
+      unmatched = true; bu = Infinity; bp = Infinity;
+      for (let i = 0; i < this.items.length; i++) {
+        if (avoid && avoid.has(this.keys[i])) continue;
+        const u = this.uses[i], p = this.prio(i);
+        if (u < bu || (u === bu && p < bp)) { best = i; bu = u; bp = p; }
+      }
+    }
+    if (best < 0) return null;
+    this.uses[best]++;
+    return { ...this.items[best], reused: bu > 0, unmatched };
+  }
+  pickFree(ctx: Set<string>, avoid?: Set<string>): Pick | null {
+    let best = -1, bu = Infinity, bs = -1, bp = Infinity;
     for (let i = 0; i < this.items.length; i++) {
       if (avoid && avoid.has(this.keys[i])) continue;
-      const u = this.uses[i];
-      const s = overlap(ctx, this.toks[i]);
-      const r = this.items[i].rank;
-      if (u < bu || (u === bu && (s > bs || (s === bs && r < br)))) { best = i; bu = u; bs = s; br = r; }
+      const u = this.uses[i], s = overlap(ctx, this.toks[i]), p = this.prio(i);
+      if (u < bu || (u === bu && (s > bs || (s === bs && p < bp)))) { best = i; bu = u; bs = s; bp = p; }
     }
     if (best < 0) return null;
     this.uses[best]++;
     return { ...this.items[best], reused: bu > 0 };
   }
 }
+
 
 // ---------- writing templates ----------
 // Placeholders: {kw} {Kw} {Kws} the article's primary keyword (lower / Title Case / Sentence case); {root} the keyword of the root
@@ -287,7 +327,8 @@ const FORMS: Record<string, FormSpec> = {
   },
 };
 const BLOG_FORMS = ['pillar', 'howto', 'comparison', 'faq', 'local'];
-const TIER_FORMS = ['explainer', 'longtail', 'question', 'alternatives', 'faqround', 'community'];
+// article N of a site: keyword | AI search prompt | long-tail | similar product/service | People Also Ask | FAQ
+const TIER_FORMS = ['explainer', 'question', 'longtail', 'alternatives', 'community', 'faqround'];
 const TIER_WORDS: Record<number, number> = { 1: 1000, 2: 800, 3: 600 };
 const ANCHOR_KINDS = ['exact', 'learn', 'brand', 'related', 'guide', 'brand-kw'];
 const AVOID = 'No unverifiable claims, no guaranteed rankings or results, no competitor names, no copied text; keep facts specific and checkable.';
@@ -345,60 +386,72 @@ const pad = (n: number): string => String(n).padStart(2, '0');
 const pageWords = (p: ClusterPage): string => [p.name, p.h1, (p.url || '').replace(/^https?:\/\/[^/]+/i, '').replace(/[-_/]+/g, ' ')].filter(Boolean).join(' ');
 
 // ---------- the plan ----------
+type FieldKey = 'h2' | 'h3' | 'h4' | 'paa' | 'similar' | 'faq' | 'quora' | 'l4';
+const FIELD_TAG: Record<FieldKey, string> = { h2: 'L14', h3: '11-B', h4: '11-C', paa: '11-D', similar: '11-E', faq: '11-F', quora: '11-G', l4: 'L4' };
+const SRC_KEY: Record<FieldKey, string> = { h2: 'H2', h3: '11-B', h4: '11-C', paa: '11-D', similar: '11-E', faq: '11-F', quora: '11-G', l4: 'L4' };
+// Layers 15 and 16 (mandatory, page-related): keyword, AI search prompt, long-tail, People Also Ask, similar product/service, FAQ.
+const BLOG_KEYS: FieldKey[] = ['h2', 'h3', 'h4', 'paa', 'similar', 'faq'];
+// Layer 17 uses the rest of everything: also Quora (Layer 10) and the AI search keywords (Layer 4).
+const L17_KEYS: FieldKey[] = ['h2', 'h3', 'h4', 'paa', 'similar', 'faq', 'quora', 'l4'];
+// The 6 articles of a site: the primary keyword of article N comes from this pool.
+const TIER_TYPES: FieldKey[] = ['h2', 'h3', 'h4', 'similar', 'paa', 'faq'];
+
 export function planCluster(input: ClusterInput): { articles: ArticleDraft[]; checks: PlanChecks } {
   if (input.pages.length !== CLUSTER.pages) throw new Error(`Exactly ${CLUSTER.pages} target pages are required (got ${input.pages.length}).`);
   const brand = (input.brand || '').trim() || 'our team';
   const audience = AUDIENCE(brand, input.industry);
-  const l14 = new Picker(input.l14);
-  const pools: Record<SlotKey, Picker> = { h3: new Picker(input.pools.h3), h4: new Picker(input.pools.h4), paa: new Picker(input.pools.paa), similar: new Picker(input.pools.similar), faq: new Picker(input.pools.faq), quora: new Picker(input.pools.quora) };
-  const POOL_TAG: Record<SlotKey, string> = { h3: '11-B', h4: '11-C', paa: '11-D', similar: '11-E', faq: '11-F', quora: '11-G' };
+  const P: Record<FieldKey, Picker> = {
+    h2: new Picker(input.l14), h3: new Picker(input.pools.h3), h4: new Picker(input.pools.h4), paa: new Picker(input.pools.paa), similar: new Picker(input.pools.similar),
+    faq: new Picker(input.pools.faq), quora: new Picker(input.pools.quora), l4: new Picker(input.pools.l4 || []),
+  };
+  const all = Object.values(P);
   const out: ArticleDraft[] = [];
   const byCode = new Map<string, ArticleDraft>();
   let seq = 0;
   const reuse: Record<string, number> = {};
-  const note = (k: string, r: boolean) => { if (r) reuse[k] = (reuse[k] || 0) + 1; };
+  const note = (k: string, r: boolean | undefined) => { if (r) reuse[k] = (reuse[k] || 0) + 1; };
+  const noteP = (k: FieldKey, p: Pick | null) => { if (p) { note(FIELD_TAG[k], p.reused); note('unmatched', p.unmatched); } };
 
-  // 1) page primary keyword: the most relevant Layer 14 keyword per page
-  const pageCtx = input.pages.map((p) => tokens(pageWords(p)));
-  const pageKw = input.pages.map((_p, i) => { const k = l14.pick(pageCtx[i]); if (k) note('L14', k.reused); return k; });
+  // 1) page primary keyword: the best-priority Layer 14 keyword related to each page (gated on the page's own words)
+  const stage1 = input.pages.map((p) => tokens(pageWords(p)));
+  all.forEach((p) => p.gate(stage1));
+  const pageKw = input.pages.map((_p, i) => { const k = P.h2.pickGated(i); noteP('h2', k); return k; });
   const fallbackKw = (i: number): string => pageKw[i]?.text || input.pages[i].h1 || input.pages[i].name || brand;
+  // from here a page is described by its own words plus its keyword
+  const pageTok = stage1.map((t, i) => union(t, tokens(fallbackKw(i))));
+  all.forEach((p) => p.gate(pageTok));
 
-  // 2) 30 website blogs, round-robin so no page starves the others
-  interface Slot { page: number; art: number; h2: (PoolItem & { reused: boolean }) | null }
+  // 2) 30 website blogs, round-robin so no page starves the others; every pool is page-gated and priority-ordered
+  interface Slot { page: number; art: number; m: Partial<Record<FieldKey, Pick | null>> }
   const slots: Slot[] = [];
   for (let a = 1; a <= CLUSTER.perPage; a++) for (let p = 0; p < CLUSTER.pages; p++) {
-    const ctx = union(pageCtx[p], tokens(fallbackKw(p)));
-    const h2 = l14.pick(ctx, a === 1 ? undefined : new Set([norm(fallbackKw(p))]));
-    if (h2) note('L14', h2.reused);
-    slots.push({ page: p, art: a, h2 });
-  }
-  const picked = new Map<string, Record<SlotKey, (PoolItem & { reused: boolean }) | null>>();
-  for (const s of slots) {
-    const primary = s.art === 1 ? fallbackKw(s.page) : s.h2?.text || fallbackKw(s.page);
-    const ctx = union(pageCtx[s.page], tokens(primary));
-    const m = {} as Record<SlotKey, (PoolItem & { reused: boolean }) | null>;
-    for (const k of SLOT_KEYS) { m[k] = pools[k].pick(ctx); if (m[k]) note(POOL_TAG[k], m[k]!.reused); }
-    picked.set(`${s.page}-${s.art}`, m);
+    const m: Slot['m'] = {};
+    for (const k of BLOG_KEYS) { m[k] = P[k].pickGated(p, k === 'h2' ? new Set([norm(fallbackKw(p))]) : undefined); noteP(k, m[k] || null); }
+    slots.push({ page: p, art: a, m });
   }
   const blogs: ArticleDraft[] = [];
   for (let p = 0; p < CLUSTER.pages; p++) {
     for (let a = 1; a <= CLUSTER.perPage; a++) {
       const s = slots.find((x) => x.page === p && x.art === a)!;
-      const m = picked.get(`${p}-${a}`)!;
+      const m = s.m;
       const blogNo = p * CLUSTER.perPage + a;
       const h1 = fallbackKw(p);
-      const primary = a === 1 ? h1 : s.h2?.text || h1;
+      const primary = a === 1 ? h1 : m.h2?.text || h1;
       const form = BLOG_FORMS[a - 1];
-      const map = { h2: s.h2?.text || '', h3: m.h3?.text || '', h4: m.h4?.text || '', paa: m.paa?.text || '', similar: m.similar?.text || '', faq: m.faq?.text || '', quora: m.quora?.text || '' };
+      const map = { h2: m.h2?.text || '', h3: m.h3?.text || '', h4: m.h4?.text || '', paa: m.paa?.text || '', similar: m.similar?.text || '', faq: m.faq?.text || '', quora: '' };
       const page = input.pages[p];
       const b = writeBrief({ form, kw: primary, root: h1, brand, page: page.name || page.h1 || '', map, variant: blogNo, audience, secondary: [h1, map.h2, map.h3], tier: 0 });
       const intent = FORMS[form].intent || intentOf(primary);
       const sibling = p * CLUSTER.perPage + (a === CLUSTER.perPage ? 1 : a + 1);
-      const draft: ArticleDraft = {
+      const src: Record<string, number | boolean | null> = { H1: pageKw[p]?.rank ?? null };
+      for (const k of BLOG_KEYS) src[SRC_KEY[k]] = m[k]?.rank ?? null;
+      src.reused = BLOG_KEYS.some((k) => m[k]?.reused);
+      src.unmatched = BLOG_KEYS.some((k) => m[k]?.unmatched) || !!pageKw[p]?.unmatched;
+      blogs.push({
         layerNo: 15, tier: 0, code: `W${pad(blogNo)}`, seq: 0, blogNo, pageSlot: p + 1, articleInPage: a, siteNo: null, subSite: null, articleNo: null, parentCode: null, targetPageUrl: page.url,
-        h1, h2: map.h2 || null, h3: map.h3 || null, h4: map.h4 || null, paa: map.paa || null, similar: map.similar || null, faq: map.faq || null, quora: map.quora || null,
-        primaryKeyword: primary, hierarchy: a === 1 ? 'H1' : s.h2?.tag || 'H2', secondaryKeywords: [h1, map.h2, map.h3].filter((x) => x && norm(x) !== norm(primary)),
-        sources: { H1: pageKw[p]?.rank ?? null, H2: s.h2?.rank ?? null, '11-B': m.h3?.rank ?? null, '11-C': m.h4?.rank ?? null, '11-D': m.paa?.rank ?? null, '11-E': m.similar?.rank ?? null, '11-F': m.faq?.rank ?? null, '11-G': m.quora?.rank ?? null, reused: !!(s.h2?.reused || m.h3?.reused) },
+        h1, h2: map.h2 || null, h3: map.h3 || null, h4: map.h4 || null, paa: map.paa || null, similar: map.similar || null, faq: map.faq || null, quora: null, aiKeyword: null,
+        primaryKeyword: primary, hierarchy: a === 1 ? 'H1' : m.h2?.tag === 'M' ? 'L11' : m.h2?.tag || 'H2', secondaryKeywords: [h1, map.h2, map.h3].filter((x) => x && norm(x) !== norm(primary)),
+        sources: src,
         role: b.f.role, title: b.title, slug: slugOf(b.title), metaTitle: b.metaTitle, metaDescription: b.metaDescription, metaTags: b.tags,
         intentType: intent, journeyStage: journeyOf(intent), objective: b.f.objective, angle: b.f.angle, audience, tone: TONE, intro: b.intro, outline: b.outline,
         wordTarget: a === 1 ? 1800 : b.f.words, placementRules: PLACEMENT, anchorText: null,
@@ -408,40 +461,45 @@ export function planCluster(input: ClusterInput): { articles: ArticleDraft[]; ch
         ],
         cta: ctaOf(intent, brand), schemaType: b.f.schema, imageBrief: `Featured image showing ${primary}; alt text: "${primary}" - ${brand}`, avoid: AVOID,
         publishDate: addDays(input.nextMonthStart, blogNo - 1),
-      };
-      blogs.push(draft);
+      });
     }
   }
   blogs.sort((x, y) => x.blogNo - y.blogNo);
-  // sibling anchors point to the sibling's own primary keyword
   for (const b of blogs) { const sib = blogs.find((x) => x.code === b.linkPlan[1].toCode); b.linkPlan[1].anchor = sib ? sib.primaryKeyword : b.primaryKeyword; }
   for (const b of blogs) { b.seq = ++seq; out.push(b); byCode.set(b.code, b); }
 
-  // 3) tiers: each article draws the supporting keyword of one slot type; the angle follows the slot type
+  // 3) tiers. Tier 1 (Layer 16) maps the same six page-related pools as the blogs; Tier 2 and Tier 3 (Layer 17) take the rest - unused items
+  // first from every pool incl. Quora and the Layer 4 AI search keywords. The primary keyword of article N comes from TIER_TYPES[N-1].
   const make = (tier: 1 | 2 | 3, parent: ArticleDraft, siteNo: number, subSite: number | null, articleNo: number): ArticleDraft => {
     const root = byCode.get(`W${pad(parent.blogNo)}`)!;
-    const key = SLOT_KEYS[articleNo - 1];
-    const ctx = union(tokens(pageWords(input.pages[root.pageSlot - 1])), tokens(root.primaryKeyword), tokens(parent.primaryKeyword));
-    const sup = pools[key].pick(ctx, new Set([norm(parent.primaryKeyword), norm(root.primaryKeyword)]));
-    if (sup) note(POOL_TAG[key], sup.reused);
+    const typeKey = TIER_TYPES[articleNo - 1];
+    const keys = tier === 1 ? BLOG_KEYS : L17_KEYS;
+    const avoid = new Set([norm(parent.primaryKeyword), norm(root.primaryKeyword)]);
+    const ctx = union(pageTok[root.pageSlot - 1], tokens(root.primaryKeyword), tokens(parent.primaryKeyword));
+    const m: Partial<Record<FieldKey, Pick | null>> = {};
+    for (const k of keys) { m[k] = tier === 1 ? P[k].pickGated(root.pageSlot - 1, avoid) : P[k].pickFree(ctx, avoid); noteP(k, m[k] || null); }
+    const sup = m[typeKey];
     const kw = sup?.text || `${root.primaryKeyword} ${['overview', 'tips', 'questions', 'alternatives', 'faqs', 'advice'][articleNo - 1]}`;
     const form = TIER_FORMS[articleNo - 1];
-    const map = { h2: '', h3: '', h4: '', paa: '', similar: '', faq: '', quora: '' } as Record<string, string>;
-    map[key] = kw;
+    const map = { h2: m.h2?.text || '', h3: m.h3?.text || '', h4: m.h4?.text || '', paa: m.paa?.text || '', similar: m.similar?.text || '', faq: m.faq?.text || '', quora: m.quora?.text || '' };
     const page = input.pages[root.pageSlot - 1];
     const variant = (siteNo + articleNo + (subSite || 0)) % 3;
-    const b = writeBrief({ form, kw, root: root.primaryKeyword, brand, page: page.name || page.h1 || '', map: map as any, variant, audience, secondary: [root.primaryKeyword, parent.primaryKeyword], tier });
+    const b = writeBrief({ form, kw, root: root.primaryKeyword, brand, page: page.name || page.h1 || '', map, variant, audience, secondary: [root.primaryKeyword, parent.primaryKeyword], tier });
     const intent = FORMS[form].intent || intentOf(kw);
     const code = tier === 3 ? `T3-S${pad(Math.ceil(siteNo / 3))}-B${subSite}-A${articleNo}` : `T${tier}-S${pad(siteNo)}-A${articleNo}`;
     const kind = ANCHOR_KINDS[(articleNo - 1 + (subSite || 0)) % ANCHOR_KINDS.length];
     const related = [parent.h2, parent.h3, parent.h4, parent.similar, parent.paa].find((x) => x && norm(x) !== norm(parent.primaryKeyword)) || '';
     const anchor = anchorFor(kind, parent.primaryKeyword, related, brand);
     const gap = tier === 1 ? articleNo : 7;
-    const d: ArticleDraft = {
+    const src: Record<string, number | boolean | null> = {};
+    for (const k of keys) src[SRC_KEY[k]] = m[k]?.rank ?? null;
+    src.reused = keys.some((k) => m[k]?.reused);
+    src.unmatched = keys.some((k) => m[k]?.unmatched);
+    return {
       layerNo: tier === 1 ? 16 : 17, tier, code, seq: 0, blogNo: root.blogNo, pageSlot: root.pageSlot, articleInPage: null, siteNo, subSite, articleNo, parentCode: parent.code, targetPageUrl: root.targetPageUrl,
-      h1: null, h2: null, h3: map.h3 || null, h4: map.h4 || null, paa: map.paa || null, similar: map.similar || null, faq: map.faq || null, quora: map.quora || null,
-      primaryKeyword: kw, hierarchy: POOL_TAG[key], secondaryKeywords: [root.primaryKeyword, parent.primaryKeyword].filter((x, i, a) => norm(x) !== norm(kw) && a.findIndex((y) => norm(y) === norm(x)) === i),
-      sources: { [POOL_TAG[key]]: sup?.rank ?? null, reused: !!sup?.reused },
+      h1: null, h2: map.h2 || null, h3: map.h3 || null, h4: map.h4 || null, paa: map.paa || null, similar: map.similar || null, faq: map.faq || null, quora: map.quora || null, aiKeyword: m.l4?.text || null,
+      primaryKeyword: kw, hierarchy: typeKey === 'h2' ? (sup?.tag === 'M' ? 'L11' : 'L14') : FIELD_TAG[typeKey], secondaryKeywords: [root.primaryKeyword, parent.primaryKeyword].filter((x, i, a) => norm(x) !== norm(kw) && a.findIndex((y) => norm(y) === norm(x)) === i),
+      sources: src,
       role: b.f.role, title: b.title, slug: slugOf(b.title), metaTitle: b.metaTitle, metaDescription: b.metaDescription, metaTags: b.tags,
       intentType: intent, journeyStage: journeyOf(intent), objective: b.f.objective, angle: b.f.angle, audience, tone: TONE, intro: b.intro, outline: b.outline,
       wordTarget: TIER_WORDS[tier], placementRules: PLACEMENT, anchorText: anchor,
@@ -449,7 +507,6 @@ export function planCluster(input: ClusterInput): { articles: ArticleDraft[]; ch
       cta: ctaOf(intent, brand), schemaType: b.f.schema, imageBrief: `Featured image showing ${kw}; alt text: "${kw}" - ${brand}`, avoid: AVOID,
       publishDate: addDays(parent.publishDate, gap),
     };
-    return d;
   };
   const tier1: ArticleDraft[] = [];
   for (const blog of blogs) for (let a = 1; a <= CLUSTER.siteArticles; a++) tier1.push(make(1, blog, blog.blogNo, null, a));
@@ -463,16 +520,19 @@ export function planCluster(input: ClusterInput): { articles: ArticleDraft[]; ch
     tier3.push(make(3, parent, (site - 1) * CLUSTER.tier3PerTier2Site + b, b, a));
   }
   for (const t of tier3) { t.seq = ++seq; out.push(t); byCode.set(t.code, t); }
-  return { articles: out, checks: checkPlan(out, reuse) };
+  const coverage: Record<string, { total: number; used: number }> = {};
+  (Object.keys(P) as FieldKey[]).forEach((k) => { coverage[FIELD_TAG[k]] = P[k].stats(); });
+  return { articles: out, checks: checkPlan(out, reuse, coverage) };
 }
+
 
 function ctaOf(intent: Intent, brand: string): string {
   return intent === 'Transactional' ? `Book or enquire with ${brand} today.` : intent === 'Commercial' || intent === 'Local' ? `See how ${brand} can help - get in touch for a quote.` : `Explore more guides from ${brand}.`;
 }
 
 // ---------- checks ----------
-export interface PlanChecks { ok: boolean; counts: Record<string, number>; reuse: Record<string, number>; problems: string[] }
-export function checkPlan(a: ArticleDraft[], reuse: Record<string, number> = {}): PlanChecks {
+export interface PlanChecks { ok: boolean; counts: Record<string, number>; reuse: Record<string, number>; coverage: Record<string, { total: number; used: number }>; problems: string[] }
+export function checkPlan(a: ArticleDraft[], reuse: Record<string, number> = {}, coverage: Record<string, { total: number; used: number }> = {}): PlanChecks {
   const problems: string[] = [];
   const counts = { blogs: 0, tier1: 0, tier2: 0, tier3: 0, total: a.length } as Record<string, number>;
   const codes = new Set<string>();
@@ -494,5 +554,6 @@ export function checkPlan(a: ArticleDraft[], reuse: Record<string, number> = {})
     const want2 = x.tier === 0 ? 6 : x.tier === 1 ? 1 : x.tier === 2 ? 3 : 0;
     if ((children.get(x.code) || 0) !== want2) problems.push(`${x.code}: ${children.get(x.code) || 0} children (expected ${want2})`);
   }
-  return { ok: problems.length === 0, counts, reuse, problems: problems.slice(0, 50) };
+  for (const k of Object.keys(coverage)) if (coverage[k].used < coverage[k].total) problems.push(`coverage ${k}: ${coverage[k].total - coverage[k].used} of ${coverage[k].total} items never used`);
+  return { ok: problems.length === 0, counts, reuse, coverage, problems: problems.slice(0, 50) };
 }
