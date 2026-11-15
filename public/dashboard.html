@@ -760,17 +760,17 @@
       }).catch(function(err){ btn.disabled = false; var mm = document.getElementById('kwMsg' + n); if (mm) mm.textContent = err.message; });
     };
   }
-  // ---- Layers 15, 16, 17: Blog Intent Primary / Sub-Primary / Secondary (allocation only, 30 blogs each) ----
-  var bi = { mid: null, data: {} };
+  // ---- Layers 15, 16, 17: Topical Blog Intent cluster (Admin picks 6 target pages; 30 website blogs + 180 Tier 1 + 180 Tier 2 + 540 Tier 3) ----
+  var bi = { mid: null, data: {}, pages: null, sel: [] };
   var BI_CFG = {
-    15: { tag: 'Layer 15 · Day 15', name: 'Blog Intent Primary' },
-    16: { tag: 'Layer 16 · Day 16', name: 'Blog Intent Sub Primary' },
-    17: { tag: 'Layer 17 · Day 17', name: 'Blog Intent Secondary' }
+    15: { tag: 'Layer 15 · Day 15', name: 'Website Blog Cluster Plan', note: '6 target pages x 5 website blogs = 30. Keyword mapping (H1/H2/H3/H4/PAA/Similar/FAQ/Quora) plus the complete writing brief for every blog.' },
+    16: { tag: 'Layer 16 · Day 16', name: 'Tier 1 Mapping', note: '30 sites x 6 articles = 180. Each Tier 1 article links to its website blog (6 per blog).' },
+    17: { tag: 'Layer 17 · Day 17', name: 'Tier 2 and Tier 3 Mapping', note: 'Tier 2: 30 sites x 6 = 180 (1 per Tier 1 article). Tier 3: 90 sites x 6 = 540 (3 follow-ups per Tier 2 article). Total cluster = 930 articles.' }
   };
   function mountBlogIntent(cust) {
     var cm = currentMonth();
     if (!cm) return;
-    bi.mid = cm.id;
+    bi.mid = cm.id; bi.pages = null; bi.sel = [];
     [15, 16, 17].forEach(function(n){
       var box = document.getElementById('l' + n + 'Box');
       if (!box) return;
@@ -779,40 +779,86 @@
     });
   }
   function loadBlogIntent(cust, cm, n, box) {
-    api('/customers/' + cust.id + '/layer' + n + '?month=' + encodeURIComponent(cm.monthCode)).then(function(d){
+    var pagesReq = n === 15 ? api('/customers/' + cust.id + '/layer15/pages?month=' + encodeURIComponent(cm.monthCode)) : Promise.resolve(null);
+    Promise.all([api('/customers/' + cust.id + '/layer' + n + '?month=' + encodeURIComponent(cm.monthCode)), pagesReq]).then(function(res){
       if (document.getElementById('l' + n + 'Box') !== box || bi.mid !== cm.id) return;
-      bi.data[n] = d;
+      bi.data[n] = res[0];
+      if (res[1]) { bi.pages = res[1]; bi.sel = (res[1].picked || []).map(function(p){ return p.websitePageId; }); }
       drawBlogIntent(cust, cm, n, box);
     }).catch(function(err){
       if (document.getElementById('l' + n + 'Box') !== box) return;
       box.innerHTML = '<section class="card"><p class="muted">Could not load Layer ' + n + ': ' + escapeHtml(err.message) + '</p></section>';
     });
   }
+  function reloadBlogIntent(cust, cm) {
+    [15, 16, 17].forEach(function(k){ var b = document.getElementById('l' + k + 'Box'); if (b) loadBlogIntent(cust, cm, k, b); });
+  }
+  function biCell(c, w) { var t = c === null || c === undefined ? '' : String(c); return '<td' + (w ? ' style="min-width:' + w + 'px"' : '') + '>' + escapeHtml(t) + '</td>'; }
+  function biBrief(r) {
+    var ol = (r.outline || []).map(function(o){ return (o.level === 2 ? '<b>H2</b> ' : '&nbsp;&nbsp;H3 ') + escapeHtml(o.text); }).join('<br>');
+    var lk = (r.linkPlan || []).map(function(l){ return escapeHtml(l.role + ' → ' + (l.toCode || l.targetUrl || 'URL after publish') + ' · anchor "' + l.anchor + '" · ' + l.rel + ' · ' + l.position); }).join('<br>');
+    return '<details><summary>Brief</summary><div style="max-width:560px;white-space:normal"><p><b>Objective:</b> ' + escapeHtml(r.objective) + '<br><b>Angle:</b> ' + escapeHtml(r.angle) + '<br><b>Audience:</b> ' + escapeHtml(r.audience) + '<br><b>Tone:</b> ' + escapeHtml(r.tone) + '</p><p><b>Intro:</b> ' + escapeHtml(r.intro) + '</p><p><b>Outline</b><br>' + ol + '</p><p><b>Words:</b> ' + r.wordTarget + ' · <b>Schema:</b> ' + escapeHtml(r.schemaType) + '<br><b>Placement:</b> ' + escapeHtml(r.placementRules) + '</p><p><b>Links</b><br>' + lk + '</p><p><b>CTA:</b> ' + escapeHtml(r.cta) + '<br><b>Image:</b> ' + escapeHtml(r.imageBrief) + '<br><b>Avoid:</b> ' + escapeHtml(r.avoid) + '</p></div></details>';
+  }
   function drawBlogIntent(cust, cm, n, box) {
     var cfg = BI_CFG[n], d = bi.data[n];
     var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2>' +
-      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' blog slots · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : 'not built yet')) + '</p>' +
-      '<p class="muted" style="margin:0 0 8px">Allocation only, no API call: every blog takes the fixed Layer 14 rank-1 keyword (H1) plus one value from each final pool (Layer 14 H2, then 11-B prompts, 11-C long-tail, 11-D PAA, 11-E similar, 11-F FAQ, 11-G Quora). Layers 15/16/17 start at pool item 1/31/61 so together they use the whole pool. Intro, intent and meta are written later by Layers 18-20.</p>';
-    if (d.checks) {
-      var bad = Object.keys(d.checks.duplicates || {});
-      var cons = d.checks.consumption || {};
-      h += '<p class="muted" style="margin:0 0 8px">Check: duplicates inside a layer: ' + (bad.length ? '<b>found</b> (' + escapeHtml(bad.join(', ')) + ')' : 'none') + ' · pools fully covered: ' + Object.keys(cons).map(function(k){ return k + ' ' + cons[k].planned + '/' + cons[k].available; }).join(', ') + '</p>';
+      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.needsPages ? 'waiting for the 6 target pages' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : 'not built yet'))) + '</p>' +
+      '<p class="muted" style="margin:0 0 8px">' + cfg.note + ' Titles, meta, intro and outline come from the built-in template and meta algorithm (no AI call); each row can be regenerated by AI later.</p>';
+    if (n === 15 && bi.pages) {
+      var P = bi.pages, sel = bi.sel;
+      h += '<div style="margin:0 0 12px"><b>Target pages</b> <span class="muted">(pick exactly 6, in order; ' + sel.length + '/6 selected)</span>';
+      if (!P.pages.length) h += '<p class="muted">No pages yet. Fetch this customer\'s website pages first (Page Image Library).</p>';
+      else {
+        h += '<div style="max-height:220px;overflow:auto;border:1px solid #ddd;padding:6px;margin:6px 0">';
+        P.pages.forEach(function(p){
+          var i = sel.indexOf(p.id);
+          h += '<label style="display:block"><input type="checkbox" class="biPg" value="' + escapeHtml(p.id) + '"' + (i >= 0 ? ' checked' : '') + '> ' + (i >= 0 ? '<b>' + (i + 1) + '.</b> ' : '') + escapeHtml(p.pageName || p.pageUrl) + ' <span class="muted">' + escapeHtml(p.pageUrl) + (p.h1 ? ' · H1: ' + escapeHtml(p.h1) : '') + '</span></label>';
+        });
+        h += '</div><button class="btn" id="biSave"' + (sel.length === 6 ? '' : ' disabled') + '>Save pages and build the cluster</button> <span class="muted" id="biPickMsg"></span>';
+      }
+      h += '</div>';
     }
-    h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '">Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
-    if (!d.records.length) h += '<p class="muted">No records yet.</p>';
+    if (d.pages && d.pages.length) h += '<p class="muted" style="margin:0 0 8px">Target pages: ' + d.pages.map(function(p){ return p.slot + '. ' + escapeHtml(p.pageName || p.pageUrl) + (p.primaryKeyword ? ' → <b>' + escapeHtml(p.primaryKeyword) + '</b>' : ''); }).join(' · ') + '</p>';
+    if (d.checks) {
+      var c = d.checks.counts || {};
+      h += '<p class="muted" style="margin:0 0 8px">Check: ' + (d.checks.ok ? '<b>all passed</b>' : '<b>problems</b> (' + escapeHtml((d.checks.problems || []).slice(0, 3).join('; ')) + ')') + ' · blogs ' + c.blogs + ' · Tier 1 ' + c.tier1 + ' · Tier 2 ' + c.tier2 + ' · Tier 3 ' + c.tier3 + ' = ' + c.total + (Object.keys(d.checks.reuse || {}).length ? ' · keyword reuse: ' + Object.keys(d.checks.reuse).map(function(k){ return k + ' x' + d.checks.reuse[k]; }).join(', ') : ' · no keyword reused') + '</p>';
+    }
+    h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '"' + (d.needsPages ? ' disabled' : '') + '>Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
+    if (!d.records.length) h += '<p class="muted">No articles yet.</p>';
     else {
-      h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Blog</th><th>H1</th><th>H2</th><th>H3 (11-B)</th><th>H4 (11-C)</th><th>PAA</th><th>Similar</th><th>FAQ</th><th>Quora</th></tr></thead><tbody>';
-      d.records.forEach(function(r){ h += '<tr><td>' + r.blogNo + '</td>' + [r.h1, r.h2, r.h3, r.h4, r.paa, r.similar, r.faq, r.quora].map(function(c){ return '<td>' + escapeHtml(c || '') + '</td>'; }).join('') + '</tr>'; });
+      var kwHead = n === 15 ? '<th>H1</th><th>H2</th><th>H3 (11-B)</th><th>H4 (11-C)</th><th>PAA</th><th>Similar</th><th>FAQ</th><th>Quora</th>' : '<th>Supporting keyword</th><th>Links to</th><th>Anchor</th>';
+      h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>ID</th><th>' + (n === 15 ? 'Page' : 'Site') + '</th><th>Role</th><th>Primary keyword</th>' + kwHead + '<th>Title</th><th>Meta title</th><th>Meta description</th><th>Meta tags</th><th>Intent</th><th>Stage</th><th>Publish</th><th>Brief</th></tr></thead><tbody>';
+      d.records.forEach(function(r){
+        var where = n === 15 ? 'P' + r.pageSlot + ' · A' + r.articleInPage : (r.tier === 3 ? 'S' + r.siteNo + ' (B' + r.subSite + ') · A' + r.articleNo : 'S' + r.siteNo + ' · A' + r.articleNo);
+        var kw = n === 15 ? [r.h1, r.h2, r.h3, r.h4, r.paa, r.similar, r.faq, r.quora].map(function(x){ return biCell(x, 140); }).join('') : biCell(r.primaryKeyword, 160) + biCell(r.parentCode) + biCell(r.anchorText, 140);
+        h += '<tr><td><b>' + escapeHtml(r.code) + '</b></td>' + biCell(where) + biCell(r.role) + biCell(r.primaryKeyword, 160) + kw + biCell(r.title, 220) + biCell(r.metaTitle, 220) + biCell(r.metaDescription, 280) + biCell(r.metaTags, 200) + biCell(r.intentType) + biCell(r.journeyStage) + biCell(r.publishDate) + '<td>' + biBrief(r) + '</td></tr>';
+      });
       h += '</tbody></table></div>';
     }
     box.innerHTML = h + '</section>';
     var btn = document.getElementById('biRun' + n);
     if (btn) btn.onclick = function(){
       btn.disabled = true;
-      api('/customers/' + cust.id + '/layer15-17/rebuild', { method: 'POST', body: { month: cm.monthCode } }).then(function(){
-        [15, 16, 17].forEach(function(k){ var b = document.getElementById('l' + k + 'Box'); if (b) loadBlogIntent(cust, cm, k, b); });
-      }).catch(function(err){ btn.disabled = false; var mm = document.getElementById('biMsg' + n); if (mm) mm.textContent = err.message; });
+      api('/customers/' + cust.id + '/layer15-17/rebuild', { method: 'POST', body: { month: cm.monthCode } }).then(function(){ reloadBlogIntent(cust, cm); })
+        .catch(function(err){ btn.disabled = false; var mm = document.getElementById('biMsg' + n); if (mm) mm.textContent = err.message; });
     };
+    if (n === 15) {
+      Array.prototype.forEach.call(box.querySelectorAll('.biPg'), function(cb){
+        cb.onchange = function(){
+          var i = bi.sel.indexOf(cb.value);
+          if (cb.checked && i < 0) { if (bi.sel.length >= 6) { cb.checked = false; return; } bi.sel.push(cb.value); }
+          if (!cb.checked && i >= 0) bi.sel.splice(i, 1);
+          drawBlogIntent(cust, cm, n, box);
+        };
+      });
+      var sv = document.getElementById('biSave');
+      if (sv) sv.onclick = function(){
+        sv.disabled = true;
+        var mm = document.getElementById('biPickMsg'); if (mm) mm.textContent = 'Building 930 articles...';
+        api('/customers/' + cust.id + '/layer15/pages', { method: 'POST', body: { month: cm.monthCode, pageIds: bi.sel } }).then(function(){ reloadBlogIntent(cust, cm); })
+          .catch(function(err){ sv.disabled = false; if (mm) mm.textContent = err.message; });
+      };
+    }
   }
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;

@@ -6,7 +6,7 @@ import { Customer } from '../customers/customer.entity';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { Layer15Service } from './layer15.service';
 
-// Layers 15, 16, 17 (Off Page SEO > Blogs: Blog Intent Primary / Sub-Primary / Secondary), admin side.
+// Layers 15, 16, 17 (Off Page SEO > Blogs: Topical Blog Intent cluster - website blogs, Tier 1, Tier 2 + Tier 3), admin side.
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers/:customerId')
 export class Layer15Controller {
@@ -27,7 +27,19 @@ export class Layer15Controller {
     return this.service.view(customerId, month, 17);
   }
 
-  // Rebuilds the three Layers' 30 slots from the current Layer 14 and the consolidated blocks.
+  // The customer's website pages (with the 6 picked ones marked) for the Admin's target-page picker.
+  @Get('layer15/pages')
+  pages(@Param('customerId') customerId: string, @Query('month') month: string) {
+    return this.service.pages(customerId, month);
+  }
+
+  // Admin picks exactly 6 target pages; the cluster is (re)built from them once Layer 14 exists.
+  @Post('layer15/pages')
+  pick(@Param('customerId') customerId: string, @Body() body: { month: string; pageIds: string[] }) {
+    return this.service.pickPages(customerId, body?.month, body?.pageIds);
+  }
+
+  // Rebuilds the month's 930 articles from the picked pages, the current Layer 14 and the consolidated blocks.
   @Post('layer15-17/rebuild')
   rebuild(@Param('customerId') customerId: string, @Body() body: { month: string }) {
     return this.service.rebuild(customerId, body?.month);
