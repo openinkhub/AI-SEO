@@ -803,9 +803,9 @@
   function drawBlogIntent(cust, cm, n, box) {
     var cfg = BI_CFG[n], d = bi.data[n];
     var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2>' +
-      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.needsPages ? 'waiting for the 6 target pages' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : 'not built yet'))) + '</p>' +
+      '<p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.copied ? 'copied from the WP plugin as it is' : d.needsPages ? 'waiting for the 6 target pages' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : 'not built yet'))) + '</p>' +
       '<p class="muted" style="margin:0 0 8px">' + cfg.note + (n === 17 ? ' Layer 17 takes the rest of Layers 4-14: unused items first, incl. Quora and the Layer 4 AI keywords.' : ' Only items related to the target pages, ordered by rank and opportunity score; keyword, AI search, long-tail, PAA, similar and FAQ on every article.') + ' Titles, meta, intro and outline come from the built-in template and meta algorithm (no AI call).</p>';
-    if (n === 15 && bi.pages) {
+    if (n === 15 && bi.pages && !d.copied) {
       var P = bi.pages, sel = bi.sel;
       h += '<div style="margin:0 0 12px"><b>Target pages</b> <span class="muted">(pick exactly 6, in order; ' + sel.length + '/6 selected)</span>';
       if (!P.pages.length) h += '<p class="muted">No pages yet. Fetch this customer\'s website pages first (Page Image Library).</p>';
@@ -826,7 +826,7 @@
       var cv = d.checks.coverage || {}, CVN = { 'L14': 'Keywords (L11-14)', 'L4': 'AI search keywords (L4)', '11-B': 'AI search prompts (L5)', '11-C': 'Long-tail (L6)', '11-D': 'PAA (L7)', '11-E': 'Similar (L8)', '11-F': 'FAQ (L9)', '11-G': 'Quora (L10)' };
       h += '<p class="muted" style="margin:0 0 8px">Layers 4-14 used in this cluster: ' + Object.keys(cv).map(function(k){ var c = cv[k]; return (CVN[k] || k) + ' ' + c.used + '/' + c.total + (c.used < c.total ? ' <b>(' + (c.total - c.used) + ' unused)</b>' : ''); }).join(' · ') + '</p>';
     }
-    h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '"' + (d.needsPages ? ' disabled' : '') + '>Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
+    if (!d.copied) h += '<div style="margin-bottom:10px"><button class="btn" id="biRun' + n + '"' + (d.needsPages ? ' disabled' : '') + '>Rebuild Layers 15-17</button> <span class="muted" id="biMsg' + n + '"></span></div>';
     if (!d.records.length && d.copy) h += '<h3 style="margin:8px 0">Copied plugin grid</h3>' + wpCopyTable(d.copy);
     else if (!d.records.length) h += '<p class="muted">No articles yet.</p>';
     else {
@@ -886,7 +886,7 @@
   }
   function drawPlatformMap(n, d) {
     var cfg = PM_CFG[n];
-    var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2><p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : (d.needsPages ? 'waiting for the 6 target pages (Layer 15)' : 'not built yet'))) + '</p><p class="muted" style="margin:0 0 8px">' + cfg.note + ' Planned URLs are shown for the Admin\'s own domains; platforms such as Medium assign the URL when the article is published.</p>';
+    var h = '<section class="card"><h2><span class="layer-tag">' + cfg.tag + '</span>' + cfg.name + '</h2><p class="muted" style="margin:4px 0 8px">' + escapeHtml(d.month) + ' · ' + d.total + '/' + d.expected + ' articles · ' + (d.complete ? '<b>complete</b>' : (d.copied ? 'copied from the WP plugin as it is' : d.total ? 'built from a partial Layer 12; customers see it once Layer 12 is complete' : (d.needsPages ? 'waiting for the 6 target pages (Layer 15)' : 'not built yet'))) + '</p>' + (d.copied ? '' : '<p class="muted" style="margin:0 0 8px">' + cfg.note + ' Planned URLs are shown for the Admin\'s own domains; platforms such as Medium assign the URL when the article is published.</p>');
     if (d.mapping) { var c = d.mapping.counts || {}; h += '<p class="muted" style="margin:0 0 8px">Check: ' + (d.mapping.ok ? '<b>all passed</b>' : '<b>problems</b> (' + escapeHtml((d.mapping.problems || []).slice(0, 3).join('; ')) + ')') + ' · Tier 1 ' + c.tier1Sites + ' sites · Tier 2 ' + c.tier2Sites + ' sites · Tier 3 ' + c.tier3Sites + ' sites</p>'; }
     if (!d.records.length) return h + (d.copy ? '<h3 style="margin:8px 0">Copied plugin grid</h3>' + wpCopyTable(d.copy) : '<p class="muted">Not copied or built yet for ' + escapeHtml(d.month) + '.</p>') + '</section>';
     h += '<div style="overflow-x:auto;max-height:560px;overflow-y:auto"><table class="tbl"><thead><tr><th>ID</th><th>Publishing site</th>' + (n === 20 ? '<th>Sub-site</th>' : '') + '<th>Article</th><th>Links to</th><th>Links to (site)</th><th>Anchor</th><th>Primary keyword</th><th>Title</th><th>Planned URL</th><th>Publish</th><th>Status</th></tr></thead><tbody>';

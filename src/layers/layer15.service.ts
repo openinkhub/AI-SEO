@@ -231,21 +231,24 @@ export class Layer15Service implements OnModuleInit {
       this.l12Complete(project.id),
       this.fr.count({ where: { projectId: project.id } }),
     ]);
-    const expected = L15_EXPECTED[layerNo];
+    const copy = await this.copies.get(customerId, project.monthCode, layerNo);
+    // A month copied from the WP plugin (e.g. M0) is shown as it is: nothing to pick, nothing to rebuild.
+    const copied = !rows.length && !!copy;
+    const expected = copied ? copy!.expected : L15_EXPECTED[layerNo];
     const full = all === CLUSTER.total ? await this.ar.find({ where: { projectId: project.id } }) : null;
     const checks = full ? await this.checksOf(full) : null;
     const coverage = full && layerNo <= 17 ? await this.coverage(project, full) : null;
     const mapping = full && layerNo >= 18 ? checkMapping(full) : null;
     const listProblems = layerNo >= 18 ? checkSiteLists() : [];
     return {
-      layer: layerNo, month: project.monthCode, total: rows.length, expected, complete: rows.length === expected && l12, layer14Complete: l12, hasLayer14: l14 > 0,
-      needsPages: picks.length !== CLUSTER.pages,
+      layer: layerNo, month: project.monthCode, total: copied ? copy!.rowCount : rows.length, expected, copied, complete: (copied ? copy!.rowCount : rows.length) === expected && l12, layer14Complete: l12, hasLayer14: l14 > 0,
+      needsPages: !copied && picks.length !== CLUSTER.pages,
       pages: picks.map((p) => ({ slot: p.slot, pageUrl: p.pageUrl, pageName: p.pageName, primaryKeyword: p.primaryKeyword })),
       mapping: mapping ? { ok: mapping.ok && !listProblems.length, counts: mapping.counts, problems: [...listProblems, ...mapping.problems] } : null,
       checks: layerNo >= 18 ? null : checks ? { ok: checks.ok && !Object.values(coverage || {}).some((c) => c.used < c.total), counts: checks.counts, reuse: checks.reuse, coverage, problems: [...checks.problems, ...Object.entries(coverage || {}).filter(([, c]) => c.used < c.total).map(([k, c]) => `coverage ${k}: ${c.total - c.used} of ${c.total} items never used`)] } : null,
       records: rows.map((r) => this.recordOf(r)),
       // Layers 15-17 copied as they are from the WP plugin (shown while the Engine's own cluster is not built for the month).
-      copy: await this.copies.get(customerId, project.monthCode, layerNo),
+      copy,
     };
   }
 
