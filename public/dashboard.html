@@ -227,12 +227,12 @@
   var NAV = [
     { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
     { key: 'all-layers', label: 'All Layers', subs: [], layers: [] },
-    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 20) },
+    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 21) },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
         ['backlinks', 'Backlinks'], ['digital-pr', 'Digital PR'] ],
-      layers: [21, 23].concat(rng(30, 59), rng(73, 162)) },
+      layers: [23].concat(rng(30, 59), rng(73, 162)) },
     { key: 'on-page', label: 'On Page SEO', subs: [['website-development', 'Website Development']],
       layers: [22, 193, 194] },
     { key: 'technical', label: 'Technical SEO', subs: [
@@ -909,11 +909,142 @@
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
     var hasL4 = r.sec.key === 'research-publish';
     if (hasL4) html += '<div id="layerBox"></div>';
-    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div>';
+    if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div><div id="l21Box"></div>';
     if (!hasL4) html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
-    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); }
+    if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); mountWebsiteBlog(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
+  }
+
+  // ---- Layer 21 · Website Blog: the Admin writes the blog content (rich text) and pushes it to the customer panel ----
+  var wb = { cid: null, mid: null, month: null, data: null, edit: null, html: false };
+  function wbBase(cust) { return '/customers/' + cust.id + '/layer21'; }
+  function mountWebsiteBlog(cust) {
+    var cm = currentMonth(), box = document.getElementById('l21Box');
+    if (!box || !cm) return;
+    wb.cid = cust.id; wb.mid = cm.id; wb.month = cm.monthCode; wb.edit = null;
+    box.innerHTML = '<section class="card"><p class="muted">Loading Layer 21…</p></section>';
+    loadWebsiteBlog(cust, box);
+  }
+  function loadWebsiteBlog(cust, box) {
+    api(wbBase(cust) + '?month=' + encodeURIComponent(wb.month)).then(function(d){
+      if (document.getElementById('l21Box') !== box || wb.cid !== cust.id) return;
+      wb.data = d; drawWebsiteBlog(cust, box);
+    }).catch(function(err){
+      if (document.getElementById('l21Box') !== box) return;
+      box.innerHTML = '<section class="card"><p class="muted">Could not load Layer 21: ' + escapeHtml(err.message) + '</p></section>';
+    });
+  }
+  var WB_BADGE = { draft: 'pending', pending_review: 'pending', approved: 'ok', auto_approved: 'ok', published: 'ok', rejected: 'fail', empty: 'pending' };
+  function drawWebsiteBlog(cust, box) {
+    var d = wb.data;
+    var h = '<section class="card"><h2><span class="layer-tag">Layer 21 · Day 21</span>Website Blog</h2>' +
+      '<p class="muted" style="margin:4px 0 12px">' + escapeHtml(d.month) + ' · ' + d.created + ' / ' + d.expected + ' written · ' + d.pushed + ' on the customer panel · ' + d.resolved + ' approved. ' +
+      'You write the blog content and press <b>Push</b>: the customer sees only the pushed blog, in rich-text view, and can Approve or Reject with a comment. A pushed blog nobody reviews in 7 days is auto-approved.</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px"><button class="btn" id="wbPushAll">Push all drafts</button><button class="btn" id="wbReload">Refresh</button><span class="muted" id="wbMsg"></span></div>' +
+      '<div style="overflow-x:auto"><table><thead><tr><th>Blog</th><th>Publish date</th><th>Title</th><th>Words</th><th>Status</th><th>Customer panel</th><th>Customer comment</th><th></th></tr></thead><tbody>';
+    d.blogs.forEach(function(b){
+      var no = b.blogNo, has = b.hasBody, st = b.status || 'empty';
+      var acts = '<button class="btn" data-wb="edit" data-no="' + no + '">' + (has ? 'Edit' : 'Write') + '</button> ';
+      if (has && (st === 'draft' || st === 'rejected')) acts += '<button class="btn" data-wb="push" data-no="' + no + '">' + (st === 'rejected' ? 'Push again' : 'Push') + '</button> ';
+      if (b.pushed && (st === 'pending_review' || st === 'rejected')) acts += '<button class="btn" data-wb="unpush" data-no="' + no + '">Withdraw</button> ';
+      if (st === 'approved' || st === 'auto_approved') acts += '<button class="btn" data-wb="published" data-no="' + no + '">Mark published</button> ';
+      if (st === 'approved' || st === 'auto_approved' || st === 'published') acts += '<button class="btn" data-wb="reopen" data-no="' + no + '">Reopen</button>';
+      h += '<tr><td><b>' + no + '</b></td><td>' + escapeHtml(b.publishDate ? fmtDay(b.publishDate) : '') + '</td><td style="min-width:240px">' + escapeHtml(b.title || '—') + '</td><td>' + (b.wordCount || '') + '</td>' +
+        '<td><span class="badge ' + (WB_BADGE[st] || 'pending') + '">' + escapeHtml(b.statusLabel) + '</span></td>' +
+        '<td>' + (b.pushed ? 'Pushed' : (has ? 'Not pushed' : '')) + '</td><td style="min-width:200px">' + escapeHtml(b.customerComment || '') + '</td><td style="white-space:nowrap">' + acts + '</td></tr>';
+    });
+    h += '</tbody></table></div><div id="wbEditor"></div></section>';
+    box.innerHTML = h;
+    var msg = function(t){ var m = document.getElementById('wbMsg'); if (m) m.textContent = t || ''; };
+    document.getElementById('wbReload').addEventListener('click', function(){ loadWebsiteBlog(cust, box); });
+    document.getElementById('wbPushAll').addEventListener('click', function(){
+      if (!confirm('Push every written draft to the customer panel?')) return;
+      msg('Pushing…');
+      api(wbBase(cust) + '/push-all?month=' + encodeURIComponent(wb.month), { method: 'POST', body: {} }).then(function(r){ loadWebsiteBlog(cust, box); }).catch(function(e){ msg(e.message); });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('button[data-wb]'), function(el){
+      el.addEventListener('click', function(){
+        var act = el.getAttribute('data-wb'), no = el.getAttribute('data-no');
+        if (act === 'edit') return openWbEditor(cust, box, parseInt(no, 10));
+        var path = wbBase(cust) + '/blogs/' + no + '/' + act + '?month=' + encodeURIComponent(wb.month), body = {};
+        if (act === 'published') { var u = prompt('Live blog URL (optional)', ''); if (u === null) return; body = { blogUrl: u }; }
+        if (act === 'reopen' && !confirm('Reopen blog ' + no + ' for editing? It leaves the customer panel until you push it again.')) return;
+        el.disabled = true; msg('Working…');
+        api(path, { method: 'POST', body: body }).then(function(){ loadWebsiteBlog(cust, box); }).catch(function(e){ el.disabled = false; msg(e.message); });
+      });
+    });
+  }
+  function wbField(id, label, val, wide) {
+    return '<div class="profile-field"' + (wide ? ' style="grid-column:1/-1"' : '') + '><label for="' + id + '">' + label + '</label><input id="' + id + '" value="' + escapeHtml(val || '') + '"></div>';
+  }
+  function openWbEditor(cust, box, no) {
+    var ed = document.getElementById('wbEditor');
+    ed.innerHTML = '<p class="muted">Loading blog ' + no + '…</p>';
+    api(wbBase(cust) + '/blogs/' + no + '?month=' + encodeURIComponent(wb.month)).then(function(b){
+      var locked = b.status === 'approved' || b.status === 'auto_approved' || b.status === 'published';
+      var tools = [['bold', 'B'], ['italic', 'I'], ['underline', 'U'], ['h2', 'H2'], ['h3', 'H3'], ['p', 'P'], ['ul', '• List'], ['ol', '1. List'], ['quote', 'Quote'], ['link', 'Link'], ['clear', 'Clear format']];
+      var h = '<hr style="margin:18px 0"><h3 style="margin:0 0 4px">Blog ' + no + ' · <span class="badge ' + (WB_BADGE[b.status] || 'pending') + '">' + escapeHtml(b.statusLabel) + '</span></h3>' +
+        (locked ? '<p class="muted">This blog is ' + escapeHtml(b.statusLabel) + ' - press Reopen in the table to edit it.</p>' : '');
+      if (b.comments && b.comments.length) {
+        h += '<div style="margin:8px 0 12px;padding:10px;border:1px solid var(--border);border-radius:8px"><b>Review history</b>' + b.comments.map(function(c){
+          return '<div class="muted" style="margin-top:4px">' + escapeHtml(new Date(c.at).toLocaleString()) + ' · ' + escapeHtml(c.by) + ' ' + escapeHtml(c.action) + (c.comment ? ': ' + escapeHtml(c.comment) : '') + '</div>';
+        }).join('') + '</div>';
+      }
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        wbField('wbTitle', 'Title (H1)', b.title, true) + wbField('wbSlug', 'URL slug', b.slug) + wbField('wbKw', 'Target keyword', b.targetKeyword) +
+        wbField('wbTags', 'Meta tags (comma separated)', b.metaTags, true) + wbField('wbDesc', 'Meta description', b.metaDescription, true) +
+        wbField('wbPage', 'Target webpage (URL)', b.targetWebpage) + wbField('wbPub', 'Publish date (YYYY-MM-DD)', b.publishDate ? String(b.publishDate).slice(0, 10) : '') + '</div>' +
+        '<div style="margin:12px 0 6px"><b>Blog content</b> <span class="muted">(this is what the customer reads)</span></div>' +
+        '<div id="wbTools" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + tools.map(function(t){ return '<button type="button" class="btn" data-cmd="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
+        '<button type="button" class="btn" id="wbSrc">HTML</button></div>' +
+        '<div id="wbRich" contenteditable="' + (locked ? 'false' : 'true') + '" style="min-height:360px;max-height:640px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:14px;background:#fff;line-height:1.6">' + (b.body || '') + '</div>' +
+        '<textarea id="wbHtml" rows="16" style="display:none;width:100%;font-family:monospace;font-size:12px"></textarea>' +
+        '<p class="muted" style="margin:6px 0">Words: <span id="wbWords">' + (b.wordCount || 0) + '</span> · scripts and unsafe markup are removed on save.</p>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="wbSave"' + (locked ? ' disabled' : '') + '>Save draft</button>' +
+        '<button class="btn" id="wbSavePush"' + (locked ? ' disabled' : '') + '>Save &amp; push to customer panel</button><button class="btn" id="wbClose">Close</button> <span class="muted" id="wbEdMsg"></span></div>';
+      ed.innerHTML = h;
+      ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var rich = document.getElementById('wbRich'), src = document.getElementById('wbHtml'), srcOn = false;
+      var words = function(){ var t = (srcOn ? src.value.replace(/<[^>]+>/g, ' ') : rich.innerText || ''); var n = t.trim() ? t.trim().split(/\s+/).length : 0; document.getElementById('wbWords').textContent = n; };
+      rich.addEventListener('input', words);
+      Array.prototype.forEach.call(ed.querySelectorAll('#wbTools button[data-cmd]'), function(el){
+        el.addEventListener('mousedown', function(e){ e.preventDefault(); });
+        el.addEventListener('click', function(){
+          if (srcOn || locked) return;
+          var c = el.getAttribute('data-cmd'); rich.focus();
+          if (c === 'bold' || c === 'italic' || c === 'underline') document.execCommand(c);
+          else if (c === 'h2' || c === 'h3' || c === 'p') document.execCommand('formatBlock', false, c);
+          else if (c === 'quote') document.execCommand('formatBlock', false, 'blockquote');
+          else if (c === 'ul') document.execCommand('insertUnorderedList');
+          else if (c === 'ol') document.execCommand('insertOrderedList');
+          else if (c === 'link') { var u = prompt('Link URL (https://…)', 'https://'); if (u) document.execCommand('createLink', false, u); }
+          else if (c === 'clear') document.execCommand('removeFormat');
+          words();
+        });
+      });
+      document.getElementById('wbSrc').addEventListener('click', function(){
+        if (!srcOn) { src.value = rich.innerHTML; src.style.display = ''; rich.style.display = 'none'; srcOn = true; }
+        else { rich.innerHTML = src.value; src.style.display = 'none'; rich.style.display = ''; srcOn = false; }
+        words();
+      });
+      src.addEventListener('input', words);
+      document.getElementById('wbClose').addEventListener('click', function(){ ed.innerHTML = ''; });
+      var save = function(push) {
+        var m = document.getElementById('wbEdMsg');
+        var body = { title: document.getElementById('wbTitle').value, slug: document.getElementById('wbSlug').value, targetKeyword: document.getElementById('wbKw').value,
+          metaTags: document.getElementById('wbTags').value, metaDescription: document.getElementById('wbDesc').value, targetWebpage: document.getElementById('wbPage').value,
+          publishDate: document.getElementById('wbPub').value, body: srcOn ? src.value : rich.innerHTML };
+        m.textContent = 'Saving…';
+        api(wbBase(cust) + '/blogs/' + no + '?month=' + encodeURIComponent(wb.month), { method: 'PUT', body: body }).then(function(){
+          if (!push) return null;
+          m.textContent = 'Pushing…';
+          return api(wbBase(cust) + '/blogs/' + no + '/push?month=' + encodeURIComponent(wb.month), { method: 'POST', body: {} });
+        }).then(function(){ loadWebsiteBlog(cust, box); }).catch(function(e){ m.textContent = e.message; });
+      };
+      document.getElementById('wbSave').addEventListener('click', function(){ save(false); });
+      document.getElementById('wbSavePush').addEventListener('click', function(){ save(true); });
+    }).catch(function(e){ ed.innerHTML = '<p class="muted">Could not open blog: ' + escapeHtml(e.message) + '</p>'; });
   }
 
   // ---- Layer 4 · AI Search Keyword: 9 AI platforms x 10 keywords ----
