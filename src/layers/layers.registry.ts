@@ -18,7 +18,7 @@ export interface LayerDef {
   internalStorage: boolean;
 }
 
-export const SECTION_LABELS: Record<string, string> = {"profile": "Profile", "on-page": "On Page SEO", "off-page": "Off Page SEO", "technical": "Technical SEO", "local": "Local SEO", "social": "Social Media", "international": "International SEO"};
+export const SECTION_LABELS: Record<string, string> = {"profile": "Profile", "research-publish": "Research & Publish", "on-page": "On Page SEO", "off-page": "Off Page SEO", "technical": "Technical SEO", "local": "Local SEO", "social": "Social Media", "international": "International SEO"};
 
 // Layers built in the Engine so far (built numerically: Layer 1, then 2, 3, ...).
 export const BUILT_LAYERS: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
@@ -29,23 +29,23 @@ export const LAYER_REGISTRY: LayerDef[] = [
   R(1, "user_login_month_context", "User Login & Month Context", "customer", 1, "profile", "user-login-month-context", 1, "Day 1", 0, 12, ""),
   R(2, "onboarding_profile_ownership", "Onboarding & Profile Ownership", "customer", 1, "profile", "onboarding-profile-ownership", 2, "Day 2", 0, 12, ""),
   R(3, "business_profile_resolution", "Business/Profile Resolution", "customer", 11, "profile", "business-profile-resolution", 3, "Day 3", 0, 12, ""),
-  R(4, "ai_search_keyword", "AI Search Keyword", "admin", 90, "on-page", "keyword-planner", 4, "Day 4", 0, 12, ""),
-  R(5, "ai_search_prompt", "AI Search Prompt", "admin", 80, "on-page", "keyword-planner", 5, "Day 5", 0, 12, ""),
-  R(6, "ai_long_tail", "AI Search Long Tail Keyword", "admin", 80, "on-page", "keyword-planner", 6, "Day 6", 0, 12, ""),
-  R(7, "google_paa", "Google People Also Ask", "admin", 30, "on-page", "keyword-planner", 7, "Day 7", 0, 12, ""),
-  R(8, "ai_similar", "AI Search Similar Product / Service", "admin", 80, "on-page", "keyword-planner", 8, "Day 8", 0, 12, ""),
-  R(9, "ai_faq", "AI Search FAQ Discovery", "admin", 80, "on-page", "keyword-planner", 9, "Day 9", 0, 12, ""),
-  R(10, "ai_quora", "AI Search Quora Q&A", "admin", 80, "on-page", "keyword-planner", 10, "Day 10", 0, 12, ""),
-  R(11, "keyword_analysis", "Keyword Analysis", "admin", 0, "on-page", "keyword-planner", 11, "Day 11", 0, 12, ""),
-  R(12, "existing_intel", "Keyword Market Validation", "admin", 0, "on-page", "keyword-planner", 12, "Day 12", 0, 12, ""),
-  R(13, "revenue_analytics", "Intent & Opportunity Analysis", "admin", 0, "on-page", "keyword-planner", 13, "Day 13", 0, 12, ""),
-  R(14, "weighted_selection", "Keyword Weighted Selection", "admin", 0, "on-page", "keyword-planner", 14, "Day 14", 0, 12, ""),
-  R(15, "intent_primary", "Website Blog Cluster Plan", "customer", 30, "off-page", "blogs", 15, "Day 15", 0, 12, ""),
-  R(16, "intent_subprimary", "Tier 1 Mapping", "customer", 180, "off-page", "blogs", 16, "Day 16", 0, 12, ""),
-  R(17, "intent_secondary", "Tier 2 and Tier 3 Mapping", "customer", 720, "off-page", "blogs", 17, "Day 17", 0, 12, ""),
-  R(18, "write_primary", "Tier 1 Platform Mapping", "customer", 180, "off-page", "blogs", 18, "Day 18", 0, 12, ""),
-  R(19, "write_subprimary", "Tier 2 Platform Mapping", "customer", 180, "off-page", "blogs", 19, "Day 19", 0, 12, ""),
-  R(20, "write_secondary", "Tier 3 Platform Mapping", "customer", 540, "off-page", "blogs", 20, "Day 20", 0, 12, ""),
+  R(4, "ai_search_keyword", "AI Search Keyword", "customer", 90, "research-publish", "layers", 4, "Day 4", 0, 12, ""),
+  R(5, "ai_search_prompt", "AI Search Prompt", "customer", 80, "research-publish", "layers", 5, "Day 5", 0, 12, ""),
+  R(6, "ai_long_tail", "AI Search Long Tail Keyword", "customer", 80, "research-publish", "layers", 6, "Day 6", 0, 12, ""),
+  R(7, "google_paa", "Google People Also Ask", "customer", 30, "research-publish", "layers", 7, "Day 7", 0, 12, ""),
+  R(8, "ai_similar", "AI Search Similar Product / Service", "customer", 80, "research-publish", "layers", 8, "Day 8", 0, 12, ""),
+  R(9, "ai_faq", "AI Search FAQ Discovery", "customer", 80, "research-publish", "layers", 9, "Day 9", 0, 12, ""),
+  R(10, "ai_quora", "AI Search Quora Q&A", "customer", 80, "research-publish", "layers", 10, "Day 10", 0, 12, ""),
+  R(11, "keyword_analysis", "Keyword Analysis", "customer", 0, "research-publish", "layers", 11, "Day 11", 0, 12, ""),
+  R(12, "existing_intel", "Keyword Market Validation", "customer", 0, "research-publish", "layers", 12, "Day 12", 0, 12, ""),
+  R(13, "revenue_analytics", "Intent & Opportunity Analysis", "customer", 0, "research-publish", "layers", 13, "Day 13", 0, 12, ""),
+  R(14, "weighted_selection", "Keyword Weighted Selection", "customer", 0, "research-publish", "layers", 14, "Day 14", 0, 12, ""),
+  R(15, "intent_primary", "Website Blog Cluster Plan", "customer", 30, "research-publish", "layers", 15, "Day 15", 0, 12, ""),
+  R(16, "intent_subprimary", "Tier 1 Mapping", "customer", 180, "research-publish", "layers", 16, "Day 16", 0, 12, ""),
+  R(17, "intent_secondary", "Tier 2 and Tier 3 Mapping", "customer", 720, "research-publish", "layers", 17, "Day 17", 0, 12, ""),
+  R(18, "write_primary", "Tier 1 Platform Mapping", "customer", 180, "research-publish", "layers", 18, "Day 18", 0, 12, ""),
+  R(19, "write_subprimary", "Tier 2 Platform Mapping", "customer", 180, "research-publish", "layers", 19, "Day 19", 0, 12, ""),
+  R(20, "write_secondary", "Tier 3 Platform Mapping", "customer", 540, "research-publish", "layers", 20, "Day 20", 0, 12, ""),
   R(21, "website_blog", "Website Blog — Next Month Production", "customer", 30, "off-page", "blogs", 21, "Day 21", 0, 12, ""),
   R(22, "website_content", "Website Content", "customer", 8, "on-page", "website-development", 22, "Day 22", 0, 12, ""),
   R(23, "website_blog_post_daily", "Website Blog Post — Daily Publishing", "customer", 30, "off-page", "website-blog-post", 1, "Day 1–30 (daily)", 1, 12, "Not applicable in M0"),

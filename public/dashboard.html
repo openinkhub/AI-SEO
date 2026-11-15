@@ -227,13 +227,14 @@
   var NAV = [
     { key: 'profile', label: 'Profile', subs: [['account', 'Account'], ['settings', 'Settings'], ['billing', 'Billing']], layers: [1, 2, 3] },
     { key: 'all-layers', label: 'All Layers', subs: [], layers: [] },
+    { key: 'research-publish', label: 'Research & Publish', subs: [['layers', 'Layers']], layers: rng(4, 20) },
     { key: 'off-page', label: 'Off Page SEO', subs: [
         ['blogs', 'Blogs'], ['blog-1-submission', 'Blog 1.0 Submission'], ['blog-2-submission', 'Blog 2.0 Submission'],
         ['blog-3-submission', 'Blog 3.0 Submission'], ['website-blog-post', 'Website Blog Post'],
         ['backlinks', 'Backlinks'], ['digital-pr', 'Digital PR'] ],
-      layers: [15, 16, 17, 18, 19, 20, 21, 23].concat(rng(30, 59), rng(73, 162)) },
-    { key: 'on-page', label: 'On Page SEO', subs: [['keyword-planner', 'Keyword Planner'], ['website-development', 'Website Development']],
-      layers: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 22, 193, 194] },
+      layers: [21, 23].concat(rng(30, 59), rng(73, 162)) },
+    { key: 'on-page', label: 'On Page SEO', subs: [['website-development', 'Website Development']],
+      layers: [22, 193, 194] },
     { key: 'technical', label: 'Technical SEO', subs: [
         ['website-audit', 'Website Audit'], ['google-analytics', 'Google Analytics'],
         ['ai-visibility', 'AI Visibility'] ],
@@ -366,7 +367,7 @@
     if (!sec) return { sec: NAV[0], sub: NAV[0].subs[0] || null };
     var sub = sec.subs.filter(function(s){ return s[0] === parts[1]; })[0] || null;
     // Profile always lands on a subsection - Account by default.
-    if (!sub && sec.key === 'profile') sub = sec.subs[0];
+    if (!sub && (sec.key === 'profile' || sec.key === 'research-publish')) sub = sec.subs[0];
     return { sec: sec, sub: sub };
   }
 
@@ -521,7 +522,7 @@
       return;
     }
     h += '<div style="overflow-x:auto"><table><thead><tr><th>Layer</th><th>Name</th>' + (opts.showSection ? '<th>Section</th>' : '<th>Subsection</th>') +
-      '<th>Date</th><th>Day</th><th>Months</th><th>Build</th><th>Status</th></tr></thead><tbody>';
+      '<th>' + (opts.sub === 'layers' ? 'Effective date' : 'Date') + '</th><th>Day</th><th>Months</th><th>Build</th><th>Status</th></tr></thead><tbody>';
     shown.forEach(function(r){
       var isToday = r.scheduledDate === today;
       var dim = r.applicable ? '' : ' style="opacity:.55"';
@@ -906,9 +907,10 @@
   function renderSectionLayers(cust, r) {
     var title = r.sub ? r.sub[1] : r.sec.label;
     var html = pageHead(title, r.sec.label + ' · ' + contextLine(cust));
-    var hasL4 = r.sec.key === 'on-page' && (!r.sub || r.sub[0] === 'keyword-planner');
+    var hasL4 = r.sec.key === 'research-publish';
+    if (hasL4) html += '<div id="layerBox"></div>';
     if (hasL4) html += '<div id="l4Box"></div><div id="l5Box"></div><div id="l6Box"></div><div id="l7Box"></div><div id="l8Box"></div><div id="l9Box"></div><div id="l10Box"></div><div id="consBox"></div><div id="l11Box"></div><div id="l12Box"></div><div id="l13Box"></div><div id="l14Box"></div><div id="l15Box"></div><div id="l16Box"></div><div id="l17Box"></div><div id="l18Box"></div><div id="l19Box"></div><div id="l20Box"></div>';
-    html += '<div id="layerBox"></div>';
+    if (!hasL4) html += '<div id="layerBox"></div>';
     document.getElementById('page').innerHTML = html;
     if (hasL4) { mountLayer4(cust); mountLayer5(cust); mountLayer6(cust); mountLayer7(cust); mountLayer8(cust); mountLayer9(cust); mountLayer10(cust); mountCons(cust); mountLayer11(cust); mountKw(cust); mountBlogIntent(cust); mountPlatformMap(cust); }
     mountLayers(cust, { section: r.sec.key, sub: r.sub ? r.sub[0] : null, showSection: false });
