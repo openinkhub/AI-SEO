@@ -36,6 +36,12 @@ export class WebsiteBlog {
   @Column({ type: 'text', nullable: true }) customerComment: string | null;
   @Column({ type: 'json', nullable: true }) comments: BlogComment[] | null;
   @Column({ type: 'varchar', length: 700, nullable: true }) blogUrl: string | null;
+  // Layer 23 publishing to the customer's blog API
+  @Column({ type: 'datetime', nullable: true }) publishedAt: Date | null;
+  @Column({ type: 'varchar', length: 12, nullable: true }) publishTrigger: string | null;
+  @Column({ type: 'text', nullable: true }) publishError: string | null;
+  @Column({ type: 'int', default: 0 }) publishAttempts: number;
+  @Column({ type: 'datetime', nullable: true }) lastPublishAt: Date | null;
   @Column({ type: 'varchar', length: 20, default: 'engine' }) source: string;
   @Column({ type: 'varchar', length: 40, nullable: true }) wpBlogId: string | null;
   @CreateDateColumn() createdAt: Date;

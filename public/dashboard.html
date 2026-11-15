@@ -942,14 +942,15 @@
       '<p class="muted" style="margin:4px 0 12px">' + escapeHtml(d.month) + ' · ' + d.created + ' / ' + d.expected + ' written · ' + d.pushed + ' on the customer panel · ' + d.resolved + ' approved. ' +
       'You write the blog content and press <b>Push</b>: the customer sees only the pushed blog, in rich-text view, and can Approve or Reject with a comment. A pushed blog nobody reviews in 7 days is auto-approved.</p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px"><button class="btn" id="wbPushAll">Push all drafts</button><button class="btn" id="wbReload">Refresh</button><span class="muted" id="wbMsg"></span></div>' +
-      '<h3 style="margin:0 0 6px">Publishing tracker</h3><p class="muted" style="margin:0 0 8px">Date, target page and the live blog URL for each blog. Saves when you leave a field. A URL on an approved blog marks it Published.</p>' +
-      '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;margin-bottom:16px"><table><thead><tr><th>Blog</th><th>Date</th><th>Target page</th><th>Published blog URL</th><th></th></tr></thead><tbody>' +
+      '<h3 style="margin:0 0 6px">Publishing tracker</h3><p class="muted" style="margin:0 0 8px">Date, target page and the live blog URL for each blog. Saves when you leave a field. A URL on an approved blog marks it Published. <b>Publish via API</b> (Admin only, never automatic) sends an approved blog to the customer\'s own Blog Publish API (set in the customer API settings) and fills the URL.</p>' +
+      '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;margin-bottom:16px"><table><thead><tr><th>Blog</th><th>Date</th><th>Target page</th><th>Published blog URL</th><th>Status</th><th>Admin</th></tr></thead><tbody>' +
       d.blogs.map(function(b){
         return '<tr data-trk="' + b.blogNo + '"><td><b>' + b.blogNo + '</b></td>' +
           '<td><input type="date" data-f="publishDate" value="' + escapeHtml(b.publishDate ? String(b.publishDate).slice(0, 10) : '') + '"></td>' +
           '<td style="min-width:280px"><input data-f="targetWebpage" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.targetWebpage || '') + '"></td>' +
           '<td style="min-width:320px"><input data-f="blogUrl" style="width:100%" placeholder="https://…" value="' + escapeHtml(b.blogUrl || '') + '"></td>' +
-          '<td class="muted" data-s style="white-space:nowrap"></td></tr>';
+          '<td class="muted" data-s style="white-space:nowrap">' + (b.publishError ? '<span style="color:var(--fail)">' + escapeHtml(b.publishError) + '</span>' : '') + '</td>' +
+          '<td>' + ((b.status === 'approved' || b.status === 'auto_approved') && !b.blogUrl ? '<button class="btn" data-pub="' + b.blogNo + '">Publish via API</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<div style="overflow-x:auto"><table><thead><tr><th>Blog</th><th>Publish date</th><th>Title</th><th>Words</th><th>Status</th><th>Customer panel</th><th>Customer comment</th><th></th></tr></thead><tbody>';
     d.blogs.forEach(function(b){
@@ -974,6 +975,16 @@
         api(wbBase(cust) + '/blogs/' + no + '/tracking?month=' + encodeURIComponent(wb.month), { method: 'PUT', body: body }).then(function(r){
           st.textContent = 'Saved' + (r.status === 'published' ? ' · Published' : '');
         }).catch(function(e){ st.textContent = e.message; });
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('button[data-pub]'), function(el){
+      el.addEventListener('click', function(){
+        var no = el.getAttribute('data-pub'), tr = el.closest('tr'), st = tr.querySelector('[data-s]');
+        if (!confirm('Publish blog ' + no + ' to the customer\'s live website now? This posts it for real.')) return;
+        el.disabled = true; st.textContent = 'Publishing…';
+        api(wbBase(cust) + '/blogs/' + no + '/publish-api?month=' + encodeURIComponent(wb.month), { method: 'POST', body: {} }).then(function(r){
+          loadWebsiteBlog(cust, box);
+        }).catch(function(e){ el.disabled = false; st.innerHTML = '<span style="color:var(--fail)">' + escapeHtml(e.message) + '</span>'; });
       });
     });
     document.getElementById('wbReload').addEventListener('click', function(){ loadWebsiteBlog(cust, box); });

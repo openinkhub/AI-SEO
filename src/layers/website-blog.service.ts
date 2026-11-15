@@ -54,6 +54,7 @@ export class WebsiteBlogService {
       status: b.status, statusLabel: STATUS_LABEL[b.status] || b.status, pushed: !!b.pushedAt, pushedAt: b.pushedAt,
       reviewDueAt: b.reviewDueAt, reviewActionAt: b.reviewActionAt, customerComment: b.customerComment, comments: b.comments || [],
       blogUrl: b.blogUrl, source: b.source, hasBody: !!(b.body && b.body.trim()),
+      publishError: b.publishError, publishAttempts: b.publishAttempts, publishedAt: b.publishedAt,
       ...(withBody ? { body: b.body || '' } : {}),
     };
   }
@@ -289,6 +290,8 @@ export class WebsiteBlogService {
     if (resolved >= BLOG_COUNT) await this.layers.setByMonth(customerId, p.monthIndex, 21, 'done');
     else if (any) await this.layers.setByMonth(customerId, p.monthIndex, 21, 'in_progress');
   }
+
+  async afterPublish(customerId: string, p: Project) { await this.syncLayer(customerId, p); }
 
   async removeByCustomer(customerId: string) { await this.repo.delete({ customerId }); }
 }

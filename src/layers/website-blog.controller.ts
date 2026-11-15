@@ -5,12 +5,13 @@ import { Customer } from '../customers/customer.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WpApiKeyGuard } from '../wp-integration/wp-api-key.guard';
 import { WebsiteBlogService } from './website-blog.service';
+import { WebsiteBlogPublisher } from './website-blog-publisher.service';
 
 // Layer 21 Website Blog - Admin: create the blog content and push it to the customer panel.
 @UseGuards(JwtAuthGuard)
 @Controller('api/v1/customers/:customerId/layer21')
 export class Layer21Controller {
-  constructor(private readonly service: WebsiteBlogService) {}
+  constructor(private readonly service: WebsiteBlogService, private readonly publisher: WebsiteBlogPublisher) {}
 
   @Get() view(@Param('customerId') id: string, @Query('month') month?: string) { return this.service.view(id, month); }
   @Get('blogs/:no') one(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.get(id, month, no); }
@@ -20,6 +21,9 @@ export class Layer21Controller {
   @Post('blogs/:no/unpush') unpush(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.unpush(id, month, no); }
   @Post('blogs/:no/reopen') reopen(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.reopen(id, month, no); }
   @Post('blogs/:no/published') published(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Body() body: any, @Query('month') month?: string) { return this.service.markPublished(id, month, no, body?.blogUrl); }
+  // Admin only: send an approved blog to the customer's own Blog Publish API; the live URL lands in the Publishing tracker.
+  @Post('blogs/:no/publish-api') publishApi(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.publisher.publish(id, month, no); }
+  @Get('publish-api') publishApiState(@Param('customerId') id: string) { return this.publisher.configured(id); }
   @Post('push-all') pushAll(@Param('customerId') id: string, @Body() body: any, @Query('month') month?: string) { return this.service.pushAll(id, month || body?.month); }
   @Post('import-wp') importWp(@Param('customerId') id: string, @Body() body: any) { return this.service.importWp(id, body); }
 }
