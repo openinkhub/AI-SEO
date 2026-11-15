@@ -15,6 +15,7 @@ export class Layer21Controller {
   @Get() view(@Param('customerId') id: string, @Query('month') month?: string) { return this.service.view(id, month); }
   @Get('blogs/:no') one(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.get(id, month, no); }
   @Put('blogs/:no') save(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Body() body: any, @Query('month') month?: string) { return this.service.save(id, month || body?.month, no, body || {}); }
+  @Put('blogs/:no/tracking') tracking(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Body() body: any, @Query('month') month?: string) { return this.service.tracking(id, month || body?.month, no, body || {}); }
   @Post('blogs/:no/push') push(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.push(id, month, no); }
   @Post('blogs/:no/unpush') unpush(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.unpush(id, month, no); }
   @Post('blogs/:no/reopen') reopen(@Param('customerId') id: string, @Param('no', ParseIntPipe) no: number, @Query('month') month?: string) { return this.service.reopen(id, month, no); }

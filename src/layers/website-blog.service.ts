@@ -103,6 +103,29 @@ export class WebsiteBlogService {
     return this.shape(saved, true);
   }
 
+  // Publishing tracker row (date / target page / published blog URL): editable in any status, with or without blog content.
+  // A live URL on an approved blog marks it Published.
+  async tracking(customerId: string, month: string | undefined, blogNo: number, input: { publishDate?: string; targetWebpage?: string; blogUrl?: string }) {
+    this.checkNo(blogNo);
+    const p = await this.monthOf(customerId, month);
+    let r = await this.repo.findOne({ where: { projectId: p.id, blogNo } });
+    if (!r) r = this.repo.create({ customerId, projectId: p.id, monthIndex: p.monthIndex, blogNo, status: 'draft', source: 'engine', wordCount: 0 });
+    if (input.publishDate !== undefined) {
+      if (String(input.publishDate).trim() && !day(input.publishDate)) throw new BadRequestException('Date must be YYYY-MM-DD.');
+      r.publishDate = day(input.publishDate);
+    }
+    if (input.targetWebpage !== undefined) r.targetWebpage = str(input.targetWebpage, 700);
+    if (input.blogUrl !== undefined) {
+      const u = str(input.blogUrl, 700);
+      if (u && !/^https?:\/\/\S+$/i.test(u)) throw new BadRequestException('Published blog URL must start with http:// or https://');
+      r.blogUrl = u;
+      if (u && (r.status === 'approved' || r.status === 'auto_approved')) r.status = 'published';
+    }
+    const saved = await this.repo.save(r);
+    await this.syncLayer(customerId, p);
+    return this.shape(saved, false);
+  }
+
   // Push: put the blog content on the customer panel for review.
   async push(customerId: string, month: string | undefined, blogNo: number) {
     this.checkNo(blogNo);
